@@ -7,8 +7,10 @@ palette, ReactFlow canvas, inspector panels, model settings, project actions,
 and server run output.
 
 - `src/index.ts` exports the public component and API boundary types.
-- `src/workbench/AppWorkbench.tsx` owns workflow state and calls the injected
-  workflow API for list/create/read/update and run operations.
+- `src/workbench/AppWorkbench.tsx` owns workflow state, panel visibility, and
+  calls to the injected workflow API for list/create/read/update and run
+  operations. Selecting a node opens the inspector only; run popover visibility
+  is driven by explicit run requests.
 - `src/workbench/components` contains focused UI panels. The workflow canvas
   lets ReactFlow own live node dragging, keeps edges driven by the workflow
   graph, and provides explicit card dimensions plus handle bounds so built-in
@@ -16,7 +18,10 @@ and server run output.
   ReactFlow remount key intentionally excludes node positions so persisting a
   completed drag does not reset the viewport. Edge selection stays local to the
   canvas, while edge deletes are applied back to the workflow graph through
-  ReactFlow edge changes.
+  ReactFlow edge changes. `WorkbenchLayout` renders the canvas-first shell with
+  floating node palette and model settings popovers, a selection-driven
+  inspector, and a top-right canvas run control whose log popover appears after
+  a run is requested.
 - `src/styles.css` contains Tailwind directives and shared base page styles for
   consuming apps.
 - `tests/core-loop.test.tsx` covers editing, save/load, and server mock run

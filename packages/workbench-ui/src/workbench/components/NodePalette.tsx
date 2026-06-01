@@ -1,4 +1,4 @@
-import { Blocks, Brain, Braces, Clock, Database, Flag, GitBranch, Play, TextCursorInput, type LucideIcon } from "lucide-react";
+import { Brain, Braces, Clock, Database, Flag, GitBranch, Play, TextCursorInput, type LucideIcon } from "lucide-react";
 import type { WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
 
 type PaletteItem = {
@@ -25,10 +25,6 @@ export function NodePalette({ onAddNode }: { onAddNode: (type: WorkflowNodeType)
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-slate-200 px-4 py-4">
-        <h2 className="text-sm font-semibold">Node Palette</h2>
-        <p className="mt-1 text-xs text-slate-500">Add nodes to the workflow canvas.</p>
-      </div>
       <div className="flex-1 overflow-y-auto p-3">
         {groups.map((group) => (
           <section key={group} className="mb-5">
@@ -55,10 +51,6 @@ export function NodePalette({ onAddNode }: { onAddNode: (type: WorkflowNodeType)
             </div>
           </section>
         ))}
-      </div>
-      <div className="border-t border-slate-200 p-3 text-xs text-slate-500">
-        <Blocks size={15} className="mr-1 inline" aria-hidden />
-        LLM and Current Time are executable in this MVP.
       </div>
     </div>
   );

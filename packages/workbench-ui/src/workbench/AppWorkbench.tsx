@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState, type SetStateAction } from "react";
-import { FilePlus2 } from "lucide-react";
 import {
   createDefaultWorkflow,
   createNode,
@@ -11,28 +10,29 @@ import {
   type WorkflowNodeType,
 } from "@ai-agent-workflow/workflow-domain";
 import type { WorkflowDto } from "@ai-agent-workflow/api-contracts";
-import { DebugPanel } from "./components/DebugPanel";
-import { ModelSettingsPanel } from "./components/ModelSettingsPanel";
-import { NodeInspector } from "./components/NodeInspector";
-import { NodePalette } from "./components/NodePalette";
-import { ProjectFileActions } from "./components/ProjectFileActions";
-import { WorkflowCanvas } from "./components/WorkflowCanvas";
+import { WorkbenchLayout } from "./components/WorkbenchLayout";
 import type { AppWorkbenchProps, DebugState } from "./types";
 
 export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
   const [workflow, setWorkflow] = useState<WorkflowFile>(() => createDefaultWorkflow());
-  const [selectedNodeId, setSelectedNodeId] = useState<string>("llm-1");
+  const [selectedNodeId, setSelectedNodeId] = useState<string>("");
   const [debugState, setDebugState] = useState<DebugState>({ status: "idle" });
   const [workflowId, setWorkflowId] = useState<string | undefined>();
   const [dirty, setDirty] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
 
   const selectedNode = useMemo(
     () => workflow.graph.nodes.find((node) => node.id === selectedNodeId),
     [selectedNodeId, workflow.graph.nodes],
   );
 
-  const selectFirstUsefulNode = useCallback((nextWorkflow: WorkflowFile) => {
-    setSelectedNodeId(nextWorkflow.graph.nodes.find((node) => node.type === "llm")?.id || nextWorkflow.graph.nodes[0]?.id || "");
+  const resetSelectionPanels = useCallback(() => {
+    setSelectedNodeId("");
+    setInspectorOpen(false);
+    setDebugOpen(false);
   }, []);
 
   const applyWorkflowDto = useCallback(
@@ -40,10 +40,16 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
       setWorkflow(dto.workflow);
       setWorkflowId(dto.id);
       setDirty(false);
-      selectFirstUsefulNode(dto.workflow);
+      resetSelectionPanels();
     },
-    [selectFirstUsefulNode],
+    [resetSelectionPanels],
   );
+
+  const applySavedWorkflowDto = useCallback((dto: WorkflowDto) => {
+    setWorkflow(dto.workflow);
+    setWorkflowId(dto.id);
+    setDirty(false);
+  }, []);
 
   const errorMessage = useCallback((error: unknown) => {
     return error instanceof Error ? error.message : "Workflow API request failed.";
@@ -62,10 +68,10 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
           ? await workflowApi.updateWorkflow(workflowId, { workflow: payload })
           : await workflowApi.createWorkflow({ workflow: payload });
 
-      applyWorkflowDto(response.workflow);
+      applySavedWorkflowDto(response.workflow);
       return response.workflow;
     },
-    [applyWorkflowDto, workflow, workflowApi, workflowForServer, workflowId],
+    [applySavedWorkflowDto, workflow, workflowApi, workflowForServer, workflowId],
   );
 
   useEffect(() => {
@@ -138,18 +144,27 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
         graph: { ...current.graph, nodes: [...current.graph.nodes, node] },
       }));
       setSelectedNodeId(node.id);
+      setInspectorOpen(true);
+      setDebugOpen(false);
+      setPaletteOpen(false);
     },
     [markWorkflow, workflow.graph.nodes.length],
   );
 
+  const handleSelectNode = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    setInspectorOpen(true);
+    setDebugOpen(false);
+  }, []);
+
   const handleNewWorkflow = useCallback(() => {
     const next = createDefaultWorkflow();
     setWorkflow(next);
-    selectFirstUsefulNode(next);
+    resetSelectionPanels();
     setDebugState({ status: "idle" });
     setWorkflowId(undefined);
     setDirty(false);
-  }, [selectFirstUsefulNode]);
+  }, [resetSelectionPanels]);
 
   const handleOpenWorkflow = useCallback(async () => {
     setDebugState({ status: "loading" });
@@ -188,6 +203,7 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
         return;
       }
 
+      setDebugOpen(true);
       setDebugState({ status: "running" });
 
       try {
@@ -210,48 +226,33 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
   );
 
   return (
-    <main className="grid h-full min-h-[760px] grid-cols-[260px_minmax(520px,1fr)_360px] grid-rows-[64px_minmax(0,1fr)_260px] bg-slate-50 text-slate-950">
-      <header className="col-span-3 flex items-center gap-3 border-b border-slate-200 bg-white px-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-emerald-600 text-white">
-          <FilePlus2 size={20} aria-hidden />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-base font-semibold">{workflow.metadata.name}</h1>
-          <p className="truncate text-xs text-slate-500">
-            {workflowId ? `Server workflow: ${workflowId}` : "Unsaved server workflow"} {dirty ? "• unsaved changes" : ""}
-          </p>
-        </div>
-        <ProjectFileActions
-          dirty={dirty}
-          filePath={workflowId}
-          onNew={handleNewWorkflow}
-          onOpen={handleOpenWorkflow}
-          onSave={() => saveWorkflow("save")}
-          onSaveAs={() => saveWorkflow("saveAs")}
-        />
-      </header>
-
-      <aside className="row-span-2 border-r border-slate-200 bg-white">
-        <NodePalette onAddNode={addNode} />
-      </aside>
-
-      <section className="min-w-0 border-r border-slate-200">
-        <WorkflowCanvas
-          workflow={workflow}
-          selectedNodeId={selectedNodeId}
-          onSelectNode={setSelectedNodeId}
-          onWorkflowChange={markWorkflow}
-        />
-      </section>
-
-      <aside className="min-w-0 overflow-y-auto bg-white">
-        <ModelSettingsPanel settings={workflow.settings.modelProvider} onChange={updateModelSettings} />
-        <NodeInspector selectedNode={selectedNode} updateNode={updateNode} />
-      </aside>
-
-      <section className="col-span-2 min-h-0 border-t border-slate-200 bg-white">
-        <DebugPanel selectedNode={selectedNode} debugState={debugState} onRun={runSelectedNode} />
-      </section>
-    </main>
+    <WorkbenchLayout
+      workflow={workflow}
+      workflowId={workflowId}
+      dirty={dirty}
+      selectedNode={selectedNode}
+      selectedNodeId={selectedNodeId}
+      debugState={debugState}
+      paletteOpen={paletteOpen}
+      settingsOpen={settingsOpen}
+      inspectorOpen={inspectorOpen}
+      debugOpen={debugOpen}
+      onAddNode={addNode}
+      onCloseDebug={() => setDebugOpen(false)}
+      onCloseInspector={() => setInspectorOpen(false)}
+      onClosePalette={() => setPaletteOpen(false)}
+      onCloseSettings={() => setSettingsOpen(false)}
+      onNewWorkflow={handleNewWorkflow}
+      onOpenWorkflow={handleOpenWorkflow}
+      onRunSelectedNode={runSelectedNode}
+      onSaveWorkflow={() => saveWorkflow("save")}
+      onSaveWorkflowAs={() => saveWorkflow("saveAs")}
+      onSelectNode={handleSelectNode}
+      onTogglePalette={() => setPaletteOpen((current) => !current)}
+      onToggleSettings={() => setSettingsOpen((current) => !current)}
+      onUpdateModelSettings={updateModelSettings}
+      onUpdateNode={updateNode}
+      onWorkflowChange={markWorkflow}
+    />
   );
 }

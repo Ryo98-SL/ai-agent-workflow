@@ -1,4 +1,4 @@
-import { KeyRound, Server } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import type { ReactNode } from "react";
 import type { OpenAICompatibleSettings } from "@ai-agent-workflow/workflow-domain";
 
@@ -15,11 +15,7 @@ export function ModelSettingsPanel({ settings, onChange }: ModelSettingsPanelPro
   };
 
   return (
-    <section className="border-b border-slate-200 p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Server size={16} className="text-slate-500" aria-hidden />
-        <h2 className="text-sm font-semibold">Model Settings</h2>
-      </div>
+    <section className="p-4">
       <div className="space-y-3">
         <Field label="Base URL">
           <input

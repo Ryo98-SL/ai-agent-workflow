@@ -1,7 +1,9 @@
 # Workbench UI
 
 React workbench UI package for editing workflows and running server-backed mock
-runs through an injected workflow API.
+runs through an injected workflow API. The shell keeps the React Flow canvas as
+the primary workspace, with node creation, model settings, node inspection, and
+run output available from floating controls and a run-triggered canvas popover.
 
 ```tsx
 import { AppWorkbench } from "@ai-agent-workflow/workbench-ui";

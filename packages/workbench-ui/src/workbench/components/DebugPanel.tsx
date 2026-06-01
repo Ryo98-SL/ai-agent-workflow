@@ -27,11 +27,11 @@ export function DebugPanel({ selectedNode, debugState, onRun }: DebugPanelProps)
   };
 
   return (
-    <div className="grid h-full grid-cols-[320px_minmax(0,1fr)]">
-      <aside className="border-r border-slate-200 p-4">
-        <div className="flex items-center justify-between gap-3">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="border-b border-slate-200 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold">Debug</h2>
+            <h2 className="truncate text-sm font-semibold">Run Controls</h2>
             <p className="mt-1 truncate text-xs text-slate-500">
               {selectedNode ? `${selectedNode.label} (${selectedNode.type})` : "No node selected"}
             </p>
@@ -43,7 +43,7 @@ export function DebugPanel({ selectedNode, debugState, onRun }: DebugPanelProps)
             className="inline-flex h-9 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {debugState.status === "running" ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
-            Run
+            Run again
           </button>
         </div>
         {selectedNode?.type === "llm" && (
@@ -71,9 +71,9 @@ export function DebugPanel({ selectedNode, debugState, onRun }: DebugPanelProps)
             Select an LLM or Current Time tool node to run the server mock workflow.
           </p>
         )}
-      </aside>
+      </div>
 
-      <div className="min-w-0 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {debugState.status === "idle" && (
           <EmptyState title="Ready to run" detail="Run an executable node to inspect server run output and events." />
         )}

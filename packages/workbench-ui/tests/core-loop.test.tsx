@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { RunEvent, WorkflowDto, WorkflowRun, WorkflowSummary } from "@ai-agent-workflow/api-contracts";
 import { createDefaultWorkflow, type WorkflowFile } from "@ai-agent-workflow/workflow-domain";
@@ -12,8 +12,17 @@ describe("MVP smoke loop", () => {
 
     render(<AppWorkbench workflowApi={api} />);
     expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open model settings" }));
     await user.type(screen.getByPlaceholderText("gpt-4.1-mini"), "-smoke");
+    fireEvent.click(screen.getByText("LLM"));
+    expect(screen.getByText("Node Inspector")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run" })).toBeInTheDocument();
+    expect(screen.queryByText("Run Log")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close node inspector" }));
+    expect(screen.queryByText("Node Inspector")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("LLM"));
     await user.click(screen.getByRole("button", { name: "Run" }));
+    expect(await screen.findByText("Run Log")).toBeInTheDocument();
     expect(await screen.findByText("Mock LLM output for LLM.")).toBeInTheDocument();
     expect(calls.updateWorkflow).toHaveBeenCalled();
 
@@ -22,7 +31,7 @@ describe("MVP smoke loop", () => {
     expect(Array.from(workflows.values()).at(-1)?.workflow.settings.modelProvider?.apiKey).toBeUndefined();
 
     await user.click(screen.getByRole("button", { name: "Open workflow" }));
-    await user.click(screen.getByRole("button", { name: /Current Time/ }));
+    fireEvent.click(await screen.findByText("Current Time"));
     await user.click(screen.getByRole("button", { name: "Run" }));
 
     expect((await screen.findAllByText("Mock tool output for Current Time.")).length).toBeGreaterThan(0);

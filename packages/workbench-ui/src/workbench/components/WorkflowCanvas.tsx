@@ -191,7 +191,7 @@ export function WorkflowCanvas({ workflow, selectedNodeId, onSelectNode, onWorkf
         onNodeClick={(_event, node) => onSelectNode(node.id)}
         onSelectionChange={({ nodes: selectedNodes }) => {
           const node = selectedNodes.at(0);
-          if (node) {
+          if (node && node.id !== selectedNodeId) {
             onSelectNode(node.id);
           }
         }}
