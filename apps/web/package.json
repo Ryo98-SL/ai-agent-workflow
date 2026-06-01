@@ -1,0 +1,27 @@
+{
+  "name": "@ai-agent-workflow/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite --host 127.0.0.1",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-agent-workflow/workbench-ui": "workspace:*",
+    "@ai-agent-workflow/workflow-client": "workspace:*",
+    "@xyflow/react": "^12.9.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@ai-agent-workflow/tsconfig": "workspace:*",
+    "@types/react": "^18.3.25",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^5.1.1",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

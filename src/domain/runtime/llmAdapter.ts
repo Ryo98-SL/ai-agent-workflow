@@ -1,5 +1,5 @@
-import { mergeVariableValues, resolvePromptVariables } from "../workflow/promptVariables";
-import type { LLMNode } from "../workflow/schema";
+import { mergeVariableValues, resolvePromptVariables } from "@ai-agent-workflow/workflow-domain";
+import type { LLMNode } from "@ai-agent-workflow/workflow-domain";
 import type { LLMRuntimeAdapter, RuntimeAdapterContext, RuntimeResult } from "./types";
 
 type ChatCompletionResponse = {

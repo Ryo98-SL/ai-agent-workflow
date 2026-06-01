@@ -1,0 +1,4 @@
+{
+  "extends": "@ai-agent-workflow/tsconfig/react.json",
+  "include": ["src", "tailwind.config.ts", "vite.config.ts"]
+}

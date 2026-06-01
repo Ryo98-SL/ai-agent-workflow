@@ -6,7 +6,7 @@ const reactHooks = require("eslint-plugin-react-hooks");
 
 module.exports = [
   {
-    ignores: ["dist", "node_modules", "coverage"],
+    ignores: ["dist", "**/dist", "node_modules", "**/node_modules", "coverage", "**/coverage"],
   },
   js.configs.recommended,
   {
@@ -33,7 +33,7 @@ module.exports = [
     },
   },
   {
-    files: ["electron/**/*.cjs", "*.config.js"],
+    files: ["**/electron/**/*.cjs", "*.config.js", "**/*.config.js"],
     languageOptions: {
       globals: {
         ...globals.node,

@@ -1,0 +1,10 @@
+{
+  "name": "@ai-agent-workflow/tsconfig",
+  "version": "0.1.0",
+  "private": true,
+  "files": [
+    "base.json",
+    "react.json",
+    "library.json"
+  ]
+}

@@ -2,7 +2,8 @@
 
 ## Purpose
 
-`src/domain/runtime` owns executable node adapter contracts and concrete MVP runtime behavior.
+`src/domain/runtime` owns legacy executable node adapter contracts and concrete
+runtime behavior retained for regression coverage.
 
 ## Key Files
 
@@ -13,4 +14,8 @@
 
 ## Behavior
 
-LLM execution resolves prompt variables before making requests, surfaces missing-variable errors without network calls, supports run cancellation, and records latency, request details, response text, raw summaries, and normalized errors.
+LLM execution resolves prompt variables before making requests, surfaces
+missing-variable errors without network calls, supports run cancellation, and
+records latency, request details, response text, raw summaries, and normalized
+errors. The migrated workbench no longer calls this path; server execution work
+is deferred in `docs/todo.md`.

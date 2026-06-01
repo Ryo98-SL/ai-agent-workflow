@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createDefaultWorkflow, type LLMNode, type ToolNode } from "../../src/domain/workflow/schema";
+import { createDefaultWorkflow, type LLMNode, type ToolNode } from "@ai-agent-workflow/workflow-domain";
 import { executeLLMNode } from "../../src/domain/runtime/llmAdapter";
 import { executeCurrentTimeTool } from "../../src/domain/runtime/toolAdapter";
 

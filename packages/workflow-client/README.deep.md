@@ -1,0 +1,23 @@
+# Workflow Client Deep README
+
+## Architecture
+
+`packages/workflow-client` is a browser-compatible TypeScript package that wraps
+fetch calls to the workflow REST API.
+
+- `src/index.ts` exports `createWorkflowClient`, `WorkflowClientError`, client
+  option types, and the typed client interface.
+- `tests/client.test.ts` covers mocked fetch success/failure behavior and a
+  lightweight integration pass against the Hono server app.
+
+## Integration Boundary
+
+The client imports request/response schemas and path builders from
+`@ai-agent-workflow/api-contracts`. It does not contain React hooks, retries,
+auth behavior, or UI state.
+
+## Test Strategy
+
+Unit tests use mocked fetch implementations for success, HTTP errors, network
+errors, and malformed responses. Integration tests route requests into
+`@ai-agent-workflow/server` through a test fetch adapter.

@@ -1,0 +1,34 @@
+{
+  "name": "@ai-agent-workflow/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ai-agent-workflow/api-contracts": "workspace:*",
+    "@ai-agent-workflow/workflow-domain": "workspace:*",
+    "@hono/node-server": "^1.14.4",
+    "hono": "^4.7.11",
+    "zod": "^3.25.42"
+  },
+  "devDependencies": {
+    "@ai-agent-workflow/tsconfig": "workspace:*",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  }
+}

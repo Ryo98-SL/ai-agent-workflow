@@ -2,13 +2,17 @@
 
 ## Purpose
 
-`src/domain` owns UI-independent workflow and runtime behavior.
+`src/domain` owns legacy UI-independent runtime behavior retained for regression
+coverage. Shared workflow schema and prompt variable behavior live in
+`packages/workflow-domain`.
 
 ## Structure
 
-- `workflow/` defines `.agentflow.json` types, validation, serialization, default workflow creation, node factories, and prompt variable utilities.
 - `runtime/` defines executable adapter contracts and concrete MVP adapters.
+- Runtime code imports persisted workflow types from
+  `@ai-agent-workflow/workflow-domain`.
 
 ## Runtime Boundary
 
-React components call `executeNode` with a selected persisted node, model settings, and test variables. Adapter implementations return normalized debug results for the UI to display.
+The migrated workbench does not call these adapters. They remain as reference
+coverage until real server-side execution replaces the mock run lifecycle.

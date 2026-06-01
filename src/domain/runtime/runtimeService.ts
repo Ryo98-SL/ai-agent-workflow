@@ -1,4 +1,4 @@
-import type { WorkflowNode } from "../workflow/schema";
+import type { WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 import { llmNodeAdapter } from "./llmAdapter";
 import { currentTimeToolAdapter } from "./toolAdapter";
 import type { RuntimeAdapterContext, RuntimeResult } from "./types";

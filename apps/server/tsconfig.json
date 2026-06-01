@@ -1,0 +1,7 @@
+{
+  "extends": "@ai-agent-workflow/tsconfig/library.json",
+  "compilerOptions": {
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src", "tests"]
+}

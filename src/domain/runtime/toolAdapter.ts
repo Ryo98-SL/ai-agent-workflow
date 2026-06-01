@@ -1,4 +1,4 @@
-import type { ToolNode } from "../workflow/schema";
+import type { ToolNode } from "@ai-agent-workflow/workflow-domain";
 import type { RuntimeAdapterContext, RuntimeResult, ToolRuntimeAdapter } from "./types";
 
 export const currentTimeToolAdapter: ToolRuntimeAdapter = {

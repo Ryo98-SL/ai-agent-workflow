@@ -1,0 +1,7 @@
+{
+  "extends": "@ai-agent-workflow/tsconfig/react.json",
+  "compilerOptions": {
+    "types": ["vitest/globals", "@testing-library/jest-dom"]
+  },
+  "include": ["src", "tests", "vitest.config.ts"]
+}

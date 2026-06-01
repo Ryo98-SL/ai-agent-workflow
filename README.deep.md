@@ -2,25 +2,56 @@
 
 ## Architecture
 
-The app is a local Electron shell around a Vite React renderer.
+The repository is a `pnpm` workspace orchestrated with Turborepo. `apps/web` is
+the primary product target, `apps/server` provides the temporary mock workflow
+REST API, and shared packages hold domain, contract, client, UI, and TypeScript
+configuration code.
 
-- `electron/main.cjs` owns windows and native file dialogs.
-- `electron/preload.cjs` exposes a narrow `window.agentWorkflow` API for opening and saving workflow files.
-- `src/domain/workflow` owns persisted workflow schema, validation, serialization, and prompt variable utilities.
-- `src/domain/runtime` owns executable node adapter interfaces and the LLM/Current Time implementations.
-- `src/workbench` owns React state, ReactFlow canvas wiring, inspectors, model settings, file actions, and debug output.
-- `tests` covers schema validation, prompt variable resolution, runtime adapters, workbench interactions, and the smoke loop.
+- `apps/web` mounts `@ai-agent-workflow/workbench-ui` and injects
+  `@ai-agent-workflow/workflow-client`.
+- `apps/server` owns deterministic in-memory workflow and mock run routes.
+- `apps/desktop` preserves Electron as a legacy shell around the same
+  server-backed workbench.
+- `packages/workbench-ui` owns React workbench state, panels, ReactFlow canvas
+  wiring, API-backed persistence, and run result rendering.
+- `packages/workflow-client` owns browser-compatible REST calls and normalized
+  client errors.
+- `packages/api-contracts` owns REST path builders, Zod request/response
+  schemas, DTO types, and normalized API errors.
+- `packages/workflow-domain` owns persisted workflow schema, validation,
+  serialization, and prompt variable utilities.
+- `packages/tsconfig` owns shared TypeScript config presets.
+- `src/domain/runtime` contains legacy client-side LLM and Current Time
+  adapters retained for regression coverage only.
 
-## Persistence And Secrets
+## Local Development
 
-Workflow files are JSON and validated through Zod before loading. `serializeWorkflowFile` updates `metadata.updatedAt` and intentionally omits `settings.modelProvider.apiKey` so secrets are not forced into versioned `.agentflow.json` files.
+Use `pnpm dev` for the normal web/server loop. It starts:
 
-## Runtime Boundary
+- `@ai-agent-workflow/server` on `http://127.0.0.1:8788`
+- `@ai-agent-workflow/web` on `http://127.0.0.1:5173`
 
-`executeNode` dispatches by persisted node type. LLM execution uses an OpenAI-compatible chat completions request. Current Time execution returns formatted local adapter output. Unsupported MVP nodes return normalized runtime errors instead of pretending to execute.
+Run `pnpm --filter @ai-agent-workflow/desktop dev` for the legacy Electron shell.
+It uses renderer port `5174` and expects the server to be running separately.
+
+## Persistence And Runtime Boundary
+
+The migrated workbench no longer calls Electron globals or local runtime
+execution. It receives a workflow API dependency, saves workflow files through
+the REST client, and creates mock runs through the server API. Workflow
+serialization still strips `settings.modelProvider.apiKey` before persistence.
+
+The server remains intentionally temporary: in-memory workflows and runs are
+deterministic for UI integration and tests, not production persistence or
+execution.
 
 ## Test Strategy
 
-- Unit tests cover schema rejection, prompt resolution, request construction, response normalization, and error normalization.
-- Component tests cover workbench rendering, inspector updates, LLM execution, and Tool execution.
-- `pnpm smoke` covers create/edit/run/save/reopen/tool-run behavior using mocked file IPC and mocked model responses.
+- Root legacy tests cover the old local runtime adapters.
+- `packages/workflow-domain` tests cover schema and prompt variables.
+- `packages/api-contracts`, `apps/server`, and `packages/workflow-client` tests
+  cover API schemas, Hono routes, and fetch client behavior.
+- `packages/workbench-ui` tests cover editing, API-backed save/load, and mock
+  run rendering with a mocked workflow API dependency.
+- `pnpm typecheck`, `pnpm test`, `pnpm lint`, and `pnpm build` run the
+  monorepo validation chain.

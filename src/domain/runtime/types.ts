@@ -1,4 +1,4 @@
-import type { LLMNode, OpenAICompatibleSettings, ToolNode, WorkflowNode } from "../workflow/schema";
+import type { LLMNode, OpenAICompatibleSettings, ToolNode, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 
 export type RuntimeStatus = "idle" | "running" | "success" | "error";
 
