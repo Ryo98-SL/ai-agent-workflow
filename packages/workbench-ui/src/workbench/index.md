@@ -16,7 +16,7 @@
   surface used by the layout shell.
 - `components/ProjectFileActions.tsx` exposes new/open/save/save-as controls.
 - `components/NodePalette.tsx` lists the MVP node family inside the palette
-  popover.
+  popover and disables adding a second Start node.
 - `components/WorkflowCanvas.tsx` wires ReactFlow nodes, workflow-backed edges,
   selection, live dragging, explicit node dimensions/handle bounds, larger
   connection handles, MiniMap styling, and a structure-only remount key that
@@ -26,16 +26,15 @@
   top-right settings popover.
 - `components/NodeInspector.tsx` routes selected nodes to the correct inspector
   when the selection panel is visible.
-- `components/inspectors/` contains LLM, Tool, and unsupported-node inspector views.
-- `components/DebugPanel.tsx` triggers server-backed mock runs and displays run
-  output/events.
+- `components/inspectors/` contains Start, LLM, Tool, and unsupported-node inspector views.
+- `components/DebugPanel.tsx` renders Start input controls, triggers
+  workflow-level server runs, and displays run output/events.
 
 ## Behavior
 
 The first screen is the workbench canvas. The UI loads and saves workflows
 through an injected workflow API. The palette and model settings are opened from
 rounded floating/header buttons, and selecting a node opens the inspector
-without opening run output. LLM and Current Time Tool selections can trigger a
-server-backed mock workflow run from the canvas top-right Run control; the run
-log popover opens only after Run is clicked. Other node types stay visible as
-schema placeholders.
+without opening run output. The top-right Run workflow control opens a run panel
+with Start-declared inputs and submits workflow-level runs through the injected
+API. Other node types stay visible as schema placeholders.

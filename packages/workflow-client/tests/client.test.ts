@@ -115,7 +115,13 @@ describe("workflow client", () => {
   });
 
   it("integrates with the Hono server app", async () => {
-    const app = createServerApp();
+    const app = createServerApp({
+      fetch: async () =>
+        jsonResponse({
+          choices: [{ message: { content: "Client integration output." } }],
+          usage: { total_tokens: 12 },
+        }),
+    });
     const fetchFromApp: typeof fetch = async (input, init) => {
       const url = new URL(input.toString());
       return app.request(`${url.pathname}${url.search}`, init);

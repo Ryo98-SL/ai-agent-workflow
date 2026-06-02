@@ -1,29 +1,44 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, Play } from "lucide-react";
-import { parsePromptVariables } from "@ai-agent-workflow/workflow-domain";
-import type { WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import type { RunInput } from "@ai-agent-workflow/api-contracts";
+import type { StartNode, WorkflowFile } from "@ai-agent-workflow/workflow-domain";
 import type { DebugState } from "../types";
 
 type DebugPanelProps = {
-  selectedNode?: WorkflowNode;
+  workflow: WorkflowFile;
   debugState: DebugState;
-  onRun: (testVariables: Record<string, string>) => void;
+  onRun: (input: RunInput) => void;
 };
 
-export function DebugPanel({ selectedNode, debugState, onRun }: DebugPanelProps) {
-  const [testVariables, setTestVariables] = useState<Record<string, string>>({});
-  const requiredVariables = useMemo(() => {
-    if (selectedNode?.type !== "llm") {
-      return [];
+export function DebugPanel({ workflow, debugState, onRun }: DebugPanelProps) {
+  const startNode = workflow.graph.nodes.find((node): node is StartNode => node.type === "start");
+  const initialValues = useMemo(
+    () =>
+      Object.fromEntries(
+        (startNode?.config.fields ?? []).map((field) => [field.name, field.defaultValue ?? ""]),
+      ) as Record<string, string>,
+    [startNode],
+  );
+  const [values, setValues] = useState<Record<string, string>>(initialValues);
+
+  useEffect(() => {
+    setValues((current) => ({ ...initialValues, ...current }));
+  }, [initialValues]);
+
+  const updateField = (key: string, value: string) => {
+    setValues((current) => ({ ...current, [key]: value }));
+  };
+
+  const submitRun = () => {
+    const input: RunInput = {};
+    for (const field of startNode?.config.fields ?? []) {
+      const value = values[field.name];
+      if (value !== undefined && value !== "") {
+        input[field.name] = value;
+      }
     }
-    return parsePromptVariables(`${selectedNode.config.systemPrompt || ""}\n${selectedNode.config.userPrompt}`);
-  }, [selectedNode]);
-
-  const executable = selectedNode?.type === "llm" || selectedNode?.type === "tool";
-
-  const updateVariable = (key: string, value: string) => {
-    setTestVariables((current) => ({ ...current, [key]: value }));
+    onRun(input);
   };
 
   return (
@@ -31,52 +46,46 @@ export function DebugPanel({ selectedNode, debugState, onRun }: DebugPanelProps)
       <div className="border-b border-slate-200 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold">Run Controls</h2>
-            <p className="mt-1 truncate text-xs text-slate-500">
-              {selectedNode ? `${selectedNode.label} (${selectedNode.type})` : "No node selected"}
-            </p>
+            <h2 className="truncate text-sm font-semibold">Workflow Run</h2>
+            <p className="mt-1 truncate text-xs text-slate-500">{startNode ? `${startNode.label} inputs` : "No Start node"}</p>
           </div>
           <button
             type="button"
-            disabled={!executable || debugState.status === "running"}
-            onClick={() => onRun(testVariables)}
+            disabled={!startNode || debugState.status === "running"}
+            onClick={submitRun}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {debugState.status === "running" ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
-            Run again
+            Run workflow
           </button>
         </div>
-        {selectedNode?.type === "llm" && (
+        {startNode && (
           <div className="mt-4 space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Test Variables</h3>
-            {requiredVariables.length === 0 ? (
-              <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">No variables detected.</p>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Start Inputs</h3>
+            {startNode.config.fields.length === 0 ? (
+              <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">This workflow has no Start inputs.</p>
             ) : (
-              requiredVariables.map((variable) => (
-                <label key={variable} className="block">
-                  <span className="mb-1 block text-xs font-medium text-slate-600">{variable}</span>
+              startNode.config.fields.map((field) => (
+                <label key={field.name} className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">
+                    {field.label || field.name}
+                    {field.required ? " *" : ""}
+                  </span>
                   <input
-                    value={testVariables[variable] ?? ""}
-                    onChange={(event) => updateVariable(variable, event.target.value)}
+                    value={values[field.name] ?? ""}
+                    onChange={(event) => updateField(field.name, event.target.value)}
                     className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm"
-                    placeholder="Override inspector value for this run"
+                    placeholder={field.defaultValue || field.name}
                   />
                 </label>
               ))
             )}
           </div>
         )}
-        {!executable && (
-          <p className="mt-4 rounded-md bg-slate-50 p-3 text-sm leading-5 text-slate-500">
-            Select an LLM or Current Time tool node to run the server mock workflow.
-          </p>
-        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        {debugState.status === "idle" && (
-          <EmptyState title="Ready to run" detail="Run an executable node to inspect server run output and events." />
-        )}
+        {debugState.status === "idle" && <EmptyState title="Ready to run" detail="Run the workflow to inspect server output and events." />}
         {debugState.status === "running" && (
           <EmptyState title="Running" detail="The workflow is running through the server API." loading />
         )}
@@ -112,7 +121,7 @@ function RuntimeResultView({ debugState }: { debugState: DebugState }) {
       </div>
       {run.error && <ErrorBox message={run.error.message} detail={JSON.stringify(run.error, null, 2)} />}
       {run.output && (
-        <ResultSection title="Server Run Output">
+        <ResultSection title="Workflow Output">
           <div className="rounded-md border border-slate-200 bg-white p-3 text-sm leading-6">{run.output.summary}</div>
           <div className="mt-3 space-y-2">
             {run.output.nodeResults.map((nodeResult) => (
@@ -124,6 +133,11 @@ function RuntimeResultView({ debugState }: { debugState: DebugState }) {
                   </span>
                 </div>
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{nodeResult.output}</p>
+                {nodeResult.data && (
+                  <pre className="mt-2 max-h-32 overflow-auto rounded-md bg-slate-950 p-2 text-xs text-slate-100">
+                    {JSON.stringify(nodeResult.data, null, 2)}
+                  </pre>
+                )}
               </div>
             ))}
           </div>

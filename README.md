@@ -33,6 +33,7 @@ pnpm build
 `pnpm dev` starts the mock API server at `http://127.0.0.1:8788` and the web app
 at `http://127.0.0.1:5173`. The web and desktop renderers use
 `VITE_WORKFLOW_API_BASE_URL` when a different API origin is needed.
+- 不要把docs/文件夹下的文件加入git记录！
 
 ## Packages And Apps
 

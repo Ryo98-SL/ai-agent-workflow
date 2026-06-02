@@ -3,14 +3,15 @@
 ## Purpose
 
 `packages/api-contracts` owns the shared REST API contract for workflow storage
-and deterministic mock run endpoints.
+and workflow run endpoints.
 
 ## Structure
 
-- `src/index.ts` contains route templates, path builders, Zod schemas, inferred
-  DTO/request/response types, and normalized API error helpers.
-- `tests/contracts.test.ts` covers path generation and representative schema
-  parsing.
+- `src/index.ts` contains route templates, path builders, Zod schemas, nullable
+  run input and structured node result contracts, inferred DTO/request/response
+  types, and normalized API error helpers.
+- `tests/contracts.test.ts` covers path generation, nullable run input,
+  structured node result metadata, and representative schema parsing.
 
 ## Behavior
 

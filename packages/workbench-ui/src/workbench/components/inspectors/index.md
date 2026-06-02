@@ -7,8 +7,9 @@ side panel.
 
 ## Structure
 
+- `StartInspector.tsx` edits Start labels and text input field declarations.
 - `LLMInspector.tsx` edits labels, prompts, model overrides, sampling settings,
-  and prompt variable defaults for LLM nodes.
+  and displays prompt variable reference status for LLM nodes.
 - `ToolInspector.tsx` edits Current Time tool labels and timezone settings.
 - `UnsupportedInspector.tsx` edits labels for schema-visible nodes whose real
   execution remains deferred.
@@ -16,4 +17,4 @@ side panel.
 ## Behavior
 
 Inspectors only mutate workflow draft state through callbacks. Server
-persistence and run creation stay in `AppWorkbench`.
+persistence and workflow-level run creation stay in `AppWorkbench`.

@@ -20,7 +20,7 @@ const items: PaletteItem[] = [
   { type: "template", label: "Template", description: "Future text transform", group: "Logic", icon: TextCursorInput },
 ];
 
-export function NodePalette({ onAddNode }: { onAddNode: (type: WorkflowNodeType) => void }) {
+export function NodePalette({ hasStartNode, onAddNode }: { hasStartNode: boolean; onAddNode: (type: WorkflowNodeType) => void }) {
   const groups = [...new Set(items.map((item) => item.group))];
 
   return (
@@ -32,12 +32,16 @@ export function NodePalette({ onAddNode }: { onAddNode: (type: WorkflowNodeType)
             <div className="space-y-2">
               {items
                 .filter((item) => item.group === group)
-                .map((item) => (
+                .map((item) => {
+                  const disabled = item.type === "start" && hasStartNode;
+                  return (
                   <button
                     key={item.type}
                     type="button"
+                    disabled={disabled}
                     onClick={() => onAddNode(item.type)}
-                    className="flex w-full items-center gap-3 rounded-md border border-slate-200 bg-white p-3 text-left hover:border-emerald-300 hover:bg-emerald-50"
+                    title={disabled ? "This workflow already has a Start node." : item.label}
+                    className="flex w-full items-center gap-3 rounded-md border border-slate-200 bg-white p-3 text-left hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                   >
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700">
                       <item.icon size={17} aria-hidden />
@@ -47,7 +51,8 @@ export function NodePalette({ onAddNode }: { onAddNode: (type: WorkflowNodeType)
                       <span className="block truncate text-xs text-slate-500">{item.description}</span>
                     </span>
                   </button>
-                ))}
+                  );
+                })}
             </div>
           </section>
         ))}

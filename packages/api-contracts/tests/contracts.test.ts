@@ -39,21 +39,22 @@ describe("api contracts", () => {
     expect(ListWorkflowsResponseSchema.parse(response).workflows).toHaveLength(1);
   });
 
-  it("validates deterministic run responses", () => {
+  it("validates workflow run responses with null input and structured node data", () => {
     const response = {
       run: {
         id: "run-1",
         workflowId: "workflow-1",
         status: "succeeded",
-        input: { topic: "contracts" },
+        input: { topic: "contracts", audience: null },
         output: {
-          summary: "Mock run completed for workflow Demo.",
+          summary: "Workflow run completed for Demo.",
           nodeResults: [
             {
-              nodeId: "start-1",
+              nodeId: "start1",
               label: "Start",
               status: "succeeded",
-              output: "Start completed.",
+              output: "Start inputs materialized.",
+              data: { topic: "contracts", audience: null },
             },
           ],
         },

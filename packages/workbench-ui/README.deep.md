@@ -8,9 +8,9 @@ and server run output.
 
 - `src/index.ts` exports the public component and API boundary types.
 - `src/workbench/AppWorkbench.tsx` owns workflow state, panel visibility, and
-  calls to the injected workflow API for list/create/read/update and run
-  operations. Selecting a node opens the inspector only; run popover visibility
-  is driven by explicit run requests.
+  calls to the injected workflow API for list/create/read/update and
+  workflow-level run operations. Selecting a node opens the inspector only; run
+  popover visibility is driven by explicit run requests.
 - `src/workbench/components` contains focused UI panels. The workflow canvas
   lets ReactFlow own live node dragging, keeps edges driven by the workflow
   graph, and provides explicit card dimensions plus handle bounds so built-in
@@ -24,7 +24,8 @@ and server run output.
   a run is requested.
 - `src/styles.css` contains Tailwind directives and shared base page styles for
   consuming apps.
-- `tests/core-loop.test.tsx` covers editing, save/load, and server mock run
+- `tests/core-loop.test.tsx` covers editing, Start field configuration,
+  workflow-level run submission, Start uniqueness, save/load, and server run
   rendering with a mocked API dependency.
 
 ## Integration Boundary
@@ -36,5 +37,5 @@ Electron globals, the Hono server app, or local runtime execution adapters.
 ## Test Strategy
 
 Component tests render the full workbench with a memory implementation of the
-workflow API. Tests assert server persistence calls and mock run rendering
-without touching browser fetch or Electron preload APIs.
+workflow API. Tests assert server persistence calls, Start input submission, and
+run rendering without touching browser fetch or Electron preload APIs.

@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.30.3",
   "description": "Web-first workflow workbench monorepo for AI agent workflow debugging.",
   "scripts": {
-    "dev": "concurrently -k \"pnpm --filter @ai-agent-workflow/server dev\" \"pnpm --filter @ai-agent-workflow/web dev\"",
+    "dev": "pnpm run @ai-agent-workflow/web#dev",
     "dev:desktop": "pnpm --filter @ai-agent-workflow/desktop dev",
     "dev:server": "pnpm --filter @ai-agent-workflow/server dev",
     "dev:web": "pnpm --filter @ai-agent-workflow/web dev",

@@ -6,6 +6,7 @@ import type {
   WorkflowNode,
   WorkflowNodeType,
 } from "@ai-agent-workflow/workflow-domain";
+import type { RunInput } from "@ai-agent-workflow/api-contracts";
 import { DebugPanel } from "./DebugPanel";
 import { FloatingPanel } from "./FloatingPanel";
 import { ModelSettingsPanel } from "./ModelSettingsPanel";
@@ -33,7 +34,8 @@ type WorkbenchLayoutProps = {
   onCloseSettings: () => void;
   onNewWorkflow: () => void;
   onOpenWorkflow: () => void;
-  onRunSelectedNode: (testVariables: Record<string, string>) => void;
+  onOpenRunPanel: () => void;
+  onRunWorkflow: (input: RunInput) => void;
   onSaveWorkflow: () => void;
   onSaveWorkflowAs: () => void;
   onSelectNode: (nodeId: string) => void;
@@ -62,7 +64,8 @@ export function WorkbenchLayout({
   onCloseSettings,
   onNewWorkflow,
   onOpenWorkflow,
-  onRunSelectedNode,
+  onOpenRunPanel,
+  onRunWorkflow,
   onSaveWorkflow,
   onSaveWorkflowAs,
   onSelectNode,
@@ -72,7 +75,7 @@ export function WorkbenchLayout({
   onUpdateNode,
   onWorkflowChange,
 }: WorkbenchLayoutProps) {
-  const executable = selectedNode?.type === "llm" || selectedNode?.type === "tool";
+  const hasStartNode = workflow.graph.nodes.some((node) => node.type === "start");
 
   return (
     <main className="relative h-full min-h-0 overflow-hidden bg-slate-50 text-slate-950">
@@ -130,17 +133,17 @@ export function WorkbenchLayout({
         </button>
       </div>
 
-      <div className="absolute right-4 top-24 z-20">
+      <div className={["absolute top-24 z-20", inspectorOpen ? "right-[412px]" : "right-4"].join(" ")}>
         <button
           type="button"
-          disabled={!executable || debugState.status === "running"}
-          onClick={() => onRunSelectedNode({})}
+          disabled={!hasStartNode || debugState.status === "running"}
+          onClick={onOpenRunPanel}
           className="inline-flex h-10 items-center gap-2 rounded-full border border-emerald-200 bg-white px-4 text-sm font-medium text-emerald-700 shadow-lg shadow-slate-900/10 hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-          aria-label="Run"
-          title={selectedNode ? "Run selected node" : "Select a runnable node first"}
+          aria-label="Run workflow"
+          title={hasStartNode ? "Run workflow" : "Add a Start node first"}
         >
           {debugState.status === "running" ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Play size={16} aria-hidden />}
-          Run
+          Run workflow
         </button>
       </div>
 
@@ -153,7 +156,7 @@ export function WorkbenchLayout({
           className="absolute left-4 top-40 z-30 h-[min(70vh,560px)] w-[300px]"
         >
           <div id="workbench-node-palette" className="h-full">
-            <NodePalette onAddNode={onAddNode} />
+            <NodePalette hasStartNode={hasStartNode} onAddNode={onAddNode} />
           </div>
         </FloatingPanel>
       )}
@@ -181,21 +184,24 @@ export function WorkbenchLayout({
           className="absolute bottom-4 right-4 top-20 z-30 w-[380px]"
         >
           <div className="h-full overflow-y-auto">
-            <NodeInspector selectedNode={selectedNode} updateNode={onUpdateNode} />
+            <NodeInspector workflow={workflow} selectedNode={selectedNode} updateNode={onUpdateNode} />
           </div>
         </FloatingPanel>
       )}
 
-      {debugOpen && selectedNode && (
+      {debugOpen && (
         <FloatingPanel
           title="Run Log"
-          description={`${selectedNode.label} (${selectedNode.type})`}
+          description="Workflow run"
           closeLabel="Close run log"
           onClose={onCloseDebug}
-          className={["absolute right-4 top-40 z-40 h-[min(70vh,560px)]", inspectorOpen ? "w-[420px]" : "w-[560px]"].join(" ")}
+          className={[
+            "absolute top-40 z-40 h-[min(70vh,560px)]",
+            inspectorOpen ? "right-[412px] w-[420px]" : "right-4 w-[560px]",
+          ].join(" ")}
         >
           <div className="h-full overflow-hidden">
-            <DebugPanel selectedNode={selectedNode} debugState={debugState} onRun={onRunSelectedNode} />
+            <DebugPanel workflow={workflow} debugState={debugState} onRun={onRunWorkflow} />
           </div>
         </FloatingPanel>
       )}

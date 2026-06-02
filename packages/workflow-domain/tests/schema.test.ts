@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultWorkflow, parseWorkflowJson, serializeWorkflowFile, validateWorkflowFile } from "@ai-agent-workflow/workflow-domain";
+import {
+  createDefaultWorkflow,
+  createNode,
+  createReadableNodeId,
+  parseWorkflowJson,
+  serializeWorkflowFile,
+  validateWorkflowFile,
+} from "@ai-agent-workflow/workflow-domain";
 
 describe("workflow schema", () => {
   it("accepts the default workflow and includes the MVP node family", () => {
@@ -8,6 +15,46 @@ describe("workflow schema", () => {
 
     expect(result.ok).toBe(true);
     expect(workflow.graph.nodes.map((node) => node.type)).toEqual(["start", "llm", "tool"]);
+    expect(workflow.graph.nodes.map((node) => node.id)).toContain("start1");
+    expect(workflow.graph.nodes.map((node) => node.id)).toContain("llm1");
+  });
+
+  it("accepts Start fields and rejects duplicate or invalid names", () => {
+    const workflow = createDefaultWorkflow();
+    const start = workflow.graph.nodes.find((node) => node.type === "start");
+
+    expect(start?.config.fields).toEqual([
+      {
+        name: "topic",
+        label: "Topic",
+        required: true,
+        defaultValue: "LLM workflow debugging",
+      },
+    ]);
+
+    if (start?.type === "start") {
+      start.config.fields = [
+        { name: "topic", required: true },
+        { name: "topic", required: false },
+      ];
+    }
+
+    const duplicate = validateWorkflowFile(workflow);
+    expect(duplicate.ok).toBe(false);
+
+    if (start?.type === "start") {
+      start.config.fields = [{ name: "bad.name", required: false }];
+    }
+
+    const invalid = validateWorkflowFile(workflow);
+    expect(invalid.ok).toBe(false);
+  });
+
+  it("creates readable collision-free node ids", () => {
+    const workflow = createDefaultWorkflow();
+
+    expect(createReadableNodeId("llm", workflow.graph.nodes)).toBe("llm2");
+    expect(createNode("llm", { x: 0, y: 0 }, workflow.graph.nodes).id).toBe("llm2");
   });
 
   it("rejects unsupported workflow versions", () => {

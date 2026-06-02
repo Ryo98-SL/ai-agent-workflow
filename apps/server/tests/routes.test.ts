@@ -6,6 +6,25 @@ async function json(response: Response) {
   return response.json() as Promise<unknown>;
 }
 
+function createModelFetch(text = "LangGraph is ready.") {
+  return async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+    new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: text,
+              reasoning: "brief reasoning",
+            },
+          },
+        ],
+        usage: { total_tokens: 42 },
+        request: init?.body ? JSON.parse(String(init.body)) : undefined,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+}
+
 describe("workflow API server", () => {
   it("responds to browser CORS requests", async () => {
     const app = createServerApp();
@@ -118,8 +137,8 @@ describe("workflow API server", () => {
     });
   });
 
-  it("creates deterministic mock runs and events", async () => {
-    const app = createServerApp();
+  it("creates LangGraph workflow runs and events", async () => {
+    const app = createServerApp({ fetch: createModelFetch("Server runtime output.") });
     const createRunResponse = await app.request("/api/workflows/workflow-1/runs", {
       method: "POST",
       body: JSON.stringify({ input: { topic: "server tests" } }),
@@ -130,13 +149,20 @@ describe("workflow API server", () => {
       run: {
         id: string;
         status: string;
-        output: { nodeResults: unknown[] };
+        output: { nodeResults: Array<{ nodeId: string; output: string; data?: unknown }> };
       };
     };
 
     expect(createdRun.run.id).toBe("run-1");
     expect(createdRun.run.status).toBe("succeeded");
-    expect(createdRun.run.output.nodeResults).toHaveLength(3);
+    expect(createdRun.run.output.nodeResults).toHaveLength(2);
+    expect(createdRun.run.output.nodeResults.map((result) => result.nodeId)).toEqual(["start1", "llm1"]);
+    expect(createdRun.run.output.nodeResults[1].output).toBe("Server runtime output.");
+    expect(createdRun.run.output.nodeResults[1].data).toMatchObject({
+      text: "Server runtime output.",
+      usage: { total_tokens: 42 },
+      reasoning: "brief reasoning",
+    });
 
     const getRunResponse = await app.request("/api/runs/run-1");
     expect(getRunResponse.status).toBe(200);
@@ -156,8 +182,117 @@ describe("workflow API server", () => {
       "run.started",
       "node.completed",
       "node.completed",
-      "node.completed",
       "run.completed",
     ]);
+  });
+
+  it("fails missing required Start input before model calls", async () => {
+    let called = false;
+    const workflow = createDefaultWorkflow();
+    const start = workflow.graph.nodes.find((node) => node.type === "start");
+    if (start?.type === "start") {
+      start.config.fields = [{ name: "topic", required: true }];
+    }
+    const app = createServerApp({
+      seedWorkflow: workflow,
+      fetch: async () => {
+        called = true;
+        return new Response("{}", { status: 200 });
+      },
+    });
+
+    const response = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: {} }),
+    });
+    const body = (await json(response)) as { run: { status: string; error: { message: string }; output: { nodeResults: unknown[] } } };
+
+    expect(response.status).toBe(201);
+    expect(body.run.status).toBe("failed");
+    expect(body.run.error.message).toContain('Missing required Start field "topic"');
+    expect(body.run.output.nodeResults).toHaveLength(1);
+    expect(called).toBe(false);
+  });
+
+  it("uses Start defaults and optional nulls", async () => {
+    const workflow = createDefaultWorkflow();
+    const start = workflow.graph.nodes.find((node) => node.type === "start");
+    const llm = workflow.graph.nodes.find((node) => node.type === "llm");
+    if (start?.type === "start") {
+      start.config.fields = [
+        { name: "topic", required: true, defaultValue: "default topic" },
+        { name: "audience", required: false },
+      ];
+    }
+    if (llm?.type === "llm") {
+      llm.config.userPrompt = "Explain {{start1.topic}} to {{start1.audience}}.";
+    }
+
+    const app = createServerApp({ seedWorkflow: workflow, fetch: createModelFetch("Defaulted output.") });
+    const response = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: {} }),
+    });
+    const body = (await json(response)) as { run: { status: string; output: { nodeResults: Array<{ data?: Record<string, unknown> }> } } };
+
+    expect(body.run.status).toBe("succeeded");
+    expect(body.run.output.nodeResults[0].data).toEqual({ topic: "default topic", audience: null });
+  });
+
+  it("returns clear failed runs for unsupported reachable nodes", async () => {
+    const workflow = createDefaultWorkflow();
+    workflow.graph.edges = [{ id: "edge-start-tool", source: "start1", target: "tool-current-time" }];
+    const app = createServerApp({ seedWorkflow: workflow, fetch: createModelFetch() });
+
+    const response = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "unsupported" } }),
+    });
+    const body = (await json(response)) as { run: { status: string; error: { message: string } } };
+
+    expect(body.run.status).toBe("failed");
+    expect(body.run.error.message).toContain("unsupported runtime type");
+  });
+
+  it("fails missing namespaced prompt variables without model calls", async () => {
+    let called = false;
+    const workflow = createDefaultWorkflow();
+    const llm = workflow.graph.nodes.find((node) => node.type === "llm");
+    if (llm?.type === "llm") {
+      llm.config.userPrompt = "Explain {{start1.missing}}.";
+    }
+    const app = createServerApp({
+      seedWorkflow: workflow,
+      fetch: async () => {
+        called = true;
+        return new Response("{}", { status: 200 });
+      },
+    });
+
+    const response = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "variables" } }),
+    });
+    const body = (await json(response)) as { run: { status: string; error: { message: string } } };
+
+    expect(body.run.status).toBe("failed");
+    expect(body.run.error.message).toContain("start1.missing");
+    expect(called).toBe(false);
+  });
+
+  it("captures model endpoint failures as failed runs", async () => {
+    const app = createServerApp({
+      fetch: async () => new Response(JSON.stringify({ error: "nope" }), { status: 503 }),
+    });
+
+    const response = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "model failure" } }),
+    });
+    const body = (await json(response)) as { run: { status: string; error: { message: string }; output: { nodeResults: unknown[] } } };
+
+    expect(body.run.status).toBe("failed");
+    expect(body.run.error.message).toContain("HTTP 503");
+    expect(body.run.output.nodeResults).toHaveLength(2);
   });
 });

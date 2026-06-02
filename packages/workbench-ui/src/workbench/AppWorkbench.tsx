@@ -10,6 +10,7 @@ import {
   type WorkflowNodeType,
 } from "@ai-agent-workflow/workflow-domain";
 import type { WorkflowDto } from "@ai-agent-workflow/api-contracts";
+import type { RunInput } from "@ai-agent-workflow/api-contracts";
 import { WorkbenchLayout } from "./components/WorkbenchLayout";
 import type { AppWorkbenchProps, DebugState } from "./types";
 
@@ -137,8 +138,13 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
 
   const addNode = useCallback(
     (type: WorkflowNodeType) => {
+      if (type === "start" && workflow.graph.nodes.some((node) => node.type === "start")) {
+        setPaletteOpen(false);
+        return;
+      }
+
       const position = { x: 180 + workflow.graph.nodes.length * 32, y: 120 + workflow.graph.nodes.length * 24 };
-      const node = createNode(type, position);
+      const node = createNode(type, position, workflow.graph.nodes);
       markWorkflow((current) => ({
         ...current,
         graph: { ...current.graph, nodes: [...current.graph.nodes, node] },
@@ -148,7 +154,7 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
       setDebugOpen(false);
       setPaletteOpen(false);
     },
-    [markWorkflow, workflow.graph.nodes.length],
+    [markWorkflow, workflow.graph.nodes],
   );
 
   const handleSelectNode = useCallback((nodeId: string) => {
@@ -197,9 +203,9 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
     [errorMessage, persistWorkflow],
   );
 
-  const runSelectedNode = useCallback(
-    async (testVariables: Record<string, string>) => {
-      if (!selectedNode || debugState.status === "running") {
+  const runWorkflow = useCallback(
+    async (input: RunInput) => {
+      if (debugState.status === "running") {
         return;
       }
 
@@ -208,7 +214,7 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
 
       try {
         const persisted = !workflowId || dirty ? await persistWorkflow("save") : { id: workflowId, workflow };
-        const runResponse = await workflowApi.createRun(persisted.id, { input: testVariables });
+        const runResponse = await workflowApi.createRun(persisted.id, { input });
         const eventResponse = await workflowApi.listRunEvents(runResponse.run.id);
 
         setDebugState({
@@ -222,7 +228,7 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
         setDebugState({ status: "error", error: errorMessage(error) });
       }
     },
-    [debugState.status, dirty, errorMessage, persistWorkflow, selectedNode, workflow, workflowApi, workflowId],
+    [debugState.status, dirty, errorMessage, persistWorkflow, workflow, workflowApi, workflowId],
   );
 
   return (
@@ -244,7 +250,8 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
       onCloseSettings={() => setSettingsOpen(false)}
       onNewWorkflow={handleNewWorkflow}
       onOpenWorkflow={handleOpenWorkflow}
-      onRunSelectedNode={runSelectedNode}
+      onOpenRunPanel={() => setDebugOpen(true)}
+      onRunWorkflow={runWorkflow}
       onSaveWorkflow={() => saveWorkflow("save")}
       onSaveWorkflowAs={() => saveWorkflow("saveAs")}
       onSelectNode={handleSelectNode}

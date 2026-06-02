@@ -87,9 +87,11 @@ export const UpdateWorkflowResponseSchema = z.object({
 });
 
 export const RunStatusSchema = z.enum(["queued", "running", "succeeded", "failed"]);
+export const RunInputValueSchema = z.union([z.string(), z.null()]);
+export const RunInputSchema = z.record(RunInputValueSchema);
 
 export const CreateRunRequestSchema = z.object({
-  input: z.record(z.string()).default({}),
+  input: RunInputSchema.default({}),
 });
 
 export const WorkflowRunOutputSchema = z.object({
@@ -100,6 +102,7 @@ export const WorkflowRunOutputSchema = z.object({
       label: z.string().min(1),
       status: RunStatusSchema,
       output: z.string(),
+      data: z.record(z.unknown()).optional(),
     }),
   ),
 });
@@ -108,7 +111,7 @@ export const WorkflowRunSchema = z.object({
   id: z.string().min(1),
   workflowId: z.string().min(1),
   status: RunStatusSchema,
-  input: z.record(z.string()),
+  input: RunInputSchema,
   output: WorkflowRunOutputSchema.nullable(),
   error: ApiErrorResponseSchema.shape.error.nullable(),
   createdAt: z.string().datetime(),
@@ -124,7 +127,14 @@ export const GetRunResponseSchema = z.object({
   run: WorkflowRunSchema,
 });
 
-export const RunEventTypeSchema = z.enum(["run.created", "run.started", "node.completed", "run.completed"]);
+export const RunEventTypeSchema = z.enum([
+  "run.created",
+  "run.started",
+  "node.completed",
+  "node.failed",
+  "run.completed",
+  "run.failed",
+]);
 
 export const RunEventSchema = z.object({
   id: z.string().min(1),
@@ -152,6 +162,7 @@ export type GetWorkflowResponse = z.infer<typeof GetWorkflowResponseSchema>;
 export type UpdateWorkflowRequest = z.input<typeof UpdateWorkflowRequestSchema>;
 export type UpdateWorkflowResponse = z.infer<typeof UpdateWorkflowResponseSchema>;
 export type RunStatus = z.infer<typeof RunStatusSchema>;
+export type RunInput = z.infer<typeof RunInputSchema>;
 export type CreateRunRequest = z.input<typeof CreateRunRequestSchema>;
 export type WorkflowRunOutput = z.infer<typeof WorkflowRunOutputSchema>;
 export type WorkflowRun = z.infer<typeof WorkflowRunSchema>;

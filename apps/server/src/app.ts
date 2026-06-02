@@ -15,14 +15,16 @@ import {
   createApiErrorResponse,
   zodIssuesToApiIssues,
   type RunEvent,
+  type RunInput,
   type WorkflowDto,
   type WorkflowRun,
   type WorkflowSummary,
 } from "@ai-agent-workflow/api-contracts";
-import { createDefaultWorkflow, type WorkflowFile, type WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import { createDefaultWorkflow, type WorkflowFile } from "@ai-agent-workflow/workflow-domain";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { z } from "zod";
+import { executeWorkflowRuntime, type RuntimeExecutionResult } from "./runtime";
 
 const SEED_TIME = "2026-06-01T00:00:00.000Z";
 
@@ -38,6 +40,7 @@ type ServerState = {
 
 export type CreateServerAppOptions = {
   seedWorkflow?: WorkflowFile;
+  fetch?: typeof fetch;
 };
 
 function cloneWorkflow(workflow: WorkflowFile): WorkflowFile {
@@ -131,88 +134,85 @@ function responseFromSchema<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, valu
   return schema.parse(value);
 }
 
-function nodeOutput(node: WorkflowNode): string {
-  if (node.type === "llm") {
-    return `Mock LLM output for ${node.label}.`;
-  }
-
-  if (node.type === "tool") {
-    return `Mock tool output for ${node.label}.`;
-  }
-
-  return `${node.label} completed.`;
-}
-
 function secondAt(offset: number): string {
   const date = new Date(SEED_TIME);
   date.setUTCSeconds(date.getUTCSeconds() + offset);
   return date.toISOString();
 }
 
-function createMockRun(state: ServerState, workflow: StoredWorkflow, input: Record<string, string>): WorkflowRun {
+function createEvent(
+  runId: string,
+  sequence: number,
+  type: RunEvent["type"],
+  message: string,
+  createdAt: string,
+  payload?: Record<string, unknown>,
+): RunEvent {
+  return {
+    id: `${runId}-event-${sequence + 1}`,
+    runId,
+    sequence,
+    type,
+    message,
+    createdAt,
+    ...(payload ? { payload } : {}),
+  };
+}
+
+function createRunFromExecution(
+  state: ServerState,
+  workflow: StoredWorkflow,
+  input: RunInput,
+  execution: RuntimeExecutionResult,
+): WorkflowRun {
   const runNumber = state.nextRunNumber;
   state.nextRunNumber += 1;
 
   const runId = `run-${runNumber}`;
   const createdAt = secondAt(runNumber * 10);
   const startedAt = secondAt(runNumber * 10 + 1);
-  const completedAt = secondAt(runNumber * 10 + 2);
-  const nodeResults = workflow.workflow.graph.nodes.map((node) => ({
-    nodeId: node.id,
-    label: node.label,
-    status: "succeeded" as const,
-    output: nodeOutput(node),
-  }));
+  const completedAt = secondAt(runNumber * 10 + execution.nodeResults.length + 2);
+  const status = execution.ok ? "succeeded" : "failed";
   const run: WorkflowRun = {
     id: runId,
     workflowId: workflow.id,
-    status: "succeeded",
+    status,
     input,
-    output: {
-      summary: `Mock run completed for workflow ${workflow.workflow.metadata.name}.`,
-      nodeResults,
-    },
-    error: null,
+    output: execution.ok
+      ? {
+          summary: `Workflow run completed for ${workflow.workflow.metadata.name}.`,
+          nodeResults: execution.nodeResults,
+        }
+      : {
+          summary: `Workflow run failed for ${workflow.workflow.metadata.name}.`,
+          nodeResults: execution.nodeResults,
+        },
+    error: execution.ok ? null : execution.error,
     createdAt,
     startedAt,
     completedAt,
   };
-  const events: RunEvent[] = [
-    {
-      id: `${runId}-event-1`,
-      runId,
-      sequence: 0,
-      type: "run.created",
-      message: `Run ${runId} created.`,
-      createdAt: run.createdAt,
-      payload: { workflowId: workflow.id },
-    },
-    {
-      id: `${runId}-event-2`,
-      runId,
-      sequence: 1,
-      type: "run.started",
-      message: `Run ${runId} started.`,
-      createdAt: startedAt,
-    },
-    ...nodeResults.map((result, index) => ({
-      id: `${runId}-event-${index + 3}`,
-      runId,
-      sequence: index + 2,
-      type: "node.completed" as const,
-      message: `${result.label} completed.`,
-      createdAt: secondAt(runNumber * 10 + index + 2),
-      payload: { nodeId: result.nodeId, output: result.output },
+  const events = [
+    createEvent(runId, 0, "run.created", `Run ${runId} created.`, run.createdAt, { workflowId: workflow.id }),
+    createEvent(runId, 1, "run.started", `Run ${runId} started.`, startedAt),
+    ...execution.nodeResults.map((result, index) => ({
+      ...createEvent(
+        runId,
+        index + 2,
+        result.status === "failed" ? "node.failed" : "node.completed",
+        `${result.label} ${result.status === "failed" ? "failed" : "completed"}.`,
+        secondAt(runNumber * 10 + index + 2),
+        { nodeId: result.nodeId, output: result.output, data: result.data },
+      ),
     })),
-    {
-      id: `${runId}-event-${nodeResults.length + 3}`,
+    createEvent(
       runId,
-      sequence: nodeResults.length + 2,
-      type: "run.completed",
-      message: `Run ${runId} completed.`,
-      createdAt: completedAt,
-      payload: { status: run.status },
-    },
+      execution.nodeResults.length + 2,
+      execution.ok ? "run.completed" : "run.failed",
+      `Run ${runId} ${execution.ok ? "completed" : "failed"}.`,
+      completedAt,
+      { status: run.status },
+    ),
   ];
 
   state.runs.set(runId, run);
@@ -295,7 +295,8 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       return c.json(parsed.body, parsed.status);
     }
 
-    const run = createMockRun(state, workflow, parsed.data.input);
+    const execution = await executeWorkflowRuntime(workflow.workflow, parsed.data.input, { fetch: options.fetch });
+    const run = createRunFromExecution(state, workflow, parsed.data.input, execution);
 
     return c.json(responseFromSchema(CreateRunResponseSchema, { run }), 201);
   });

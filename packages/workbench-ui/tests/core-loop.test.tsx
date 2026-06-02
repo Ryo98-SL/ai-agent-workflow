@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { RunEvent, WorkflowDto, WorkflowRun, WorkflowSummary } from "@ai-agent-workflow/api-contracts";
 import { createDefaultWorkflow, type WorkflowFile } from "@ai-agent-workflow/workflow-domain";
@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AppWorkbench, type WorkbenchWorkflowApi } from "../src";
 
 describe("MVP smoke loop", () => {
-  it("creates, edits, runs, saves, reopens, and renders a server mock run", async () => {
+  it("edits, runs, saves, reopens, and renders a workflow run", async () => {
     const user = userEvent.setup();
     const { api, workflows, calls } = createMemoryWorkflowApi();
 
@@ -16,14 +16,22 @@ describe("MVP smoke loop", () => {
     await user.type(screen.getByPlaceholderText("gpt-4.1-mini"), "-smoke");
     fireEvent.click(screen.getByText("LLM"));
     expect(screen.getByText("Node Inspector")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Run" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("llm1")).toBeInTheDocument();
+    expect(screen.getByText("start1.topic")).toBeInTheDocument();
+    expect(screen.getByText("resolvable")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run workflow" })).toBeInTheDocument();
     expect(screen.queryByText("Run Log")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close node inspector" }));
     expect(screen.queryByText("Node Inspector")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText("LLM"));
-    await user.click(screen.getByRole("button", { name: "Run" }));
+    await user.click(screen.getByRole("button", { name: "Run workflow" }));
     expect(await screen.findByText("Run Log")).toBeInTheDocument();
-    expect(await screen.findByText("Mock LLM output for LLM.")).toBeInTheDocument();
+    const runPanel = screen.getByText("Workflow Run").closest("div");
+    expect(runPanel).not.toBeNull();
+    await user.clear(screen.getByRole("textbox", { name: /Topic/ }));
+    await user.type(screen.getByRole("textbox", { name: /Topic/ }), "workbench tests");
+    await user.click(screen.getAllByRole("button", { name: "Run workflow" }).at(-1)!);
+    expect((await screen.findAllByText("Memory runtime output.")).length).toBeGreaterThan(0);
+    expect(api.createRun).toHaveBeenLastCalledWith("workflow-1", { input: { topic: "workbench tests" } });
     expect(calls.updateWorkflow).toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Save workflow as" }));
@@ -31,10 +39,27 @@ describe("MVP smoke loop", () => {
     expect(Array.from(workflows.values()).at(-1)?.workflow.settings.modelProvider?.apiKey).toBeUndefined();
 
     await user.click(screen.getByRole("button", { name: "Open workflow" }));
-    fireEvent.click(await screen.findByText("Current Time"));
-    await user.click(screen.getByRole("button", { name: "Run" }));
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+  });
 
-    expect((await screen.findAllByText("Mock tool output for Current Time.")).length).toBeGreaterThan(0);
+  it("edits Start fields and prevents adding a second Start node", async () => {
+    const user = userEvent.setup();
+    const { api } = createMemoryWorkflowApi();
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Start"));
+    expect(screen.getByDisplayValue("start1")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add field" }));
+    await user.clear(screen.getAllByRole("textbox", { name: "Name" }).at(-1)!);
+    await user.type(screen.getAllByRole("textbox", { name: "Name" }).at(-1)!, "audience");
+    expect(screen.getByDisplayValue("audience")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open node palette" }));
+    const palette = screen.getByText("Node Palette").closest("aside");
+    expect(palette).not.toBeNull();
+    expect(within(palette!).getByRole("button", { name: /Start/ })).toBeDisabled();
   });
 });
 
@@ -115,7 +140,8 @@ function createMemoryWorkflowApi() {
             nodeId: node.id,
             label: node.label,
             status: "succeeded",
-            output: node.type === "tool" ? `Mock tool output for ${node.label}.` : `Mock LLM output for ${node.label}.`,
+            output: node.type === "start" ? "Start inputs materialized." : "Memory runtime output.",
+            data: node.type === "start" ? request.input ?? {} : { text: "Memory runtime output.", usage: null, reasoning: null },
           })),
         },
         error: null,

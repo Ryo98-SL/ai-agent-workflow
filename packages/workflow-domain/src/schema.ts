@@ -24,9 +24,33 @@ const BaseNodeSchema = z.object({
   label: z.string().min(1),
 });
 
+const StartFieldSchema = z.object({
+  name: z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, "Use letters, numbers, and underscores; do not start with a number."),
+  label: z.string().optional(),
+  required: z.boolean().default(false),
+  defaultValue: z.string().optional(),
+});
+
 const StartNodeSchema = BaseNodeSchema.extend({
   type: z.literal("start"),
-  config: z.object({}).default({}),
+  config: z
+    .object({
+      fields: z.array(StartFieldSchema).default([]),
+    })
+    .default({ fields: [] })
+    .superRefine((config, context) => {
+      const names = new Set<string>();
+      for (const [index, field] of config.fields.entries()) {
+        if (names.has(field.name)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Duplicate Start field name "${field.name}".`,
+            path: ["fields", index, "name"],
+          });
+        }
+        names.add(field.name);
+      }
+    }),
 });
 
 const LLMNodeSchema = BaseNodeSchema.extend({
@@ -102,7 +126,9 @@ export const WorkflowFileSchema = z.object({
   }),
 });
 
+export type StartField = z.infer<typeof StartFieldSchema>;
 export type WorkflowNode = z.infer<typeof WorkflowNodeSchema>;
+export type StartNode = Extract<WorkflowNode, { type: "start" }>;
 export type LLMNode = Extract<WorkflowNode, { type: "llm" }>;
 export type ToolNode = Extract<WorkflowNode, { type: "tool" }>;
 export type WorkflowEdge = z.infer<typeof WorkflowEdgeSchema>;
@@ -165,21 +191,30 @@ export function createDefaultWorkflow(): WorkflowFile {
     graph: {
       nodes: [
         {
-          id: "start-1",
+          id: "start1",
           type: "start",
           label: "Start",
           position: { x: 80, y: 120 },
-          config: {},
+          config: {
+            fields: [
+              {
+                name: "topic",
+                label: "Topic",
+                required: true,
+                defaultValue: "LLM workflow debugging",
+              },
+            ],
+          },
         },
         {
-          id: "llm-1",
+          id: "llm1",
           type: "llm",
           label: "LLM",
           position: { x: 360, y: 110 },
           config: {
             systemPrompt: "You are a precise workflow debugging assistant.",
-            userPrompt: "Explain {{topic}} in one concise paragraph.",
-            variables: { topic: "LLM node debugging" },
+            userPrompt: "Explain {{start1.topic}} in one concise paragraph.",
+            variables: {},
             temperature: 0.7,
             maxTokens: 800,
           },
@@ -192,7 +227,7 @@ export function createDefaultWorkflow(): WorkflowFile {
           config: { adapter: "currentTime", timezone: "UTC" },
         },
       ],
-      edges: [{ id: "edge-start-llm", source: "start-1", target: "llm-1" }],
+      edges: [{ id: "edge-start-llm", source: "start1", target: "llm1" }],
     },
     settings: {
       modelProvider: {
@@ -203,19 +238,34 @@ export function createDefaultWorkflow(): WorkflowFile {
   };
 }
 
-export function createNode(type: WorkflowNodeType, position: { x: number; y: number }): WorkflowNode {
-  const id = `${type}-${Math.random().toString(36).slice(2, 8)}`;
+export function createReadableNodeId(type: WorkflowNodeType, existingNodes: Pick<WorkflowNode, "id">[] = []): string {
+  const base = type;
+  const existingIds = new Set(existingNodes.map((node) => node.id));
+  let index = 1;
+
+  while (existingIds.has(`${base}${index}`)) {
+    index += 1;
+  }
+
+  return `${base}${index}`;
+}
+
+export function createNode(
+  type: WorkflowNodeType,
+  position: { x: number; y: number },
+  existingNodes: Pick<WorkflowNode, "id">[] = [],
+): WorkflowNode {
+  const id = createReadableNodeId(type, existingNodes);
   const base = { id, type, position, label: nodeTypeLabel(type) };
 
   if (type === "llm") {
     return {
       ...base,
-      id: id.startsWith("llm-") ? id : `llm-${id}`,
       type,
       config: {
         systemPrompt: "You are a precise workflow debugging assistant.",
-        userPrompt: "Explain {{topic}} in one concise paragraph.",
-        variables: { topic: "LLM node debugging" },
+        userPrompt: "Explain {{start1.topic}} in one concise paragraph.",
+        variables: {},
         temperature: 0.7,
         maxTokens: 800,
       },
@@ -228,6 +278,14 @@ export function createNode(type: WorkflowNodeType, position: { x: number; y: num
       label: "Current Time",
       type,
       config: { adapter: "currentTime", timezone: "UTC" },
+    };
+  }
+
+  if (type === "start") {
+    return {
+      ...base,
+      type,
+      config: { fields: [] },
     };
   }
 

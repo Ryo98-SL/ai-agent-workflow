@@ -1,7 +1,7 @@
 # Workflow Domain
 
-Shared workflow schema, workflow file helpers, node factories, and prompt
-variable utilities for AI Agent Workflow apps and services.
+Shared workflow schema, workflow file helpers, readable node factories, and
+namespaced prompt variable utilities for AI Agent Workflow apps and services.
 
 ## Commands
 
@@ -16,5 +16,5 @@ pnpm --filter @ai-agent-workflow/workflow-domain build
 Import from the package root:
 
 ```ts
-import { createDefaultWorkflow, parseWorkflowJson } from "@ai-agent-workflow/workflow-domain";
+import { createDefaultWorkflow, parseWorkflowJson, resolvePromptWithRuntimeState } from "@ai-agent-workflow/workflow-domain";
 ```

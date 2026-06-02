@@ -20,7 +20,7 @@ describe("runtime adapters", () => {
 
     const result = await executeLLMNode(node, {
       modelProvider: { baseURL: "http://mock.test/v1", model: "mock-model", apiKey: "key" },
-      testVariables: {},
+      testVariables: { "start1.topic": "legacy adapter tests" },
     });
 
     expect(result.status).toBe("success");
@@ -38,13 +38,13 @@ describe("runtime adapters", () => {
     const workflow = createDefaultWorkflow();
     const node = workflow.graph.nodes.find((candidate) => candidate.type === "llm") as LLMNode;
     const result = await executeLLMNode(
-      { ...node, config: { ...node.config, userPrompt: "Hello {{missing}}", variables: {} } },
+      { ...node, config: { ...node.config, userPrompt: "Hello {{missing.value}}", variables: {} } },
       { modelProvider: { baseURL: "http://mock.test/v1", model: "mock-model" }, testVariables: {} },
     );
 
     expect(result.status).toBe("error");
     expect(result.error?.code).toBe("missing_variables");
-    expect(result.error?.message).toContain("missing");
+    expect(result.error?.message).toContain("missing.value");
   });
 
   it("normalizes HTTP errors", async () => {
@@ -59,7 +59,7 @@ describe("runtime adapters", () => {
 
     const result = await executeLLMNode(node, {
       modelProvider: { baseURL: "http://mock.test/v1", model: "mock-model" },
-      testVariables: {},
+      testVariables: { "start1.topic": "legacy adapter tests" },
     });
 
     expect(result.status).toBe("error");

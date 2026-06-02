@@ -6,10 +6,10 @@
 Electron, server, or runtime execution dependencies.
 
 - `src/schema.ts` defines the `.agentflow.json` Zod schemas, inferred types,
-  parse/validate/serialize helpers, default workflow creation, and node
-  factories.
-- `src/promptVariables.ts` defines prompt placeholder parsing, resolution, and
-  variable value merging.
+  Start input field contracts, parse/validate/serialize helpers, default
+  workflow creation, and readable node factories.
+- `src/promptVariables.ts` defines namespaced prompt placeholder parsing,
+  runtime-state resolution, and legacy variable value merging.
 - `src/index.ts` exports the stable public API used by app, runtime, and tests.
 - `tests/` contains package-local unit tests for schema and prompt utilities.
 

@@ -7,12 +7,13 @@ workbench shell.
 
 ## Key Files
 
-- `DebugPanel.tsx` handles run controls, test variables, and server run result
-  rendering.
+- `DebugPanel.tsx` handles workflow-level run controls, Start input values, and
+  server run result rendering.
 - `FloatingPanel.tsx` provides the shared popover and floating panel frame.
 - `ModelSettingsPanel.tsx` edits OpenAI-compatible base URL, model, and in-memory API key inside the settings popover.
 - `NodeInspector.tsx` selects the inspector for the active node type when a node is selected.
-- `NodePalette.tsx` adds schema nodes to the workflow from the palette popover.
+- `NodePalette.tsx` adds schema nodes to the workflow from the palette popover
+  and disables Start when the workflow already contains one.
 - `ProjectFileActions.tsx` provides new/open/save/save-as commands through
   callbacks from `AppWorkbench`.
 - `WorkbenchLayout.tsx` renders the canvas-first shell, rounded palette button,

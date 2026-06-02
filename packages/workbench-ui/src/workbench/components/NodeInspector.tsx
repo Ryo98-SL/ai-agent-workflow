@@ -1,14 +1,16 @@
-import type { WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import type { WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 import { LLMInspector } from "./inspectors/LLMInspector";
+import { StartInspector } from "./inspectors/StartInspector";
 import { ToolInspector } from "./inspectors/ToolInspector";
 import { UnsupportedInspector } from "./inspectors/UnsupportedInspector";
 
 type NodeInspectorProps = {
+  workflow: WorkflowFile;
   selectedNode?: WorkflowNode;
   updateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
 };
 
-export function NodeInspector({ selectedNode, updateNode }: NodeInspectorProps) {
+export function NodeInspector({ workflow, selectedNode, updateNode }: NodeInspectorProps) {
   if (!selectedNode) {
     return (
       <section className="p-4">
@@ -21,11 +23,12 @@ export function NodeInspector({ selectedNode, updateNode }: NodeInspectorProps) 
   return (
     <section className="p-4">
       <div className="mb-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Inspector</p>
         <h2 className="mt-1 truncate text-lg font-semibold">{selectedNode.label}</h2>
       </div>
-      {selectedNode.type === "llm" ? (
-        <LLMInspector node={selectedNode} updateNode={updateNode} />
+      {selectedNode.type === "start" ? (
+        <StartInspector node={selectedNode} updateNode={updateNode} />
+      ) : selectedNode.type === "llm" ? (
+        <LLMInspector workflow={workflow} node={selectedNode} updateNode={updateNode} />
       ) : selectedNode.type === "tool" ? (
         <ToolInspector node={selectedNode} updateNode={updateNode} />
       ) : (

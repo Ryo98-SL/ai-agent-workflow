@@ -20,4 +20,5 @@ auth behavior, or UI state.
 
 Unit tests use mocked fetch implementations for success, HTTP errors, network
 errors, and malformed responses. Integration tests route requests into
-`@ai-agent-workflow/server` through a test fetch adapter.
+`@ai-agent-workflow/server` through a test fetch adapter and inject a mocked
+OpenAI-compatible model response for workflow runs.
