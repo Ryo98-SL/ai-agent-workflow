@@ -22,6 +22,7 @@ import {
 } from "@ai-agent-workflow/api-contracts";
 import {
   createDefaultWorkflow,
+  type ModelProviderKeys,
   type OpenAICompatibleSettings,
   type WorkflowFile,
 } from "@ai-agent-workflow/workflow-domain";
@@ -96,8 +97,12 @@ function workflowSummary(stored: StoredWorkflow): WorkflowSummary {
   };
 }
 
-function workflowForRun(workflow: WorkflowFile, modelProvider?: OpenAICompatibleSettings): WorkflowFile {
-  if (!modelProvider) {
+function workflowForRun(
+  workflow: WorkflowFile,
+  modelProvider?: OpenAICompatibleSettings,
+  modelProviderKeys?: ModelProviderKeys,
+): WorkflowFile {
+  if (!modelProvider && !modelProviderKeys) {
     return workflow;
   }
 
@@ -105,7 +110,11 @@ function workflowForRun(workflow: WorkflowFile, modelProvider?: OpenAICompatible
     ...cloneWorkflow(workflow),
     settings: {
       ...workflow.settings,
-      modelProvider,
+      modelProvider: modelProvider || workflow.settings.modelProvider,
+      modelProviderKeys: {
+        ...workflow.settings.modelProviderKeys,
+        ...modelProviderKeys,
+      },
     },
   };
 }
@@ -335,9 +344,10 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       workflowId,
       inputKeys: Object.keys(parsed.data.input),
       hasTransientModelProvider: Boolean(parsed.data.modelProvider),
+      hasTransientModelProviderKeys: Boolean(parsed.data.modelProviderKeys),
     });
     const execution = await executeWorkflowRuntime(
-      workflowForRun(workflow.workflow, parsed.data.modelProvider),
+      workflowForRun(workflow.workflow, parsed.data.modelProvider, parsed.data.modelProviderKeys),
       parsed.data.input,
       {
         fetch: options.fetch,

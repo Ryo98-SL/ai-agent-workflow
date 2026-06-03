@@ -1,16 +1,27 @@
-import type { ReactNode } from "react";
-import { parsePromptVariableReferences } from "@ai-agent-workflow/workflow-domain";
-import type { LLMNode, WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import { useState, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
+import { parsePromptVariableReferences, resolveLLMModelSettings } from "@ai-agent-workflow/workflow-domain";
+import type { LLMModelSettings, LLMNode, WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import { Button } from "../Button";
+import { ModelCapabilityTags } from "../ModelCapabilityTags";
+import { DEFAULT_MODEL_SETTINGS } from "../ModelSettingsPanel";
+import { ModelSettingsEditor } from "../ModelSettingsEditor";
+import { getModelCapabilities } from "../modelCatalog";
+import { ModelProviderLogo } from "../modelProviderVisuals";
+import { Popover } from "../Popover";
 
 type LLMInspectorProps = {
   workflow: WorkflowFile;
   node: LLMNode;
+  showDevModelProviders?: boolean;
   updateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
 };
 
-export function LLMInspector({ workflow, node, updateNode }: LLMInspectorProps) {
+export function LLMInspector({ workflow, node, showDevModelProviders = false, updateNode }: LLMInspectorProps) {
   const prompts = `${node.config.systemPrompt || ""}\n${node.config.userPrompt}`;
   const variables = parsePromptVariableReferences(prompts);
+  const modelSettings = modelSettingsForEditor(workflow, node);
+  const hasModelOverride = Boolean(node.config.modelSettings || node.config.model);
 
   const updateConfig = (patch: Partial<LLMNode["config"]>) => {
     updateNode(node.id, (current) =>
@@ -43,14 +54,19 @@ export function LLMInspector({ workflow, node, updateNode }: LLMInspectorProps) 
           className="min-h-20 w-full resize-y rounded-md border border-slate-200 p-2 text-sm leading-5"
         />
       </Field>
-      <Field label="Model override">
-        <input
-          value={node.config.model || ""}
-          onChange={(event) => updateConfig({ model: event.target.value || undefined })}
-          className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm"
-          placeholder="Use global model"
-        />
-      </Field>
+      <ModelSettingField
+        hasModelOverride={hasModelOverride}
+        modelSettings={modelSettings}
+        nodeId={node.id}
+        showDevModelProviders={showDevModelProviders}
+        onChange={(nextSettings) =>
+          updateConfig({
+            model: undefined,
+            modelSettings: sanitizeNodeModelSettings(nextSettings),
+          })
+        }
+        onReset={() => updateConfig({ model: undefined, modelSettings: undefined })}
+      />
       <Field label="System prompt">
         <textarea
           value={node.config.systemPrompt || ""}
@@ -65,28 +81,6 @@ export function LLMInspector({ workflow, node, updateNode }: LLMInspectorProps) 
           className="min-h-28 w-full resize-y rounded-md border border-slate-200 p-2 text-sm leading-5"
         />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Temperature">
-          <input
-            value={node.config.temperature ?? 0.7}
-            onChange={(event) => updateConfig({ temperature: Number(event.target.value) })}
-            className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm"
-            min={0}
-            max={2}
-            step={0.1}
-            type="number"
-          />
-        </Field>
-        <Field label="Max tokens">
-          <input
-            value={node.config.maxTokens ?? 800}
-            onChange={(event) => updateConfig({ maxTokens: Number(event.target.value) })}
-            className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm"
-            min={1}
-            type="number"
-          />
-        </Field>
-      </div>
       <section>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Prompt Variables</h3>
         {variables.length === 0 ? (
@@ -116,6 +110,103 @@ export function LLMInspector({ workflow, node, updateNode }: LLMInspectorProps) 
       </section>
     </div>
   );
+}
+
+function ModelSettingField({
+  hasModelOverride,
+  modelSettings,
+  nodeId,
+  showDevModelProviders,
+  onChange,
+  onReset,
+}: {
+  hasModelOverride: boolean;
+  modelSettings: LLMModelSettings;
+  nodeId: string;
+  showDevModelProviders: boolean;
+  onChange: (settings: LLMModelSettings) => void;
+  onReset: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const capabilities = getModelCapabilities(modelSettings.model, modelSettings.provider);
+
+  return (
+    <div>
+      <span className="mb-1 block text-xs font-medium text-slate-600">Model Setting</span>
+      <Popover
+        id={`llm-model-setting-${nodeId}`}
+        open={open}
+        onOpenChange={setOpen}
+        placement="bottom-start"
+        renderTrigger={({ ref, props }) => (
+          <Button
+            {...props}
+            ref={ref}
+            variant="modelTrigger"
+            size="unstyled"
+            onClick={() => setOpen((current) => !current)}
+            aria-label="Open model setting"
+          >
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white">
+              <ModelProviderLogo provider={modelSettings.provider} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold">{modelSettings.model}</span>
+              <span className="block truncate text-[11px] text-slate-500">
+                {hasModelOverride ? "Node override" : "Workflow default"}
+              </span>
+            </span>
+            <ModelCapabilityTags capabilities={capabilities} />
+            <ChevronDown size={16} className="text-slate-400" aria-hidden />
+          </Button>
+        )}
+      >
+        <div className="w-[360px] overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-xl shadow-slate-900/10">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+            <h3 className="text-sm font-semibold">Model Setting</h3>
+            <Button variant="ghost" size="sm" onClick={onReset} disabled={!hasModelOverride}>
+              Use workflow default
+            </Button>
+          </div>
+          <div className="p-4">
+            <ModelSettingsEditor
+              settings={modelSettings}
+              selectorId={`llm-model-selector-${nodeId}`}
+              apiKeyPlaceholder="Use provider default key"
+              showAdvanced
+              showDevModelProviders={showDevModelProviders}
+              onChange={(nextSettings) => onChange(nextSettings as LLMModelSettings)}
+            />
+          </div>
+        </div>
+      </Popover>
+    </div>
+  );
+}
+
+function modelSettingsForEditor(workflow: WorkflowFile, node: LLMNode): LLMModelSettings {
+  const workflowDefault = workflow.settings.modelProvider || DEFAULT_MODEL_SETTINGS;
+  const resolved = resolveLLMModelSettings(workflow, node);
+
+  return {
+    provider: node.config.modelSettings?.provider || resolved?.provider || workflowDefault.provider,
+    baseURL: node.config.modelSettings?.baseURL || resolved?.baseURL || workflowDefault.baseURL,
+    model: node.config.modelSettings?.model || resolved?.model || node.config.model || workflowDefault.model,
+    apiKey: node.config.modelSettings?.apiKey || "",
+    temperature: node.config.modelSettings?.temperature ?? node.config.temperature ?? 0.7,
+    maxTokens: node.config.modelSettings?.maxTokens ?? node.config.maxTokens ?? 800,
+  };
+}
+
+function sanitizeNodeModelSettings(settings: LLMModelSettings): LLMModelSettings {
+  return {
+    provider: settings.provider,
+    baseURL: settings.baseURL,
+    model: settings.model,
+    apiKey: settings.apiKey || undefined,
+    temperature: settings.temperature,
+    maxTokens: settings.maxTokens,
+  };
 }
 
 function referenceStatus(workflow: WorkflowFile, nodeId: string, path: string[]): string {

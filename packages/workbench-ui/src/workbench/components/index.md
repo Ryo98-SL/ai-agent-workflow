@@ -2,56 +2,38 @@
 
 ## Purpose
 
-This directory contains focused React components for the server-backed
-workbench shell.
+Focused React components for the server-backed workbench shell.
 
 ## Key Files
 
-- `Button.tsx` centralizes workbench button styling, sizes, disabled states,
-  and shared variants for icon controls, panel actions, model selector rows, and
-  node palette items.
-- `DebugPanel.tsx` handles workflow-level run controls, Start input values, and
-  server run result rendering.
-- `FloatingPanel.tsx` provides the shared floating panel frame used inside
-  body-level popovers and inspector panels.
-- `InlineNodePalettePopover.tsx` renders the node-handle anchored palette used
-  by canvas PlusNode buttons and forwards palette selections back with
-  direction-aware handle connection options. Target-handle palettes disable End
-  because End nodes cannot feed into another node.
-- `ModelSettingsPanel.tsx` edits provider-aware model settings inside the
-  settings popover, with a body-level searchable DeepSeek/Ollama selector and
-  in-memory API key entry for DeepSeek that is sent through run requests instead
-  of saved workflow payloads.
+- `WorkflowCanvas.tsx` adapts workflow nodes and edges to ReactFlow, preserving
+  controlled node data, selection, drag persistence, fixed handle bounds,
+  MiniMap styling, active model/provider data, hover edge highlighting, and
+  direction-aware handle palette creation.
+- `modelCatalog.ts` is the local source for selectable providers, model IDs,
+  and chat/image capability metadata.
+- `modelProviderVisuals.tsx` maps provider names to bundled logo assets and
+  normalizes their mixed source dimensions in the model UI.
+- `WorkbenchLayout.tsx` owns the canvas-first shell and panel placement.
+- `Popover.tsx` and `FloatingPanel.tsx` provide the shared body-level floating
+  surfaces.
+- `InlineNodePalettePopover.tsx` anchors node creation to a ReactFlow handle.
+- `ModelSettingsEditor.tsx` is the reusable provider/model/base URL/API key
+  editor shared by global settings and LLM node overrides.
+- `ModelSettingsPanel.tsx` edits workflow-level provider-aware settings and the
+  provider keyring. DeepSeek is the fallback; OpenAI and Anthropic are
+  available by default; Ollama is development-only.
+- `DebugPanel.tsx` gathers Start inputs, triggers runs, and renders run output.
 - `NodeInspector.tsx` selects the inspector for the active node type when a node is selected.
-- `NodePalette.tsx` adds schema nodes to the workflow from the palette popover
-  and disables Start when the workflow already contains one, with optional
-  per-palette disabled node types for handle-specific creation rules.
-- `Popover.tsx` wraps `@floating-ui/react` positioning, dismissal, and
-  `FloatingPortal` rendering so anchored workbench popovers are mounted under
-  `body` instead of inside their layout containers. It supports both rendered
-  trigger buttons and externally supplied reference elements for popovers
-  anchored to controls inside ReactFlow nodes.
-- `ProjectFileActions.tsx` provides new/open/save/save-as commands through
-  callbacks from `AppWorkbench`.
-- `WorkbenchLayout.tsx` renders the canvas-first shell, square-rounded palette
-  and settings icon buttons, selection-driven inspector panel, top-right
-  icon-only Run button, and anchored body-level popovers for node palette, model
-  settings, and run log.
-- `WorkflowCanvas.tsx` adapts persisted workflow nodes and workflow-backed edges
-  into ReactFlow, including per-workflow-type nodeTypes, node selection, local
-  controlled node data updates, live dragging, explicit node dimensions/handle
-  bounds, fixed top-positioned handles for dynamic Start cards, Start
-  input/description previews, larger connection handles, node-handle palette
-  opening anchored to ReactFlow handle elements, direction-aware edge creation,
-  and visible MiniMap node styling. The canvas
-  synchronizes the active inspector node into ReactFlow selected state,
-  preserves that selected outline across pane clicks, and clears it only when
-  another node is selected or the inspector is closed. Node field and
-  description edits update node data without viewport resets. Node
-  Delete/Backspace removal updates the workflow graph, clears the inspector when
-  the active node is removed, and drops edges attached to removed nodes. Edge
-  selection stays local, while edge Delete/Backspace removal updates the
-  workflow.
-- `inspectors/` contains node-specific configuration forms.
-- `workflowNodes/` contains one ReactFlow node component per workflow node type,
-  the shared card shell, icon bindings, and node layout constants.
+- `NodePalette.tsx` lists creatable schema nodes and prevents duplicate Start.
+- `ProjectFileActions.tsx`, `Button.tsx`, `inspectors/`, and `workflowNodes/`
+  contain focused controls, forms, and node renderers.
+
+## Constraints
+
+ReactFlow handles must stay aligned with explicit layout bounds. Inspector edits
+should update node cards without viewport resets. LLM node model-setting edits
+should update the node override and effective card logo without changing
+workflow defaults. Edge selection is local, but edge/node deletion must persist
+graph changes. All anchored popovers should use the shared body-level popover
+path.

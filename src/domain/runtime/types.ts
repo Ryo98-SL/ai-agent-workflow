@@ -1,4 +1,10 @@
-import type { LLMNode, OpenAICompatibleSettings, ToolNode, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import type {
+  LLMNode,
+  ModelProviderKeys,
+  OpenAICompatibleSettings,
+  ToolNode,
+  WorkflowNode,
+} from "@ai-agent-workflow/workflow-domain";
 
 export type RuntimeStatus = "idle" | "running" | "success" | "error";
 
@@ -37,6 +43,7 @@ export type RuntimeResult = {
 
 export type RuntimeAdapterContext = {
   modelProvider?: OpenAICompatibleSettings;
+  modelProviderKeys?: ModelProviderKeys;
   testVariables: Record<string, string>;
   signal?: AbortSignal;
 };

@@ -1,5 +1,5 @@
 import { mergeVariableValues, resolvePromptVariables } from "@ai-agent-workflow/workflow-domain";
-import type { LLMNode } from "@ai-agent-workflow/workflow-domain";
+import type { LLMModelSettings, LLMNode } from "@ai-agent-workflow/workflow-domain";
 import type { LLMRuntimeAdapter, RuntimeAdapterContext, RuntimeResult } from "./types";
 
 type ChatCompletionResponse = {
@@ -58,7 +58,7 @@ export async function executeLLMNode(
     });
   }
 
-  const settings = context.modelProvider;
+  const settings = resolveContextModelSettings(node, context);
   if (!settings?.baseURL || !settings.model) {
     return finishResult(started, startedAt, {
       nodeId: node.id,
@@ -73,7 +73,7 @@ export async function executeLLMNode(
     });
   }
 
-  const model = node.config.model || settings.model;
+  const model = settings.model;
   const messages = [
     ...(systemResolution.text ? [{ role: "system" as const, content: systemResolution.text }] : []),
     { role: "user" as const, content: userResolution.text },
@@ -82,8 +82,8 @@ export async function executeLLMNode(
   const body = {
     model,
     messages,
-    temperature: node.config.temperature ?? 0.7,
-    max_tokens: node.config.maxTokens ?? 800,
+    temperature: settings.temperature ?? 0.7,
+    max_tokens: settings.maxTokens ?? 800,
   };
 
   try {
@@ -144,6 +144,35 @@ export async function executeLLMNode(
       },
     });
   }
+}
+
+function resolveContextModelSettings(
+  node: LLMNode,
+  context: RuntimeAdapterContext,
+): LLMModelSettings | undefined {
+  const workflowSettings = context.modelProvider;
+  const nodeSettings = node.config.modelSettings;
+  const provider = nodeSettings?.provider || workflowSettings?.provider;
+
+  if (!provider) {
+    return undefined;
+  }
+
+  const baseURL = nodeSettings?.baseURL || workflowSettings?.baseURL;
+  const model = nodeSettings?.model || node.config.model || workflowSettings?.model;
+
+  if (!baseURL || !model) {
+    return undefined;
+  }
+
+  return {
+    provider,
+    baseURL,
+    model,
+    apiKey: nodeSettings?.apiKey || context.modelProviderKeys?.[provider] || workflowSettings?.apiKey,
+    temperature: nodeSettings?.temperature ?? node.config.temperature,
+    maxTokens: nodeSettings?.maxTokens ?? node.config.maxTokens,
+  };
 }
 
 function finishResult(

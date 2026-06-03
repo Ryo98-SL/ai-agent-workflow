@@ -7,5 +7,5 @@ Consumers import from `@ai-agent-workflow/api-contracts` and validate data with
 the exported schemas before crossing package boundaries.
 
 Run inputs accept string or `null` values, run requests may include transient
-model provider settings for execution, and node results can include structured
-`data` metadata alongside display output.
+model provider settings and provider keyring values for execution, and node
+results can include structured `data` metadata alongside display output.

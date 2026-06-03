@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { FilePlus2, Loader2, Play, Plus, Settings } from "lucide-react";
 import type {
+  ModelProviderKeys,
   OpenAICompatibleSettings,
   WorkflowFile,
   WorkflowNode,
@@ -44,7 +45,7 @@ type WorkbenchLayoutProps = {
   onSelectNode: (nodeId: string) => void;
   onTogglePalette: () => void;
   onToggleSettings: () => void;
-  onUpdateModelSettings: (settings: OpenAICompatibleSettings) => void;
+  onUpdateModelSettings: (settings: OpenAICompatibleSettings, providerKeys: ModelProviderKeys) => void;
   onUpdateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
   onWorkflowChange: Dispatch<SetStateAction<WorkflowFile>>;
 };
@@ -144,6 +145,7 @@ export function WorkbenchLayout({
           >
             <ModelSettingsPanel
               settings={workflow.settings.modelProvider}
+              providerKeys={workflow.settings.modelProviderKeys}
               showDevModelProviders={showDevModelProviders}
               onChange={onUpdateModelSettings}
             />
@@ -243,7 +245,12 @@ export function WorkbenchLayout({
           className="absolute bottom-4 right-4 top-20 z-30 w-[380px]"
         >
           <div className="h-full overflow-y-auto">
-            <NodeInspector workflow={workflow} selectedNode={selectedNode} updateNode={onUpdateNode} />
+            <NodeInspector
+              workflow={workflow}
+              selectedNode={selectedNode}
+              showDevModelProviders={showDevModelProviders}
+              updateNode={onUpdateNode}
+            />
           </div>
         </FloatingPanel>
       )}

@@ -32,8 +32,8 @@ const variantClassNames: Record<ButtonVariant, string> = {
   ghost: "justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:text-slate-300",
   dangerGhost: "justify-center text-rose-600 hover:bg-rose-50 disabled:text-slate-300",
   modelTrigger:
-    "h-12 w-full justify-start gap-3 rounded-lg border border-slate-200 bg-slate-950 px-3 text-left text-white shadow-sm hover:border-slate-400 disabled:bg-slate-800",
-  modelOption: "h-10 w-full justify-start gap-3 text-left text-sm text-slate-200 hover:bg-slate-800 disabled:text-slate-500",
+    "h-12 w-full justify-start gap-3 rounded-lg border border-slate-200 bg-white px-3 text-left text-slate-900 shadow-sm hover:border-slate-300 hover:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400",
+  modelOption: "h-10 w-full justify-start gap-3 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:text-slate-400",
   nodePalette:
     "justify-start gap-3 border border-slate-200 bg-white p-3 text-left hover:border-emerald-300 hover:bg-emerald-50 disabled:bg-slate-100 disabled:text-slate-400",
 };

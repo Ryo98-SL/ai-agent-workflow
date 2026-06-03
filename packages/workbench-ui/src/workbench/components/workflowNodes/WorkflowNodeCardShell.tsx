@@ -1,6 +1,6 @@
 import type { MouseEvent, PointerEvent, ReactNode } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import type { WorkflowNode, WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
+import type { ModelProvider, WorkflowNode, WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
 import { type LucideIcon, Plus } from "lucide-react";
 import type { WorkflowNodePaletteHandleType } from "../../types";
 import { getWorkflowNodeCardClassName } from "./workflowNodeLayout";
@@ -13,7 +13,10 @@ export type OpenWorkflowNodePalette = (
   handleType: WorkflowNodePaletteHandleType,
   anchorElement: HTMLElement,
 ) => void;
-export type WorkflowReactNode = Node<{ node: WorkflowNode; onOpenNodePalette?: OpenWorkflowNodePalette }, WorkflowNodeType>;
+export type WorkflowReactNode = Node<
+  { node: WorkflowNode; activeModel?: string; activeModelProvider?: ModelProvider; onOpenNodePalette?: OpenWorkflowNodePalette },
+  WorkflowNodeType
+>;
 export type WorkflowNodeProps = NodeProps<WorkflowReactNode>;
 
 type WorkflowNodeCardShellProps = WorkflowNodeProps & {

@@ -13,6 +13,8 @@ describe("MVP smoke loop", () => {
     render(<AppWorkbench workflowApi={api} />);
     expect(screen.queryByText("Untitled Agent Workflow")).not.toBeInTheDocument();
     expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    expect(screen.getByText("qwen3.5:0.8b")).toBeInTheDocument();
+    expect(screen.getByAltText("Ollama")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open model settings" }));
     expect(screen.getByText("deepseek-v4-flash")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Model name"), "-smoke");
@@ -37,9 +39,11 @@ describe("MVP smoke loop", () => {
     expect(api.createRun).toHaveBeenLastCalledWith("workflow-1", {
       input: { topic: "workbench tests" },
       modelProvider: expect.objectContaining({
-        apiKey: "deepseek-test-key",
         model: "deepseek-v4-flash-smoke",
         provider: "deepseek",
+      }),
+      modelProviderKeys: expect.objectContaining({
+        deepseek: "deepseek-test-key",
       }),
     });
     expect(calls.updateWorkflow).toHaveBeenCalled();
@@ -47,6 +51,7 @@ describe("MVP smoke loop", () => {
     await user.click(screen.getByRole("button", { name: "Save workflow as" }));
     expect(workflows.size).toBe(2);
     expect(Array.from(workflows.values()).at(-1)?.workflow.settings.modelProvider?.apiKey).toBeUndefined();
+    expect(Array.from(workflows.values()).at(-1)?.workflow.settings.modelProviderKeys.deepseek).toBe("deepseek-test-key");
 
     await user.click(screen.getByRole("button", { name: "Open workflow" }));
     expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
@@ -93,6 +98,24 @@ describe("MVP smoke loop", () => {
     );
   });
 
+  it("highlights directly connected edges when hovering a node", async () => {
+    const { api } = createMemoryWorkflowApi();
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+
+    const llmNode = screen.getByText("LLM").closest("[data-testid='rf__node-llm1']");
+    const edgePath = document.querySelector("[data-testid='rf__edge-edge-start-llm'] .react-flow__edge-path");
+    expect(llmNode).not.toBeNull();
+    expect(edgePath).not.toBeNull();
+
+    fireEvent.mouseEnter(llmNode!);
+    expect(edgePath).toHaveStyle({ stroke: "#10b981", strokeWidth: "2.5" });
+
+    fireEvent.mouseLeave(llmNode!);
+    expect(edgePath).not.toHaveStyle({ stroke: "#10b981" });
+  });
+
   it("opens a target-handle palette, disables End, and connects the created node into the target node", async () => {
     const user = userEvent.setup();
     const { api, workflows } = createMemoryWorkflowApi();
@@ -128,6 +151,11 @@ describe("MVP smoke loop", () => {
     await user.click(screen.getByRole("button", { name: "Open model settings" }));
     await user.click(screen.getByRole("button", { name: "Choose model provider and model" }));
     expect(screen.getAllByText("deepseek").length).toBeGreaterThan(0);
+    expect(screen.getByText("OpenAI")).toBeInTheDocument();
+    expect(screen.getByText("Anthropic")).toBeInTheDocument();
+    expect(screen.getByText("gpt-5.2")).toBeInTheDocument();
+    expect(screen.getByText("claude-sonnet-4-20250514")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Image input").length).toBeGreaterThan(0);
     expect(screen.queryByText("Ollama")).not.toBeInTheDocument();
     unmount();
 
@@ -136,14 +164,85 @@ describe("MVP smoke loop", () => {
     expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open model settings" }));
     await user.click(screen.getByRole("button", { name: "Choose model provider and model" }));
-    expect(screen.getByText("Ollama")).toBeInTheDocument();
+    expect(screen.getAllByText("Ollama").length).toBeGreaterThan(0);
     await user.click(screen.getByText("llama3.2"));
     expect(screen.getByDisplayValue("http://127.0.0.1:11434")).toBeInTheDocument();
   });
+
+  it("selects OpenAI multimodal models and shows icon capability tags", async () => {
+    const user = userEvent.setup();
+    const { api } = createMemoryWorkflowApi();
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open model settings" }));
+    await user.click(screen.getByRole("button", { name: "Choose model provider and model" }));
+    await user.click(screen.getByText("gpt-5.2"));
+
+    expect(screen.getByDisplayValue("https://api.openai.com/v1")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("gpt-5.2")).toBeInTheDocument();
+    expect(screen.getAllByAltText("OpenAI").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Chat model").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Image input").length).toBeGreaterThan(0);
+  });
+
+  it("shows the LLM node model override on the canvas", async () => {
+    const { api } = createMemoryWorkflowApi((workflow) => ({
+      ...workflow,
+      settings: {
+        modelProvider: {
+          provider: "deepseek",
+          baseURL: "https://api.deepseek.com",
+          model: "deepseek-v4-flash",
+        },
+        modelProviderKeys: {},
+      },
+      graph: {
+        ...workflow.graph,
+        nodes: workflow.graph.nodes.map((node) =>
+          node.type === "llm" ? { ...node, config: { ...node.config, model: "gpt-5.5" } } : node,
+        ),
+      },
+    }));
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    expect(screen.getByText("gpt-5.5")).toBeInTheDocument();
+    expect(screen.getByAltText("DeepSeek")).toBeInTheDocument();
+  });
+
+  it("configures node-level model settings from the LLM inspector", async () => {
+    const user = userEvent.setup();
+    const { api, workflows } = createMemoryWorkflowApi();
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("LLM"));
+    await user.click(screen.getByRole("button", { name: "Open model setting" }));
+    await user.click(screen.getByRole("button", { name: "Choose model provider and model" }));
+    await user.click(screen.getByText("gpt-5.2"));
+    await user.type(screen.getByLabelText("API Key"), "node-openai-key");
+    await user.click(screen.getByText("Advanced"));
+    await user.clear(screen.getByLabelText("Max tokens"));
+    await user.type(screen.getByLabelText("Max tokens"), "1200");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    const savedNode = workflows.get("workflow-1")?.workflow.graph.nodes.find((node) => node.type === "llm");
+    expect(savedNode?.type).toBe("llm");
+    if (savedNode?.type === "llm") {
+      expect(savedNode.config.modelSettings).toMatchObject({
+        provider: "openai",
+        baseURL: "https://api.openai.com/v1",
+        model: "gpt-5.2",
+        apiKey: "node-openai-key",
+        maxTokens: 1200,
+      });
+    }
+  });
 });
 
-function createMemoryWorkflowApi() {
-  const seed = createDefaultWorkflow();
+function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => WorkflowFile = (workflow) => workflow) {
+  const seed = prepareSeed(createDefaultWorkflow());
   const workflows = new Map<string, WorkflowDto>([
     [
       "workflow-1",

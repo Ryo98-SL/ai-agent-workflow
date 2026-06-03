@@ -1,5 +1,11 @@
 import type { CreateRunRequest, RunEvent, WorkflowDto, WorkflowRun, WorkflowSummary } from "@ai-agent-workflow/api-contracts";
-import type { OpenAICompatibleSettings, WorkflowFile, WorkflowNode, WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
+import type {
+  ModelProviderKeys,
+  OpenAICompatibleSettings,
+  WorkflowFile,
+  WorkflowNode,
+  WorkflowNodeType,
+} from "@ai-agent-workflow/workflow-domain";
 
 export type WorkbenchStatus = "idle" | "loading" | "running" | "success" | "error";
 
@@ -35,6 +41,6 @@ export type AddNodeOptions = {
 
 export type WorkflowMutators = {
   updateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
-  updateModelSettings: (settings: OpenAICompatibleSettings) => void;
+  updateModelSettings: (settings: OpenAICompatibleSettings, providerKeys: ModelProviderKeys) => void;
   addNode: (type: WorkflowNodeType, options?: AddNodeOptions) => void;
 };

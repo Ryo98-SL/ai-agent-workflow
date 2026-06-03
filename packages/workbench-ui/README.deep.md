@@ -2,69 +2,45 @@
 
 ## Architecture
 
-`packages/workbench-ui` owns the reusable React workbench. It renders the node
-palette, ReactFlow canvas, inspector panels, model settings, project actions,
-and server run output.
+`packages/workbench-ui` owns the browser-compatible workbench UI. It imports
+workflow schemas and run DTO types, but not Electron globals, server internals,
+or runtime execution adapters.
+
+Core responsibilities:
 
 - `src/index.ts` exports the public component and API boundary types.
-- `src/workbench/AppWorkbench.tsx` owns workflow state, panel visibility, and
-  calls to the injected workflow API for list/create/read/update and
-  workflow-level run operations. It forwards the development-provider flag that
-  controls whether Ollama appears in model settings, preserves in-memory
-  DeepSeek API keys after save responses, and passes current model settings as
-  transient run request data. It holds the workbench layout behind an initial
-  server-load gate so the default workflow placeholder is never rendered before
-  the backend workflow arrives. Selecting a node opens the inspector only; run
-  popover visibility is driven by explicit run requests.
-- `src/workbench/components` contains focused UI panels. The workflow canvas
-  keeps ReactFlow nodes controlled locally for data updates while letting
-  ReactFlow own selected node state, so inspector edits update canvas cards
-  without viewport refits or selection bounce. Edges stay driven by the workflow
-  graph, and fixed-size node types provide explicit card dimensions plus handle
-  bounds so built-in connection and MiniMap rendering do not depend on
-  measurement timing. Start card height can grow with fields and descriptions,
-  while handles remain fixed near the top of the card so edge endpoints do not
-  depend on dynamic content height. Persisted workflow node types map directly to
-  ReactFlow nodeTypes, and `components/workflowNodes` keeps one icon-bearing node
-  component per workflow node type plus shared type-colored icon background
-  classes used by both canvas nodes and the node palette. Node handle add
-  buttons open an inline node palette anchored to the ReactFlow handle element;
-  selecting a node from the source-handle palette creates an edge from the
-  clicked node to the created node, while selecting a node from the target-handle
-  palette creates an edge from the created node into the clicked node. End nodes
-  expose only a target handle, and target-handle palettes disable End creation.
-  Edge selection stays local to the canvas, while edge deletes are applied back
-  to the workflow graph through ReactFlow edge changes. `Button` centralizes
-  workbench button sizes and
-  visual variants so icon controls, model selector rows, palette items, and
-  panel actions share one native button entry point. `Popover` wraps
-  `@floating-ui/react` for anchored fixed positioning, viewport collision
-  handling, outside dismissal, body-level `FloatingPortal` rendering, and both
-  trigger-rendered and externally supplied reference elements.
-  `WorkbenchLayout` renders the canvas-first shell with square-rounded floating
-  node palette and model settings icon buttons, a selection-driven inspector,
-  and a top-right icon-only canvas run control; the node palette, model
-  settings, and run log panels render through body-level popovers instead of
-  sharing the canvas layout container. `ModelSettingsPanel` renders a searchable
-  provider/model selector with DeepSeek enabled by default and Ollama hidden
-  unless the host app passes the development-provider flag. Its model selector
-  dropdown also uses the shared body-level popover primitive. Its API key entry
-  stays in memory and is omitted from saved workflow files.
-- `src/styles.css` contains Tailwind directives and shared base page styles for
-  consuming apps.
-- `tests/core-loop.test.tsx` covers editing, Start field configuration,
-  workflow-level run submission, Start uniqueness, node-handle palette creation
-  with direction-aware edge wiring and target-handle End disabling, save/load,
-  and server run rendering with a mocked API dependency.
+- `src/workbench/AppWorkbench.tsx` owns workflow state, panel visibility,
+  initial server loading, persistence calls, and workflow-level run calls.
+- `src/workbench/components` owns the canvas-first shell, popovers, inspectors,
+  model settings, node palette, run panel, and ReactFlow adapters.
+- `src/workbench/assets` stores bundled DeepSeek, OpenAI, Anthropic, and
+  Ollama provider logos so model UI never depends on external image URLs at
+  runtime.
+- `src/styles.css` exposes Tailwind/base styles for consuming apps.
+- `tests/core-loop.test.tsx` covers the end-to-end UI loop with a mocked API.
 
-## Integration Boundary
+Design constraints:
 
-The package imports workflow schemas from `@ai-agent-workflow/workflow-domain`
-and run DTO types from `@ai-agent-workflow/api-contracts`. It does not import
-Electron globals, the Hono server app, or local runtime execution adapters.
+- The layout waits for the server workflow before mounting the canvas, avoiding
+  a placeholder graph flash.
+- Popovers use the shared Floating UI wrapper and mount under `body`.
+- ReactFlow nodes keep explicit dimensions and handle bounds; dynamic Start and
+  LLM content, including provider-logo sizing, must not shift handle positions.
+- Source-handle palette additions create outgoing edges; target-handle additions
+  create incoming edges and cannot create End nodes.
+- Hovering a node highlights only its directly connected edges and remains local
+  UI state.
+- Inspector edits update node data without viewport resets or selection bounce.
+- Edge selection is local UI state; edge deletion persists back to the workflow
+  graph.
+- DeepSeek is the normal model-settings fallback. OpenAI and Anthropic are
+  selectable cloud providers. Ollama is hidden unless the host enables
+  development providers. Workflow-level API keys are stored in the provider
+  keyring, while LLM node overrides can carry their own API key and advanced
+  sampling settings.
 
 ## Test Strategy
 
-Component tests render the full workbench with a memory implementation of the
-workflow API. Tests assert server persistence calls, Start input submission, and
-run rendering without touching browser fetch or Electron preload APIs.
+Component tests render the full workbench with a memory workflow API. They
+should cover user-visible behavior and API calls without browser fetch, Electron
+preload APIs, or local runtime adapters.

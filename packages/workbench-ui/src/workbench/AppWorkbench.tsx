@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import {
   createDefaultWorkflow,
   createNode,
+  type ModelProviderKeys,
   type OpenAICompatibleSettings,
   parseWorkflowJson,
   serializeWorkflowFile,
@@ -127,12 +128,13 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
   );
 
   const updateModelSettings = useCallback(
-    (settings: OpenAICompatibleSettings) => {
+    (settings: OpenAICompatibleSettings, providerKeys: ModelProviderKeys) => {
       markWorkflow((current) => ({
         ...current,
         settings: {
           ...current.settings,
           modelProvider: settings,
+          modelProviderKeys: providerKeys,
         },
       }));
     },
@@ -238,6 +240,7 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
         const runResponse = await workflowApi.createRun(persisted.id, {
           input,
           modelProvider: workflow.settings.modelProvider,
+          modelProviderKeys: workflow.settings.modelProviderKeys,
         });
         const eventResponse = await workflowApi.listRunEvents(runResponse.run.id);
 

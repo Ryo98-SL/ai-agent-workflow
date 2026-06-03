@@ -5,9 +5,12 @@ namespaced prompt variable utilities for AI Agent Workflow apps and services.
 Every persisted workflow node carries a user-editable `description` alongside
 its label and type-specific config.
 
-Model settings are provider-aware. The persisted workflow settings currently
-support `deepseek` and `ollama`, defaulting to DeepSeek
-`deepseek-v4-flash` at `https://api.deepseek.com`.
+Model settings are provider-aware. Persisted workflow settings support
+`deepseek`, `openai`, `anthropic`, and `ollama`, defaulting to DeepSeek
+`deepseek-v4-flash` at `https://api.deepseek.com`. Workflow settings also keep
+provider API keys in a `modelProviderKeys` keyring, while LLM nodes can carry
+their own `modelSettings` override for provider, base URL, model, API key,
+temperature, and max tokens.
 
 ## Commands
 

@@ -7,10 +7,11 @@ import { UnsupportedInspector } from "./inspectors/UnsupportedInspector";
 type NodeInspectorProps = {
   workflow: WorkflowFile;
   selectedNode?: WorkflowNode;
+  showDevModelProviders?: boolean;
   updateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
 };
 
-export function NodeInspector({ workflow, selectedNode, updateNode }: NodeInspectorProps) {
+export function NodeInspector({ workflow, selectedNode, showDevModelProviders = false, updateNode }: NodeInspectorProps) {
   if (!selectedNode) {
     return (
       <section className="p-4">
@@ -28,7 +29,12 @@ export function NodeInspector({ workflow, selectedNode, updateNode }: NodeInspec
       {selectedNode.type === "start" ? (
         <StartInspector node={selectedNode} updateNode={updateNode} />
       ) : selectedNode.type === "llm" ? (
-        <LLMInspector workflow={workflow} node={selectedNode} updateNode={updateNode} />
+        <LLMInspector
+          workflow={workflow}
+          node={selectedNode}
+          showDevModelProviders={showDevModelProviders}
+          updateNode={updateNode}
+        />
       ) : selectedNode.type === "tool" ? (
         <ToolInspector node={selectedNode} updateNode={updateNode} />
       ) : (

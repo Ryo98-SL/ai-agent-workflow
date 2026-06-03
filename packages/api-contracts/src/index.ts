@@ -1,4 +1,8 @@
-import { OpenAICompatibleSettingsSchema, WorkflowFileSchema } from "@ai-agent-workflow/workflow-domain";
+import {
+  ModelProviderKeysSchema,
+  OpenAICompatibleSettingsSchema,
+  WorkflowFileSchema,
+} from "@ai-agent-workflow/workflow-domain";
 import { z } from "zod";
 
 export const API_ROUTE_TEMPLATES = {
@@ -93,6 +97,7 @@ export const RunInputSchema = z.record(RunInputValueSchema);
 export const CreateRunRequestSchema = z.object({
   input: RunInputSchema.default({}),
   modelProvider: OpenAICompatibleSettingsSchema.optional(),
+  modelProviderKeys: ModelProviderKeysSchema.optional(),
 });
 
 export const WorkflowRunOutputSchema = z.object({

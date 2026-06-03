@@ -14,9 +14,10 @@ supported Start-to-LLM workflow subset.
 - `validation.ts` validates the executable graph shape and reachable node set.
 - `startValues.ts` materializes Start field values from run input.
 - `prompts.ts` resolves namespaced prompt placeholders against runtime state.
-- `models.ts` invokes provider-aware LangChain chat models for DeepSeek and
-  Ollama, using the workflow settings supplied to the current run and logging
-  safe provider/model invocation metadata.
+- `models.ts` resolves node-level model settings over workflow defaults and
+  provider keyring values, then invokes provider-aware LangChain chat models
+  from `@langchain/deepseek`, `@langchain/openai`, `@langchain/anthropic`, and
+  `@langchain/ollama`. It logs safe provider/model invocation metadata.
 - `errors.ts` defines runtime error classes and API error normalization.
 - `types.ts` defines runtime execution result and executor option types.
 
@@ -26,4 +27,4 @@ The runtime accepts a validated workflow payload and run input, compiles the
 reachable Start/LLM nodes into LangGraph, stores each node output under its node
 id in runtime state, and returns structured node results for API persistence.
 Tests can inject `fetch` through `RuntimeExecutorOptions` so DeepSeek and
-Ollama calls remain deterministic.
+other provider calls remain deterministic.

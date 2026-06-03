@@ -11,6 +11,11 @@ const startWorkflowNodeSize = {
   minHeight: 132,
 };
 
+const llmWorkflowNodeSize = {
+  width: 220,
+  minHeight: 112,
+};
+
 const workflowHandleBounds = {
   top: 20,
   width: 0,
@@ -18,6 +23,16 @@ const workflowHandleBounds = {
 };
 
 export function getWorkflowNodeSize(node: WorkflowNode) {
+  if (node.type === "llm") {
+    const descriptionLineCount = node.description ? Math.ceil(node.description.length / 34) : 0;
+    const height = Math.max(llmWorkflowNodeSize.minHeight, 96 + descriptionLineCount * 18);
+
+    return {
+      width: llmWorkflowNodeSize.width,
+      height,
+    };
+  }
+
   if (node.type !== "start") {
     return defaultWorkflowNodeSize;
   }
@@ -66,6 +81,6 @@ export function getWorkflowNodeHandles(node: WorkflowNode) {
 }
 
 export function getWorkflowNodeCardClassName(type: WorkflowNodeType) {
-  const sizeClassName = type === "start" ? "w-[220px]" : "w-[184px]";
+  const sizeClassName = type === "start" || type === "llm" ? "w-[220px]" : "w-[184px]";
   return `${sizeClassName} rounded-md border bg-white p-3 shadow-sm`;
 }

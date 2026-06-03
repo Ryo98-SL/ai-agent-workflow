@@ -2,17 +2,17 @@
 
 ## Purpose
 
-`inspectors` contains node-specific configuration forms used by the workbench
-side panel.
+Node-specific configuration forms for the selection inspector.
 
 ## Structure
 
 - `StartInspector.tsx` edits Start labels and text input field declarations.
-- `LLMInspector.tsx` edits labels, prompts, model overrides, sampling settings,
-  and displays prompt variable reference status for LLM nodes.
+- `LLMInspector.tsx` edits labels, prompts, prompt variable reference status,
+  and a compact Model Setting field. The field opens a popover with the shared
+  model settings editor, node-level API key override, and Advanced controls for
+  temperature and max tokens.
 - `ToolInspector.tsx` edits Current Time tool labels and timezone settings.
-- `UnsupportedInspector.tsx` edits labels for schema-visible nodes whose real
-  execution remains deferred.
+- `UnsupportedInspector.tsx` keeps schema-visible placeholder nodes editable.
 
 ## Behavior
 

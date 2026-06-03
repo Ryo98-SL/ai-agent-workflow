@@ -21,6 +21,9 @@ The schema supports the MVP node family: Start, LLM, Knowledge, Tool, Code,
 If/Else, Template, and End. Every node carries a user-editable description.
 Start nodes declare text input fields. LLM nodes retain legacy
 `config.variables` compatibility, but runtime prompts resolve from namespaced
-workflow state. Loading rejects unsupported versions and malformed graph data
-with normalized messages. Serialization updates `metadata.updatedAt` and omits
-API keys from saved workflow files.
+workflow state. Model settings accept DeepSeek, OpenAI, Anthropic, and Ollama
+providers. Workflow API keys live in `settings.modelProviderKeys`, and LLM
+nodes can define `config.modelSettings` overrides. Loading rejects unsupported
+versions and malformed graph data with normalized messages. Serialization
+updates `metadata.updatedAt` and migrates legacy workflow provider keys into
+the provider keyring.

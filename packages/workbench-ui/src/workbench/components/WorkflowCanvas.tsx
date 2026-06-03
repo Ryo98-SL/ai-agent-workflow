@@ -13,6 +13,7 @@ import {
   type EdgeChange,
   type NodeChange,
 } from "@xyflow/react";
+import { resolveLLMModelSettings } from "@ai-agent-workflow/workflow-domain";
 import type { WorkflowEdge, WorkflowFile, WorkflowNode, WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
 import type { AddNodeOptions } from "../types";
 import { InlineNodePalettePopover, type InlineNodePaletteState } from "./InlineNodePalettePopover";
@@ -54,12 +55,16 @@ const nodeTypes = {
 type WorkflowFlowNode = WorkflowReactNode;
 
 function toFlowNode(
+  workflow: WorkflowFile,
   node: WorkflowNode,
   currentNode?: WorkflowFlowNode,
   onOpenNodePalette?: OpenWorkflowNodePalette,
 ): WorkflowFlowNode {
   const nodeSize = getWorkflowNodeSize(node);
   const handles = getWorkflowNodeHandles(node);
+  const activeSettings = node.type === "llm" ? resolveLLMModelSettings(workflow, node) : workflow.settings.modelProvider;
+  const activeModel = activeSettings?.model;
+  const activeModelProvider = activeSettings?.provider;
 
   return {
     ...currentNode,
@@ -70,29 +75,35 @@ function toFlowNode(
     initialHeight: nodeSize.height,
     ...(handles ? { handles } : { handles: undefined }),
     selected: currentNode?.selected,
-    data: { node, onOpenNodePalette },
+    data: { node, activeModel, activeModelProvider, onOpenNodePalette },
   };
 }
 
-function toFlowNodes(workflowNodes: WorkflowNode[], onOpenNodePalette?: OpenWorkflowNodePalette): WorkflowFlowNode[] {
-  return workflowNodes.map((node) => {
-    return toFlowNode(node, undefined, onOpenNodePalette);
+function toFlowNodes(workflow: WorkflowFile, onOpenNodePalette?: OpenWorkflowNodePalette): WorkflowFlowNode[] {
+  return workflow.graph.nodes.map((node) => {
+    return toFlowNode(workflow, node, undefined, onOpenNodePalette);
   });
 }
 
-function toFlowEdges(edges: WorkflowEdge[], selectedEdgeIds: Set<string>): Edge[] {
+function toFlowEdges(edges: WorkflowEdge[], selectedEdgeIds: Set<string>, hoveredNodeId?: string): Edge[] {
   return edges.map((edge) => ({
     id: edge.id,
     source: edge.source,
     target: edge.target,
     label: edge.label,
-    markerEnd: { type: MarkerType.ArrowClosed },
+    markerEnd: { type: MarkerType.ArrowClosed, color: isConnectedToHoveredNode(edge, hoveredNodeId) ? "#10b981" : undefined },
     selected: selectedEdgeIds.has(edge.id),
+    style: isConnectedToHoveredNode(edge, hoveredNodeId) ? { stroke: "#10b981", strokeWidth: 2.5 } : undefined,
+    // zIndex: isConnectedToHoveredNode(edge, hoveredNodeId) ? 1 : undefined,
   }));
 }
 
 function toWorkflowEdges(edges: Edge[]): WorkflowEdge[] {
   return edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target }));
+}
+
+function isConnectedToHoveredNode(edge: WorkflowEdge, hoveredNodeId?: string) {
+  return Boolean(hoveredNodeId) && (edge.source === hoveredNodeId || edge.target === hoveredNodeId);
 }
 
 export function WorkflowCanvas({
@@ -104,6 +115,7 @@ export function WorkflowCanvas({
   onWorkflowChange,
 }: WorkflowCanvasProps) {
   const [selectedEdgeIds, setSelectedEdgeIds] = useState(() => new Set<string>());
+  const [hoveredNodeId, setHoveredNodeId] = useState<string>();
   const [inlinePalette, setInlinePalette] = useState<InlineNodePaletteState | null>(null);
   const openInlinePalette = useCallback<OpenWorkflowNodePalette>((sourceNode, handleType, anchorElement) => {
     setInlinePalette({
@@ -113,17 +125,22 @@ export function WorkflowCanvas({
       anchorElement,
     });
   }, []);
-  const [nodes, setNodes] = useState(() => toFlowNodes(workflow.graph.nodes, openInlinePalette));
-  const edges = useMemo(() => toFlowEdges(workflow.graph.edges, selectedEdgeIds), [selectedEdgeIds, workflow.graph.edges]);
+  const [nodes, setNodes] = useState(() => toFlowNodes(workflow, openInlinePalette));
+  const edges = useMemo(
+    () => toFlowEdges(workflow.graph.edges, selectedEdgeIds, hoveredNodeId),
+    [hoveredNodeId, selectedEdgeIds, workflow.graph.edges],
+  );
   const flowKey = workflow.metadata.createdAt;
   const hasStartNode = workflow.graph.nodes.some((node) => node.type === "start");
 
   useEffect(() => {
     setNodes((currentNodes) => {
       const currentNodesById = new Map(currentNodes.map((node) => [node.id, node]));
-      return workflow.graph.nodes.map((node) => toFlowNode(node, currentNodesById.get(node.id), openInlinePalette));
+      return workflow.graph.nodes.map((node) =>
+        toFlowNode(workflow, node, currentNodesById.get(node.id), openInlinePalette),
+      );
     });
-  }, [openInlinePalette, workflow.graph.nodes]);
+  }, [openInlinePalette, workflow]);
 
   useEffect(() => {
     setNodes((currentNodes) =>
@@ -265,6 +282,8 @@ export function WorkflowCanvas({
         onEdgesChange={onEdgesChange}
         onNodeDragStop={(_event, _node, nextNodes) => persistNodePositions(nextNodes as WorkflowFlowNode[])}
         onNodeClick={(_event, node) => onSelectNode(node.id)}
+        onNodeMouseEnter={(_event, node) => setHoveredNodeId(node.id)}
+        onNodeMouseLeave={() => setHoveredNodeId(undefined)}
       >
         <Background color="#cbd5e1" gap={22} />
         <MiniMap

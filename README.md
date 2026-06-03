@@ -36,6 +36,10 @@ at `http://127.0.0.1:5173`. The web and desktop renderers use
 - 不要把docs/文件夹下的文件加入git记录！
 - 调整 ReactFlow 时，优先检查节点、边、handle 的现有配置能否解决问题；
   不要在未排查配置项前自定义渲染器或重新造轮子。
+- 接入模型 provider 时，优先使用对应官方/维护良好的 SDK 或 LangChain
+  集成包，例如 `@langchain/deepseek`、`@langchain/openai`、
+  `@langchain/anthropic`、`@langchain/ollama`。不要在已有库可用时手写
+  Chat Completions、Anthropic Messages 或 Ollama HTTP 协议适配层。
 
 ## Packages And Apps
 

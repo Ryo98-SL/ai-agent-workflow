@@ -118,8 +118,12 @@ describe("workflow client", () => {
     const app = createServerApp({
       fetch: async () =>
         jsonResponse({
-          choices: [{ message: { content: "Client integration output." } }],
-          usage: { total_tokens: 12 },
+          model: "qwen3.5:0.8b",
+          created_at: "2026-06-01T00:00:00.000Z",
+          message: { role: "assistant", content: "Client integration output." },
+          done: true,
+          prompt_eval_count: 5,
+          eval_count: 7,
         }),
     });
     const fetchFromApp: typeof fetch = async (input, init) => {

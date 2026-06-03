@@ -19,9 +19,9 @@ describe("workflow schema", () => {
     expect(workflow.graph.nodes.map((node) => node.id)).toContain("llm1");
     expect(workflow.graph.nodes.every((node) => Boolean(node.description))).toBe(true);
     expect(workflow.settings.modelProvider).toMatchObject({
-      provider: "deepseek",
-      baseURL: "https://api.deepseek.com",
-      model: "deepseek-v4-flash",
+      provider: "ollama",
+      baseURL: "http://127.0.0.1:11434",
+      model: "qwen3.5:0.8b",
     });
   });
 
@@ -34,7 +34,7 @@ describe("workflow schema", () => {
         name: "topic",
         label: "Topic",
         required: true,
-        defaultValue: "LLM workflow debugging",
+        defaultValue: "cat",
       },
     ]);
 
@@ -96,7 +96,7 @@ describe("workflow schema", () => {
     }
   });
 
-  it("omits API keys during serialization", () => {
+  it("moves workflow API keys into the provider keyring during serialization", () => {
     const workflow = createDefaultWorkflow();
     workflow.settings.modelProvider = {
       provider: "deepseek",
@@ -106,8 +106,9 @@ describe("workflow schema", () => {
     };
 
     const serialized = serializeWorkflowFile(workflow);
+    const parsed = JSON.parse(serialized) as { settings: { modelProvider: { apiKey?: string }; modelProviderKeys: { deepseek?: string } } };
 
-    expect(serialized).not.toContain("secret");
-    expect(serialized).not.toContain("apiKey");
+    expect(parsed.settings.modelProvider.apiKey).toBeUndefined();
+    expect(parsed.settings.modelProviderKeys.deepseek).toBe("secret");
   });
 });

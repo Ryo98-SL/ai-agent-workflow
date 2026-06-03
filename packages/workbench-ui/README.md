@@ -1,21 +1,20 @@
 # Workbench UI
 
-React workbench UI package for editing workflows and running server-backed
-workflow runs through an injected workflow API. The shell keeps the React Flow
-canvas as the primary workspace, with Start input editing, node creation, model
-settings, node inspection, and run output available from floating controls and
-a run-triggered canvas popover. Canvas controls use square-rounded icon buttons,
-including an icon-only Run control, and canvas nodes keep their connection
-handles aligned with rendered edge endpoints. Node handles expose inline add
-buttons that open the node palette beside the handle and connect newly created
-nodes according to the clicked handle direction. Target-handle creation wires
-the new node into the clicked node, while source-handle creation wires the
-clicked node into the new node. React Flow node rendering is split by
-workflow node type, with type-colored icon backgrounds shown beside each node
-title and in node palettes. Start nodes preview declared input fields and the
-node description on the canvas. The node palette, model settings, model
-selector, and run log popovers are anchored with floating-ui and mounted under
-`body` so they are not clipped by canvas layout containers.
+Reusable React workbench for editing workflows and running them through an
+injected workflow API. React Flow is the primary workspace; node creation, model
+settings, inspection, and run output live in floating panels.
+
+Principles:
+
+- Keep workflow persistence and runs behind the injected API.
+- Keep popovers mounted under `body` so canvas containers cannot clip them.
+- Keep node handle behavior direction-aware: source creates outgoing edges,
+  target creates incoming edges.
+- Show important canvas state in-place: Start inputs, LLM effective model with
+  bundled provider logo, and selected-node feedback.
+- Keep model configuration consistent: global settings and LLM node overrides
+  share the same provider/model/API key editor, with node advanced settings for
+  temperature and max tokens.
 
 ```tsx
 import { AppWorkbench } from "@ai-agent-workflow/workbench-ui";
@@ -26,8 +25,8 @@ import "@ai-agent-workflow/workbench-ui/styles.css";
 ```
 
 Consumers provide a workflow API compatible with
-`@ai-agent-workflow/workflow-client`. Pass `showDevModelProviders` to expose
-development-only model providers such as Ollama in the model selector; DeepSeek
-is available by default. DeepSeek API keys stay in browser memory: save/open
-payloads omit them, while run requests pass the current key as transient model
-settings.
+`@ai-agent-workflow/workflow-client`. DeepSeek, OpenAI, and Anthropic are
+available by default with local logo assets; pass `showDevModelProviders` to
+expose development providers such as Ollama. Provider API keys are edited per
+provider, and LLM nodes can override provider, model, base URL, API key,
+temperature, and max tokens.

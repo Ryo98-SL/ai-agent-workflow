@@ -7,22 +7,32 @@ async function json(response: Response) {
 }
 
 function createModelFetch(text = "LangGraph is ready.") {
-  return async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
-    new Response(
-      JSON.stringify({
-        choices: [
-          {
-            message: {
-              content: text,
-              reasoning_content: "brief reasoning",
+  return async (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const requestUrl = String(url);
+    const body = requestUrl.includes("/api/chat")
+      ? {
+          model: "qwen3.5:0.8b",
+          created_at: "2026-06-01T00:00:00.000Z",
+          message: { role: "assistant", content: text },
+          done: true,
+          prompt_eval_count: 20,
+          eval_count: 22,
+        }
+      : {
+          choices: [
+            {
+              message: {
+                content: text,
+                reasoning_content: "brief reasoning",
+              },
             },
-          },
-        ],
-        usage: { total_tokens: 42 },
-        request: init?.body ? JSON.parse(String(init.body)) : undefined,
-      }),
-      { status: 200, headers: { "content-type": "application/json" } },
-    );
+          ],
+          usage: { total_tokens: 42 },
+          request: init?.body ? JSON.parse(String(init.body)) : undefined,
+        };
+
+    return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+  };
 }
 
 function requestHeader(init: Parameters<typeof fetch>[1] | undefined, name: string) {
@@ -168,7 +178,7 @@ describe("workflow API server", () => {
     expect(createdRun.run.output.nodeResults[1].output).toBe("Server runtime output.");
     expect(createdRun.run.output.nodeResults[1].data).toMatchObject({
       text: "Server runtime output.",
-      usage: { totalTokens: 42 },
+      usage: { total_tokens: 42 },
       reasoning: null,
     });
 
@@ -235,6 +245,58 @@ describe("workflow API server", () => {
     expect(logOutput).toContain("runtime.model.invoke_started");
     expect(logOutput).not.toContain("transient-deepseek-key");
     expect(logOutput).not.toContain("Explain {{start1.topic}}");
+  });
+
+  it("uses node model settings with provider keyring fallback", async () => {
+    const workflow = createDefaultWorkflow();
+    workflow.settings.modelProvider = {
+      provider: "deepseek",
+      baseURL: "https://api.deepseek.com",
+      model: "deepseek-v4-flash",
+    };
+    workflow.settings.modelProviderKeys = { openai: "provider-openai-key" };
+    const llm = workflow.graph.nodes.find((node) => node.type === "llm");
+    if (llm?.type === "llm") {
+      llm.config.modelSettings = {
+        provider: "openai",
+        baseURL: "https://api.openai.com/v1",
+        model: "gpt-5.2",
+        temperature: 0.2,
+        maxTokens: 1200,
+      };
+    }
+
+    let authorization = "";
+    let requestedUrl = "";
+    let requestedBody = {} as { model?: string; max_completion_tokens?: number; max_tokens?: number; temperature?: number };
+    const app = createServerApp({
+      seedWorkflow: workflow,
+      fetch: async (url, init) => {
+        requestedUrl = String(url);
+        authorization = requestHeader(init, "authorization") ?? "";
+        requestedBody = JSON.parse(String(init?.body));
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: "Node settings output." } }],
+            usage: { total_tokens: 9 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    const response = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "node settings" } }),
+    });
+    const body = (await json(response)) as { run: { status: string; output: { nodeResults: Array<{ output: string }> } } };
+
+    expect(response.status).toBe(201);
+    expect(body.run.status).toBe("succeeded");
+    expect(body.run.output.nodeResults[1].output).toBe("Node settings output.");
+    expect(requestedUrl).toBe("https://api.openai.com/v1/chat/completions");
+    expect(authorization).toBe("Bearer provider-openai-key");
+    expect(requestedBody).toMatchObject({ model: "gpt-5.2", max_completion_tokens: 1200, temperature: 0.2 });
   });
 
   it("fails missing required Start input before model calls", async () => {
@@ -391,7 +453,7 @@ describe("workflow API server", () => {
     const body = (await json(response)) as { run: { status: string; error: { message: string }; output: { nodeResults: unknown[] } } };
 
     expect(body.run.status).toBe("failed");
-    expect(body.run.error.message).toContain("503");
+    expect(body.run.error.message).toContain("nope");
     expect(body.run.output.nodeResults).toHaveLength(2);
   });
 });

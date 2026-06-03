@@ -78,9 +78,13 @@ describe("api contracts", () => {
         model: "deepseek-chat",
         apiKey: "secret",
       },
+      modelProviderKeys: {
+        openai: "openai-secret",
+      },
     });
 
     expect(parsed.modelProvider?.apiKey).toBe("secret");
+    expect(parsed.modelProviderKeys?.openai).toBe("openai-secret");
   });
 
   it("creates normalized API errors", () => {

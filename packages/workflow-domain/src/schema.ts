@@ -54,18 +54,6 @@ const StartNodeSchema = BaseNodeSchema.extend({
     }),
 });
 
-const LLMNodeSchema = BaseNodeSchema.extend({
-  type: z.literal("llm"),
-  config: z.object({
-    systemPrompt: z.string().optional(),
-    userPrompt: z.string().default("Write a short response for {{topic}}."),
-    variables: z.record(z.string()).default({ topic: "workflow debugging" }),
-    model: z.string().optional(),
-    temperature: z.number().min(0).max(2).default(0.7),
-    maxTokens: z.number().int().positive().max(32000).default(800),
-  }),
-});
-
 const ToolNodeSchema = BaseNodeSchema.extend({
   type: z.literal("tool"),
   config: z.object({
@@ -86,6 +74,43 @@ const BasicConfigNodeSchema = <Type extends Exclude<WorkflowNodeType, "start" | 
       .default({}),
   });
 
+export const MODEL_PROVIDERS = ["deepseek", "openai", "anthropic", "ollama"] as const;
+export const ModelProviderSchema = z.enum(MODEL_PROVIDERS);
+
+export const OpenAICompatibleSettingsSchema = z.object({
+  provider: ModelProviderSchema.default("deepseek"),
+  baseURL: z.string().url().default("https://api.deepseek.com"),
+  apiKey: z.string().optional(),
+  model: z.string().min(1).default("deepseek-v4-flash"),
+});
+
+export const ModelProviderKeysSchema = z
+  .object({
+    deepseek: z.string().optional(),
+    openai: z.string().optional(),
+    anthropic: z.string().optional(),
+    ollama: z.string().optional(),
+  })
+  .default({});
+
+export const LLMModelSettingsSchema = OpenAICompatibleSettingsSchema.extend({
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().int().positive().max(32000).optional(),
+});
+
+const LLMNodeSchema = BaseNodeSchema.extend({
+  type: z.literal("llm"),
+  config: z.object({
+    systemPrompt: z.string().optional(),
+    userPrompt: z.string().default("Write a short response for {{topic}}."),
+    variables: z.record(z.string()).default({ topic: "workflow debugging" }),
+    model: z.string().optional(),
+    modelSettings: LLMModelSettingsSchema.optional(),
+    temperature: z.number().min(0).max(2).default(0.7),
+    maxTokens: z.number().int().positive().max(32000).default(800),
+  }),
+});
+
 export const WorkflowNodeSchema = z.discriminatedUnion("type", [
   StartNodeSchema,
   LLMNodeSchema,
@@ -104,16 +129,6 @@ export const WorkflowEdgeSchema = z.object({
   label: z.string().optional(),
 });
 
-export const MODEL_PROVIDERS = ["deepseek", "ollama"] as const;
-export const ModelProviderSchema = z.enum(MODEL_PROVIDERS);
-
-export const OpenAICompatibleSettingsSchema = z.object({
-  provider: ModelProviderSchema.default("deepseek"),
-  baseURL: z.string().url().default("https://api.deepseek.com"),
-  apiKey: z.string().optional(),
-  model: z.string().min(1).default("deepseek-v4-flash"),
-});
-
 export const WorkflowFileSchema = z.object({
   version: z.literal("1"),
   metadata: z.object({
@@ -128,6 +143,7 @@ export const WorkflowFileSchema = z.object({
   }),
   settings: z.object({
     modelProvider: OpenAICompatibleSettingsSchema.optional(),
+    modelProviderKeys: ModelProviderKeysSchema,
   }),
 });
 
@@ -139,6 +155,8 @@ export type ToolNode = Extract<WorkflowNode, { type: "tool" }>;
 export type WorkflowEdge = z.infer<typeof WorkflowEdgeSchema>;
 export type ModelProvider = z.infer<typeof ModelProviderSchema>;
 export type OpenAICompatibleSettings = z.infer<typeof OpenAICompatibleSettingsSchema>;
+export type ModelProviderKeys = z.infer<typeof ModelProviderKeysSchema>;
+export type LLMModelSettings = z.infer<typeof LLMModelSettingsSchema>;
 export type WorkflowFile = z.infer<typeof WorkflowFileSchema>;
 
 export type ValidationResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -164,6 +182,21 @@ export function parseWorkflowJson(content: string): ValidationResult<WorkflowFil
 }
 
 export function serializeWorkflowFile(workflow: WorkflowFile): string {
+  const modelProvider = workflow.settings.modelProvider
+    ? {
+        ...workflow.settings.modelProvider,
+        apiKey: undefined,
+      }
+    : undefined;
+  const legacyProviderKey = workflow.settings.modelProvider?.apiKey;
+  const modelProviderKeys =
+    legacyProviderKey && workflow.settings.modelProvider
+      ? {
+          ...workflow.settings.modelProviderKeys,
+          [workflow.settings.modelProvider.provider]:
+            workflow.settings.modelProviderKeys?.[workflow.settings.modelProvider.provider] || legacyProviderKey,
+        }
+      : workflow.settings.modelProviderKeys;
   const sanitized: WorkflowFile = {
     ...workflow,
     metadata: {
@@ -172,16 +205,47 @@ export function serializeWorkflowFile(workflow: WorkflowFile): string {
     },
     settings: {
       ...workflow.settings,
-      modelProvider: workflow.settings.modelProvider
-        ? {
-            ...workflow.settings.modelProvider,
-            apiKey: undefined,
-          }
-        : undefined,
+      modelProvider,
+      modelProviderKeys,
     },
   };
 
   return `${JSON.stringify(sanitized, null, 2)}\n`;
+}
+
+export function getProviderApiKey(workflow: WorkflowFile, provider: ModelProvider): string | undefined {
+  return workflow.settings.modelProviderKeys?.[provider] || legacyModelProviderApiKey(workflow, provider);
+}
+
+export function resolveLLMModelSettings(workflow: WorkflowFile, node: LLMNode): LLMModelSettings | undefined {
+  const workflowSettings = workflow.settings.modelProvider;
+  const nodeSettings = node.config.modelSettings;
+  const provider = nodeSettings?.provider || workflowSettings?.provider;
+
+  if (!provider) {
+    return undefined;
+  }
+
+  const baseURL = nodeSettings?.baseURL || workflowSettings?.baseURL;
+  const model = nodeSettings?.model || node.config.model || workflowSettings?.model;
+
+  if (!baseURL || !model) {
+    return undefined;
+  }
+
+  return {
+    provider,
+    baseURL,
+    model,
+    apiKey: nodeSettings?.apiKey || getProviderApiKey(workflow, provider),
+    temperature: nodeSettings?.temperature ?? node.config.temperature,
+    maxTokens: nodeSettings?.maxTokens ?? node.config.maxTokens,
+  };
+}
+
+function legacyModelProviderApiKey(workflow: WorkflowFile, provider: ModelProvider): string | undefined {
+  const settings = workflow.settings.modelProvider;
+  return settings?.provider === provider ? settings.apiKey : undefined;
 }
 
 export function createDefaultWorkflow(): WorkflowFile {
@@ -235,8 +299,8 @@ export function createDefaultWorkflow(): WorkflowFile {
         provider: "ollama",
         baseURL: "http://127.0.0.1:11434",
         model: "qwen3.5:0.8b",
-        apiKey: "",
       },
+      modelProviderKeys: {},
     },
   };
 }

@@ -14,10 +14,10 @@ The local server listens on `http://127.0.0.1:8788` by default. Set `PORT` to
 override the port.
 
 Workflow runs require provider-aware model settings on the workflow. The server
-uses LangChain chat model modules for DeepSeek and Ollama, then keeps run
-records/events in memory. Run requests can provide transient model settings,
-including a DeepSeek API key, for execution without storing that key on the
-workflow.
+uses workflow defaults, provider keyring values, and optional node-level model
+settings to choose the provider, model, base URL, API key, temperature, and max
+tokens for each LLM node. Run requests can still provide transient model
+settings/keyring values for execution.
 
 Route handling and runtime execution emit structured JSON logs through the
 shared `src/logger.ts` module. Log metadata is limited to safe identifiers and

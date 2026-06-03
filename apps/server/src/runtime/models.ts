@@ -1,6 +1,8 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { ChatOllama } from "@langchain/ollama";
+import { ChatOpenAI } from "@langchain/openai";
 import type {
   LLMNode,
   ModelProvider,
@@ -8,29 +10,33 @@ import type {
   WorkflowFile,
   WorkflowRuntimeState,
 } from "@ai-agent-workflow/workflow-domain";
+import { resolveLLMModelSettings } from "@ai-agent-workflow/workflow-domain";
 import { RuntimeModelError, RuntimeValidationError } from "./errors";
 import { logger } from "../logger";
 import { resolvePrompt } from "./prompts";
 
 function chooseModelSettings(workflow: WorkflowFile, node: LLMNode): OpenAICompatibleSettings {
-  const settings = workflow.settings.modelProvider;
+  const settings = resolveLLMModelSettings(workflow, node);
   if (!settings) {
     throw new RuntimeValidationError("Workflow model provider settings are required for LLM runs.");
   }
 
-  return {
-    ...settings,
-    model: node.config.model || settings.model,
-  };
+  return settings;
 }
 
-function createChatModel(settings: OpenAICompatibleSettings, node: LLMNode, fetchImpl: typeof fetch) {
-  const providerFactories: Record<ModelProvider, () => ChatDeepSeek | ChatOllama> = {
+type RuntimeChatModel = {
+  invoke: (messages: Array<SystemMessage | HumanMessage>) => Promise<Record<string, any>>;
+};
+
+function createChatModel(settings: OpenAICompatibleSettings, node: LLMNode, fetchImpl: typeof fetch): RuntimeChatModel {
+  const temperature = node.config.modelSettings?.temperature ?? node.config.temperature;
+  const maxTokens = node.config.modelSettings?.maxTokens ?? node.config.maxTokens;
+  const providerFactories: Record<ModelProvider, () => RuntimeChatModel> = {
     deepseek: () =>
       new ChatDeepSeek({
         model: settings.model,
-        temperature: node.config.temperature,
-        maxTokens: node.config.maxTokens,
+        temperature,
+        maxTokens,
         maxRetries: 0,
         timeout: 10_000,
         apiKey: settings.apiKey || "missing-deepseek-api-key",
@@ -43,10 +49,32 @@ function createChatModel(settings: OpenAICompatibleSettings, node: LLMNode, fetc
       new ChatOllama({
         think: false,
         model: settings.model,
-        temperature: node.config.temperature,
+        temperature,
         baseUrl: settings.baseURL,
         fetch: fetchImpl,
         checkOrPullModel: false,
+      }),
+    openai: () =>
+      new ChatOpenAI({
+        model: settings.model,
+        temperature,
+        maxTokens,
+        apiKey: settings.apiKey || "missing-openai-api-key",
+        configuration: {
+          baseURL: settings.baseURL,
+          fetch: fetchImpl as any,
+        },
+      }),
+    anthropic: () =>
+      new ChatAnthropic({
+        model: settings.model,
+        temperature,
+        maxTokens,
+        apiKey: settings.apiKey || "missing-anthropic-api-key",
+        anthropicApiUrl: settings.baseURL,
+        clientOptions: {
+          fetch: fetchImpl as any,
+        },
       }),
   };
 

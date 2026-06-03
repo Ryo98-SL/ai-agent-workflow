@@ -9,23 +9,26 @@ through LangGraph JS.
 
 - `src/app.ts` creates an isolated Hono app and in-memory store for tests or
   runtime, then persists synchronous run results and events. Run requests may
-  carry transient model-provider settings so API keys can be used for execution
-  without being written back to stored workflows.
+  carry transient model-provider settings and provider keyring values that are
+  merged into the workflow used for that execution.
 - `src/logger.ts` provides the shared structured logger used by server routes
   and runtime modules. It writes JSON logs through `console` and keeps callers
   responsible for passing only safe summary metadata.
 - `src/runtime/` validates supported workflow graphs, materializes Start input
   fields, compiles reachable Start/LLM nodes into a LangGraph StateGraph,
-  resolves namespaced prompt variables, and invokes LangChain DeepSeek or
-  Ollama chat model modules from workflow model settings. The executor and
-  model modules emit lifecycle logs for execution start/end, node completion,
-  node failure, and model invocation. The folder keeps the executor, validation,
-  prompt, Start input, model, error, and type modules separate so the runtime
-  can grow without one oversized file.
+  resolves namespaced prompt variables, and invokes provider-aware model calls
+  from the merged workflow/node settings. Provider calls use the matching
+  LangChain integrations: `@langchain/deepseek`, `@langchain/openai`,
+  `@langchain/anthropic`, and `@langchain/ollama`. The executor and model
+  modules emit lifecycle logs for
+  execution start/end, node completion, node failure, and model invocation. The
+  folder keeps the executor, validation, prompt, Start input, model, error, and
+  type modules separate so the runtime can grow without one oversized file.
 - `src/index.ts` exports the app factory and starts the Node server when run by
   the package `dev` script.
 - `tests/routes.test.ts` covers request validation, normalized errors,
-  workflow CRUD routes, DeepSeek/Ollama model calls, and run event persistence.
+  workflow CRUD routes, provider/keyring model calls, node-level model
+  settings, and run event persistence.
 
 ## Integration Boundary
 
