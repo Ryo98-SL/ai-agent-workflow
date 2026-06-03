@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type SetStateAction } from "react";
+import { Loader2 } from "lucide-react";
 import {
   createDefaultWorkflow,
   createNode,
@@ -12,10 +13,11 @@ import {
 import type { WorkflowDto } from "@ai-agent-workflow/api-contracts";
 import type { RunInput } from "@ai-agent-workflow/api-contracts";
 import { WorkbenchLayout } from "./components/WorkbenchLayout";
-import type { AppWorkbenchProps, DebugState } from "./types";
+import type { AddNodeOptions, AppWorkbenchProps, DebugState } from "./types";
 
-export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
+export function AppWorkbench({ workflowApi, showDevModelProviders = false }: AppWorkbenchProps) {
   const [workflow, setWorkflow] = useState<WorkflowFile>(() => createDefaultWorkflow());
+  const [initialLoaded, setInitialLoaded] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
   const [debugState, setDebugState] = useState<DebugState>({ status: "idle" });
   const [workflowId, setWorkflowId] = useState<string | undefined>();
@@ -46,8 +48,8 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
     [resetSelectionPanels],
   );
 
-  const applySavedWorkflowDto = useCallback((dto: WorkflowDto) => {
-    setWorkflow(dto.workflow);
+  const applySavedWorkflowDto = useCallback((dto: WorkflowDto, previousWorkflow: WorkflowFile) => {
+    setWorkflow(preserveTransientModelProvider(dto.workflow, previousWorkflow));
     setWorkflowId(dto.id);
     setDirty(false);
   }, []);
@@ -69,7 +71,7 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
           ? await workflowApi.updateWorkflow(workflowId, { workflow: payload })
           : await workflowApi.createWorkflow({ workflow: payload });
 
-      applySavedWorkflowDto(response.workflow);
+      applySavedWorkflowDto(response.workflow, workflow);
       return response.workflow;
     },
     [applySavedWorkflowDto, workflow, workflowApi, workflowForServer, workflowId],
@@ -90,6 +92,7 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
         if (!cancelled) {
           applyWorkflowDto(response.workflow);
           setDebugState({ status: "idle" });
+          setInitialLoaded(true);
         }
       } catch (error) {
         if (!cancelled) {
@@ -137,17 +140,30 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
   );
 
   const addNode = useCallback(
-    (type: WorkflowNodeType) => {
+    (type: WorkflowNodeType, options?: AddNodeOptions) => {
       if (type === "start" && workflow.graph.nodes.some((node) => node.type === "start")) {
         setPaletteOpen(false);
         return;
       }
 
-      const position = { x: 180 + workflow.graph.nodes.length * 32, y: 120 + workflow.graph.nodes.length * 24 };
+      const anchorNode = options?.sourceNodeId
+        ? workflow.graph.nodes.find((node) => node.id === options.sourceNodeId)
+        : undefined;
+      const position = anchorNode
+        ? {
+            x: anchorNode.position.x + (options?.handleType === "target" ? -260 : 260),
+            y: anchorNode.position.y,
+          }
+        : { x: 180 + workflow.graph.nodes.length * 32, y: 120 + workflow.graph.nodes.length * 24 };
       const node = createNode(type, position, workflow.graph.nodes);
+      const edge = anchorNode ? createConnectedNodeEdge(anchorNode.id, node.id, options?.handleType) : undefined;
       markWorkflow((current) => ({
         ...current,
-        graph: { ...current.graph, nodes: [...current.graph.nodes, node] },
+        graph: {
+          ...current.graph,
+          nodes: [...current.graph.nodes, node],
+          edges: edge ? [...current.graph.edges, edge] : current.graph.edges,
+        },
       }));
       setSelectedNodeId(node.id);
       setInspectorOpen(true);
@@ -161,6 +177,11 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
     setSelectedNodeId(nodeId);
     setInspectorOpen(true);
     setDebugOpen(false);
+  }, []);
+
+  const handleCloseInspector = useCallback(() => {
+    setSelectedNodeId("");
+    setInspectorOpen(false);
   }, []);
 
   const handleNewWorkflow = useCallback(() => {
@@ -214,7 +235,10 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
 
       try {
         const persisted = !workflowId || dirty ? await persistWorkflow("save") : { id: workflowId, workflow };
-        const runResponse = await workflowApi.createRun(persisted.id, { input });
+        const runResponse = await workflowApi.createRun(persisted.id, {
+          input,
+          modelProvider: workflow.settings.modelProvider,
+        });
         const eventResponse = await workflowApi.listRunEvents(runResponse.run.id);
 
         setDebugState({
@@ -231,6 +255,10 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
     [debugState.status, dirty, errorMessage, persistWorkflow, workflow, workflowApi, workflowId],
   );
 
+  if (!initialLoaded) {
+    return <WorkbenchStartupState error={debugState.error} />;
+  }
+
   return (
     <WorkbenchLayout
       workflow={workflow}
@@ -243,14 +271,15 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
       settingsOpen={settingsOpen}
       inspectorOpen={inspectorOpen}
       debugOpen={debugOpen}
+      showDevModelProviders={showDevModelProviders}
       onAddNode={addNode}
       onCloseDebug={() => setDebugOpen(false)}
-      onCloseInspector={() => setInspectorOpen(false)}
+      onCloseInspector={handleCloseInspector}
       onClosePalette={() => setPaletteOpen(false)}
       onCloseSettings={() => setSettingsOpen(false)}
       onNewWorkflow={handleNewWorkflow}
       onOpenWorkflow={handleOpenWorkflow}
-      onOpenRunPanel={() => setDebugOpen(true)}
+      onToggleRunPanel={() => setDebugOpen((state) => !state)}
       onRunWorkflow={runWorkflow}
       onSaveWorkflow={() => saveWorkflow("save")}
       onSaveWorkflowAs={() => saveWorkflow("saveAs")}
@@ -262,4 +291,60 @@ export function AppWorkbench({ workflowApi }: AppWorkbenchProps) {
       onWorkflowChange={markWorkflow}
     />
   );
+}
+
+function createConnectedNodeEdge(
+  anchorNodeId: string,
+  createdNodeId: string,
+  handleType: AddNodeOptions["handleType"] = "source",
+) {
+  const source = handleType === "target" ? createdNodeId : anchorNodeId;
+  const target = handleType === "target" ? anchorNodeId : createdNodeId;
+
+  return {
+    id: `edge-${source}-${target}-${Date.now()}`,
+    source,
+    target,
+  };
+}
+
+function WorkbenchStartupState({ error }: { error?: string }) {
+  return (
+    <main className="flex h-full min-h-0 items-center justify-center bg-slate-50 p-6 text-slate-950">
+      <section className="w-full max-w-sm rounded-md border border-slate-200 bg-white p-5 text-center shadow-sm">
+        {error ? (
+          <>
+            <h1 className="text-sm font-semibold text-slate-900">Workflow load failed</h1>
+            <p className="mt-2 text-sm leading-5 text-rose-600">{error}</p>
+          </>
+        ) : (
+          <>
+            <Loader2 size={22} className="mx-auto animate-spin text-slate-500" aria-hidden />
+            <h1 className="mt-3 text-sm font-semibold text-slate-900">Loading workflow</h1>
+            <p className="mt-2 text-sm leading-5 text-slate-500">Syncing workflow state with the server.</p>
+          </>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function preserveTransientModelProvider(savedWorkflow: WorkflowFile, previousWorkflow: WorkflowFile): WorkflowFile {
+  const savedSettings = savedWorkflow.settings.modelProvider;
+  const previousSettings = previousWorkflow.settings.modelProvider;
+
+  if (!savedSettings || !previousSettings?.apiKey || savedSettings.provider !== previousSettings.provider) {
+    return savedWorkflow;
+  }
+
+  return {
+    ...savedWorkflow,
+    settings: {
+      ...savedWorkflow.settings,
+      modelProvider: {
+        ...savedSettings,
+        apiKey: previousSettings.apiKey,
+      },
+    },
+  };
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createDefaultWorkflow, type LLMNode, type ToolNode } from "@ai-agent-workflow/workflow-domain";
+import { createDefaultWorkflow, createNode, type LLMNode, type ToolNode } from "@ai-agent-workflow/workflow-domain";
 import { executeLLMNode } from "../../src/domain/runtime/llmAdapter";
 import { executeCurrentTimeTool } from "../../src/domain/runtime/toolAdapter";
 
@@ -19,7 +19,7 @@ describe("runtime adapters", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await executeLLMNode(node, {
-      modelProvider: { baseURL: "http://mock.test/v1", model: "mock-model", apiKey: "key" },
+      modelProvider: { provider: "deepseek", baseURL: "http://mock.test/v1", model: "mock-model", apiKey: "key" },
       testVariables: { "start1.topic": "legacy adapter tests" },
     });
 
@@ -39,7 +39,7 @@ describe("runtime adapters", () => {
     const node = workflow.graph.nodes.find((candidate) => candidate.type === "llm") as LLMNode;
     const result = await executeLLMNode(
       { ...node, config: { ...node.config, userPrompt: "Hello {{missing.value}}", variables: {} } },
-      { modelProvider: { baseURL: "http://mock.test/v1", model: "mock-model" }, testVariables: {} },
+      { modelProvider: { provider: "deepseek", baseURL: "http://mock.test/v1", model: "mock-model" }, testVariables: {} },
     );
 
     expect(result.status).toBe("error");
@@ -58,7 +58,7 @@ describe("runtime adapters", () => {
     );
 
     const result = await executeLLMNode(node, {
-      modelProvider: { baseURL: "http://mock.test/v1", model: "mock-model" },
+      modelProvider: { provider: "deepseek", baseURL: "http://mock.test/v1", model: "mock-model" },
       testVariables: { "start1.topic": "legacy adapter tests" },
     });
 
@@ -68,8 +68,7 @@ describe("runtime adapters", () => {
   });
 
   it("executes the current time tool", async () => {
-    const workflow = createDefaultWorkflow();
-    const node = workflow.graph.nodes.find((candidate) => candidate.type === "tool") as ToolNode;
+    const node = createNode("tool", { x: 0, y: 0 }) as ToolNode;
     const result = await executeCurrentTimeTool(node, { testVariables: {} });
 
     expect(result.status).toBe("success");

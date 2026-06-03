@@ -6,8 +6,9 @@
 Electron, server, or runtime execution dependencies.
 
 - `src/schema.ts` defines the `.agentflow.json` Zod schemas, inferred types,
-  Start input field contracts, parse/validate/serialize helpers, default
-  workflow creation, and readable node factories.
+  node-level descriptions, Start input field contracts, parse/validate/serialize
+  helpers, default workflow creation, readable node factories, and
+  provider-aware model settings for DeepSeek and Ollama.
 - `src/promptVariables.ts` defines namespaced prompt placeholder parsing,
   runtime-state resolution, and legacy variable value merging.
 - `src/index.ts` exports the stable public API used by app, runtime, and tests.

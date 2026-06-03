@@ -1,75 +1,83 @@
-import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import {
   addEdge,
   applyEdgeChanges,
+  applyNodeChanges,
   Background,
   Controls,
-  Handle,
   MarkerType,
   MiniMap,
-  Position,
   ReactFlow,
   type Connection,
   type Edge,
   type EdgeChange,
-  type Node,
-  type NodeProps,
+  type NodeChange,
 } from "@xyflow/react";
-import type { WorkflowEdge, WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import type { WorkflowEdge, WorkflowFile, WorkflowNode, WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
+import type { AddNodeOptions } from "../types";
+import { InlineNodePalettePopover, type InlineNodePaletteState } from "./InlineNodePalettePopover";
+import {
+  CodeWorkflowNode,
+  EndWorkflowNode,
+  IfElseWorkflowNode,
+  KnowledgeWorkflowNode,
+  LlmWorkflowNode,
+  StartWorkflowNode,
+  TemplateWorkflowNode,
+  ToolWorkflowNode,
+  getWorkflowNodeHandles,
+  getWorkflowNodeSize,
+  type OpenWorkflowNodePalette,
+  type WorkflowReactNode,
+} from "./workflowNodes";
 
 type WorkflowCanvasProps = {
   workflow: WorkflowFile;
   selectedNodeId?: string;
+  onAddNode: (type: WorkflowNodeType, options?: AddNodeOptions) => void;
+  onClearSelection: () => void;
   onSelectNode: (nodeId: string) => void;
   onWorkflowChange: Dispatch<SetStateAction<WorkflowFile>>;
 };
 
 const nodeTypes = {
-  workflowNode: WorkflowNodeCard,
+  start: StartWorkflowNode,
+  llm: LlmWorkflowNode,
+  knowledge: KnowledgeWorkflowNode,
+  tool: ToolWorkflowNode,
+  code: CodeWorkflowNode,
+  ifElse: IfElseWorkflowNode,
+  template: TemplateWorkflowNode,
+  end: EndWorkflowNode,
 };
 
-const workflowNodeSize = {
-  width: 184,
-  height: 74,
-};
+type WorkflowFlowNode = WorkflowReactNode;
 
-const workflowNodeHandles = [
-  {
-    id: null,
-    type: "target" as const,
-    position: Position.Left,
-    x: -8,
-    y: workflowNodeSize.height / 2 - 8,
-    width: 16,
-    height: 16,
-  },
-  {
-    id: null,
-    type: "source" as const,
-    position: Position.Right,
-    x: workflowNodeSize.width - 8,
-    y: workflowNodeSize.height / 2 - 8,
-    width: 16,
-    height: 16,
-  },
-];
+function toFlowNode(
+  node: WorkflowNode,
+  currentNode?: WorkflowFlowNode,
+  onOpenNodePalette?: OpenWorkflowNodePalette,
+): WorkflowFlowNode {
+  const nodeSize = getWorkflowNodeSize(node);
+  const handles = getWorkflowNodeHandles(node);
 
-const handleClassName =
-  "!h-4 !w-4 !border-2 !border-white !bg-slate-500 !shadow-sm transition-colors hover:!bg-emerald-600";
-
-type WorkflowFlowNode = Node<{ node: WorkflowNode }, "workflowNode">;
-
-function toFlowNodes(workflowNodes: WorkflowNode[], selectedNodeId?: string): WorkflowFlowNode[] {
-  return workflowNodes.map((node) => ({
+  return {
+    ...currentNode,
     id: node.id,
-    type: "workflowNode",
+    type: node.type,
     position: node.position,
-    initialWidth: workflowNodeSize.width,
-    initialHeight: workflowNodeSize.height,
-    handles: workflowNodeHandles,
-    selected: node.id === selectedNodeId,
-    data: { node },
-  }));
+    initialWidth: nodeSize.width,
+    initialHeight: nodeSize.height,
+    ...(handles ? { handles } : { handles: undefined }),
+    selected: currentNode?.selected,
+    data: { node, onOpenNodePalette },
+  };
+}
+
+function toFlowNodes(workflowNodes: WorkflowNode[], onOpenNodePalette?: OpenWorkflowNodePalette): WorkflowFlowNode[] {
+  return workflowNodes.map((node) => {
+    return toFlowNode(node, undefined, onOpenNodePalette);
+  });
 }
 
 function toFlowEdges(edges: WorkflowEdge[], selectedEdgeIds: Set<string>): Edge[] {
@@ -87,17 +95,84 @@ function toWorkflowEdges(edges: Edge[]): WorkflowEdge[] {
   return edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target }));
 }
 
-export function WorkflowCanvas({ workflow, selectedNodeId, onSelectNode, onWorkflowChange }: WorkflowCanvasProps) {
+export function WorkflowCanvas({
+  workflow,
+  selectedNodeId,
+  onAddNode,
+  onClearSelection,
+  onSelectNode,
+  onWorkflowChange,
+}: WorkflowCanvasProps) {
   const [selectedEdgeIds, setSelectedEdgeIds] = useState(() => new Set<string>());
-  const defaultNodes = useMemo(() => toFlowNodes(workflow.graph.nodes, selectedNodeId), [selectedNodeId, workflow.graph.nodes]);
+  const [inlinePalette, setInlinePalette] = useState<InlineNodePaletteState | null>(null);
+  const openInlinePalette = useCallback<OpenWorkflowNodePalette>((sourceNode, handleType, anchorElement) => {
+    setInlinePalette({
+      sourceNodeId: sourceNode.id,
+      sourceNodeLabel: sourceNode.label,
+      handleType,
+      anchorElement,
+    });
+  }, []);
+  const [nodes, setNodes] = useState(() => toFlowNodes(workflow.graph.nodes, openInlinePalette));
   const edges = useMemo(() => toFlowEdges(workflow.graph.edges, selectedEdgeIds), [selectedEdgeIds, workflow.graph.edges]);
-  const flowKey = useMemo(
-    () =>
-      [
-        workflow.metadata.createdAt,
-        workflow.graph.nodes.map((node) => `${node.id}:${node.type}:${node.label}`).join("|"),
-      ].join("::"),
-    [workflow.graph.nodes, workflow.metadata.createdAt],
+  const flowKey = workflow.metadata.createdAt;
+  const hasStartNode = workflow.graph.nodes.some((node) => node.type === "start");
+
+  useEffect(() => {
+    setNodes((currentNodes) => {
+      const currentNodesById = new Map(currentNodes.map((node) => [node.id, node]));
+      return workflow.graph.nodes.map((node) => toFlowNode(node, currentNodesById.get(node.id), openInlinePalette));
+    });
+  }, [openInlinePalette, workflow.graph.nodes]);
+
+  useEffect(() => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) => {
+        const selected = Boolean(selectedNodeId) && node.id === selectedNodeId;
+        return node.selected === selected ? node : { ...node, selected };
+      }),
+    );
+  }, [selectedNodeId]);
+
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      const selectionChanges = changes.filter((change) => change.type === "select");
+      const removedNodeIds = new Set(changes.filter((change) => change.type === "remove").map((change) => change.id));
+      const onlyClearingSelection =
+        selectionChanges.length > 0 && selectionChanges.every((change) => !change.selected) && !changes.some((change) => change.type !== "select");
+
+      setNodes((currentNodes) => {
+        const nextNodes = applyNodeChanges(changes, currentNodes) as WorkflowFlowNode[];
+        if (!selectedNodeId || !onlyClearingSelection) {
+          return nextNodes;
+        }
+
+        return nextNodes.map((node) => (node.id === selectedNodeId ? { ...node, selected: true } : node));
+      });
+
+      if (removedNodeIds.size > 0) {
+        setSelectedEdgeIds((current) => {
+          return new Set(
+            [...current].filter((edgeId) => {
+              const edge = edges.find((candidate) => candidate.id === edgeId);
+              return edge && !removedNodeIds.has(edge.source) && !removedNodeIds.has(edge.target);
+            }),
+          );
+        });
+        if (selectedNodeId && removedNodeIds.has(selectedNodeId)) {
+          onClearSelection();
+        }
+        onWorkflowChange((current) => ({
+          ...current,
+          graph: {
+            ...current.graph,
+            nodes: current.graph.nodes.filter((node) => !removedNodeIds.has(node.id)),
+            edges: current.graph.edges.filter((edge) => !removedNodeIds.has(edge.source) && !removedNodeIds.has(edge.target)),
+          },
+        }));
+      }
+    },
+    [edges, onClearSelection, onWorkflowChange, selectedNodeId],
   );
 
   const persistNodePositions = useCallback(
@@ -171,7 +246,7 @@ export function WorkflowCanvas({ workflow, selectedNodeId, onSelectNode, onWorkf
     <div className="h-full">
       <ReactFlow
         key={flowKey}
-        defaultNodes={defaultNodes}
+        nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
@@ -186,15 +261,10 @@ export function WorkflowCanvas({ workflow, selectedNodeId, onSelectNode, onWorkf
         minZoom={0.4}
         maxZoom={1.6}
         onConnect={onConnect}
+        onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeDragStop={(_event, _node, nextNodes) => persistNodePositions(nextNodes as WorkflowFlowNode[])}
         onNodeClick={(_event, node) => onSelectNode(node.id)}
-        onSelectionChange={({ nodes: selectedNodes }) => {
-          const node = selectedNodes.at(0);
-          if (node && node.id !== selectedNodeId) {
-            onSelectNode(node.id);
-          }
-        }}
       >
         <Background color="#cbd5e1" gap={22} />
         <MiniMap
@@ -208,38 +278,13 @@ export function WorkflowCanvas({ workflow, selectedNodeId, onSelectNode, onWorkf
           className="!bg-white !shadow-sm"
         />
         <Controls />
+        <InlineNodePalettePopover
+          hasStartNode={hasStartNode}
+          palette={inlinePalette}
+          onAddNode={onAddNode}
+          onClose={() => setInlinePalette(null)}
+        />
       </ReactFlow>
-    </div>
-  );
-}
-
-function WorkflowNodeCard({ data, selected }: NodeProps<Node<{ node: WorkflowNode }>>) {
-  const node = data.node;
-  const executable = node.type === "llm" || node.type === "tool";
-
-  return (
-    <div
-      className={[
-        "w-[184px] rounded-md border bg-white p-3 shadow-sm",
-        selected ? "border-emerald-500 ring-2 ring-emerald-100" : "border-slate-200",
-      ].join(" ")}
-    >
-      <Handle type="target" position={Position.Left} className={handleClassName} />
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{node.label}</p>
-          <p className="mt-1 text-xs uppercase text-slate-500">{node.type}</p>
-        </div>
-        <span
-          className={[
-            "rounded px-1.5 py-0.5 text-[10px] font-semibold",
-            executable ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500",
-          ].join(" ")}
-        >
-          {executable ? "RUN" : "MVP"}
-        </span>
-      </div>
-      <Handle type="source" position={Position.Right} className={handleClassName} />
     </div>
   );
 }

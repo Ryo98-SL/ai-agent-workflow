@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
+import { Button } from "./Button";
 
 type FloatingPanelProps = {
   title: string;
@@ -23,15 +24,15 @@ export function FloatingPanel({ title, description, closeLabel, onClose, childre
           <h2 className="truncate text-sm font-semibold text-slate-950">{title}</h2>
           {description && <p className="mt-1 truncate text-xs text-slate-500">{description}</p>}
         </div>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="iconSm"
           onClick={onClose}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900"
           aria-label={closeLabel}
           title={closeLabel}
         >
           <X size={16} aria-hidden />
-        </button>
+        </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
     </aside>

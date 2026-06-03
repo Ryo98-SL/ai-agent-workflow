@@ -1,5 +1,5 @@
 import { createDefaultWorkflow } from "@ai-agent-workflow/workflow-domain";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createServerApp } from "@ai-agent-workflow/server";
 
 async function json(response: Response) {
@@ -14,7 +14,7 @@ function createModelFetch(text = "LangGraph is ready.") {
           {
             message: {
               content: text,
-              reasoning: "brief reasoning",
+              reasoning_content: "brief reasoning",
             },
           },
         ],
@@ -24,6 +24,14 @@ function createModelFetch(text = "LangGraph is ready.") {
       { status: 200, headers: { "content-type": "application/json" } },
     );
 }
+
+function requestHeader(init: Parameters<typeof fetch>[1] | undefined, name: string) {
+  return new Headers(init?.headers).get(name);
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("workflow API server", () => {
   it("responds to browser CORS requests", async () => {
@@ -61,7 +69,7 @@ describe("workflow API server", () => {
           name: "Seed Workflow",
           description: "Local workflow debug project.",
           updatedAt: "2026-06-01T00:00:00.000Z",
-          nodeCount: 3,
+          nodeCount: 2,
           edgeCount: 1,
         },
       ],
@@ -160,8 +168,8 @@ describe("workflow API server", () => {
     expect(createdRun.run.output.nodeResults[1].output).toBe("Server runtime output.");
     expect(createdRun.run.output.nodeResults[1].data).toMatchObject({
       text: "Server runtime output.",
-      usage: { total_tokens: 42 },
-      reasoning: "brief reasoning",
+      usage: { totalTokens: 42 },
+      reasoning: null,
     });
 
     const getRunResponse = await app.request("/api/runs/run-1");
@@ -184,6 +192,49 @@ describe("workflow API server", () => {
       "node.completed",
       "run.completed",
     ]);
+  });
+
+  it("uses transient run model provider settings without storing API keys", async () => {
+    const infoLog = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    let authorization = "";
+    const app = createServerApp({
+      fetch: async (_url, init) => {
+        authorization = requestHeader(init, "authorization") ?? "";
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: "Transient key output." } }],
+            usage: { total_tokens: 8 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    const createRunResponse = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({
+        input: { topic: "transient key" },
+        modelProvider: {
+          provider: "deepseek",
+          baseURL: "https://api.deepseek.com",
+          model: "deepseek-chat",
+          apiKey: "transient-deepseek-key",
+        },
+      }),
+    });
+    const readResponse = await app.request("/api/workflows/workflow-1");
+    const stored = (await json(readResponse)) as { workflow: { workflow: { settings: { modelProvider?: { apiKey?: string } } } } };
+
+    expect(createRunResponse.status).toBe(201);
+    expect(authorization).toBe("Bearer transient-deepseek-key");
+    expect(stored.workflow.workflow.settings.modelProvider?.apiKey).toBeUndefined();
+
+    const logOutput = [...infoLog.mock.calls, ...errorLog.mock.calls].flat().join("\n");
+    expect(logOutput).toContain("run.create_requested");
+    expect(logOutput).toContain("runtime.model.invoke_started");
+    expect(logOutput).not.toContain("transient-deepseek-key");
+    expect(logOutput).not.toContain("Explain {{start1.topic}}");
   });
 
   it("fails missing required Start input before model calls", async () => {
@@ -239,9 +290,57 @@ describe("workflow API server", () => {
     expect(body.run.output.nodeResults[0].data).toEqual({ topic: "default topic", audience: null });
   });
 
+  it("creates workflow runs with Ollama provider settings", async () => {
+    const workflow = createDefaultWorkflow();
+    workflow.settings.modelProvider = {
+      provider: "ollama",
+      baseURL: "http://127.0.0.1:11434",
+      model: "llama3.2",
+    };
+    let requestedUrl = "";
+    const app = createServerApp({
+      seedWorkflow: workflow,
+      fetch: async (url) => {
+        requestedUrl = String(url);
+        return new Response(
+          JSON.stringify({
+            model: "llama3.2",
+            created_at: "2026-06-01T00:00:00.000Z",
+            message: { role: "assistant", content: "Ollama runtime output." },
+            done: true,
+            prompt_eval_count: 7,
+            eval_count: 5,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    const response = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "ollama" } }),
+    });
+    const body = (await json(response)) as { run: { status: string; output: { nodeResults: Array<{ output: string; data?: unknown }> } } };
+
+    expect(body.run.status).toBe("succeeded");
+    expect(requestedUrl).toContain("/api/chat");
+    expect(body.run.output.nodeResults[1].output).toBe("Ollama runtime output.");
+    expect(body.run.output.nodeResults[1].data).toMatchObject({
+      text: "Ollama runtime output.",
+      reasoning: null,
+    });
+  });
+
   it("returns clear failed runs for unsupported reachable nodes", async () => {
     const workflow = createDefaultWorkflow();
-    workflow.graph.edges = [{ id: "edge-start-tool", source: "start1", target: "tool-current-time" }];
+    workflow.graph.nodes.push({
+      id: "tool1",
+      type: "tool",
+      label: "Tool",
+      position: { x: 360, y: 240 },
+      config: { adapter: "currentTime", timezone: "UTC" },
+    });
+    workflow.graph.edges = [{ id: "edge-start-tool", source: "start1", target: "tool1" }];
     const app = createServerApp({ seedWorkflow: workflow, fetch: createModelFetch() });
 
     const response = await app.request("/api/workflows/workflow-1/runs", {
@@ -292,7 +391,7 @@ describe("workflow API server", () => {
     const body = (await json(response)) as { run: { status: string; error: { message: string }; output: { nodeResults: unknown[] } } };
 
     expect(body.run.status).toBe("failed");
-    expect(body.run.error.message).toContain("HTTP 503");
+    expect(body.run.error.message).toContain("503");
     expect(body.run.output.nodeResults).toHaveLength(2);
   });
 });

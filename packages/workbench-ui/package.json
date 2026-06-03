@@ -21,6 +21,7 @@
   "dependencies": {
     "@ai-agent-workflow/api-contracts": "workspace:*",
     "@ai-agent-workflow/workflow-domain": "workspace:*",
+    "@floating-ui/react": "^0.27.19",
     "@xyflow/react": "^12.9.3",
     "lucide-react": "^0.511.0",
     "react": "^18.3.1",

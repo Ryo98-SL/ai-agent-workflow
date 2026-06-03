@@ -15,4 +15,5 @@ coverage. Shared workflow schema and prompt variable behavior live in
 ## Runtime Boundary
 
 The migrated workbench does not call these adapters. They remain as reference
-coverage until real server-side execution replaces the mock run lifecycle.
+coverage for the earlier client-side adapter path while primary runs execute on
+the server.

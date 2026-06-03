@@ -23,10 +23,18 @@ export type WorkbenchWorkflowApi = {
 
 export type AppWorkbenchProps = {
   workflowApi: WorkbenchWorkflowApi;
+  showDevModelProviders?: boolean;
+};
+
+export type WorkflowNodePaletteHandleType = "target" | "source";
+
+export type AddNodeOptions = {
+  sourceNodeId?: string;
+  handleType?: WorkflowNodePaletteHandleType;
 };
 
 export type WorkflowMutators = {
   updateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
   updateModelSettings: (settings: OpenAICompatibleSettings) => void;
-  addNode: (type: WorkflowNodeType) => void;
+  addNode: (type: WorkflowNodeType, options?: AddNodeOptions) => void;
 };

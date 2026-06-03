@@ -1,5 +1,7 @@
 import { Brain, Braces, Clock, Database, Flag, GitBranch, Play, TextCursorInput, type LucideIcon } from "lucide-react";
 import type { WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
+import { Button } from "./Button";
+import { workflowNodeIconBackgroundClassNames, workflowNodeIconClassName } from "./workflowNodes/workflowNodeVisuals";
 
 type PaletteItem = {
   type: WorkflowNodeType;
@@ -20,8 +22,17 @@ const items: PaletteItem[] = [
   { type: "template", label: "Template", description: "Future text transform", group: "Logic", icon: TextCursorInput },
 ];
 
-export function NodePalette({ hasStartNode, onAddNode }: { hasStartNode: boolean; onAddNode: (type: WorkflowNodeType) => void }) {
+export function NodePalette({
+  disabledTypes = [],
+  hasStartNode,
+  onAddNode,
+}: {
+  disabledTypes?: WorkflowNodeType[];
+  hasStartNode: boolean;
+  onAddNode: (type: WorkflowNodeType) => void;
+}) {
   const groups = [...new Set(items.map((item) => item.group))];
+  const disabledTypeSet = new Set(disabledTypes);
 
   return (
     <div className="flex h-full flex-col">
@@ -33,24 +44,31 @@ export function NodePalette({ hasStartNode, onAddNode }: { hasStartNode: boolean
               {items
                 .filter((item) => item.group === group)
                 .map((item) => {
-                  const disabled = item.type === "start" && hasStartNode;
+                  const disabled = (item.type === "start" && hasStartNode) || disabledTypeSet.has(item.type);
                   return (
-                  <button
-                    key={item.type}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => onAddNode(item.type)}
-                    title={disabled ? "This workflow already has a Start node." : item.label}
-                    className="flex w-full items-center gap-3 rounded-md border border-slate-200 bg-white p-3 text-left hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                  >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700">
-                      <item.icon size={17} aria-hidden />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium">{item.label}</span>
-                      <span className="block truncate text-xs text-slate-500">{item.description}</span>
-                    </span>
-                  </button>
+                    <Button
+                      key={item.type}
+                      variant="nodePalette"
+                      size="unstyled"
+                      fullWidth
+                      disabled={disabled}
+                      onClick={() => onAddNode(item.type)}
+                      title={disabled ? disabledPaletteItemTitle(item.type, hasStartNode) : item.label}
+                    >
+                      <span
+                        className={[
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-md",
+                          workflowNodeIconBackgroundClassNames[item.type],
+                          workflowNodeIconClassName,
+                        ].join(" ")}
+                      >
+                        <item.icon size={17} aria-hidden />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{item.label}</span>
+                        <span className="block truncate text-xs text-slate-500">{item.description}</span>
+                      </span>
+                    </Button>
                   );
                 })}
             </div>
@@ -59,4 +77,16 @@ export function NodePalette({ hasStartNode, onAddNode }: { hasStartNode: boolean
       </div>
     </div>
   );
+}
+
+function disabledPaletteItemTitle(type: WorkflowNodeType, hasStartNode: boolean) {
+  if (type === "start" && hasStartNode) {
+    return "This workflow already has a Start node.";
+  }
+
+  if (type === "end") {
+    return "End nodes cannot feed into this target handle.";
+  }
+
+  return "This node type is unavailable here.";
 }

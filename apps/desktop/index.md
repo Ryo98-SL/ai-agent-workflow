@@ -13,6 +13,6 @@ web app becomes the primary client.
 
 ## Behavior
 
-The desktop shell uses server-backed workflow persistence and mock runs. Legacy
-local file open/save behavior is deferred unless desktop parity becomes a
-separate product goal.
+The desktop shell uses server-backed workflow persistence and server workflow
+runs. Legacy local file open/save behavior is deferred unless desktop parity
+becomes a separate product goal.

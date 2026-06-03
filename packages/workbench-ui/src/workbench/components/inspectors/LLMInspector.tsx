@@ -32,6 +32,17 @@ export function LLMInspector({ workflow, node, updateNode }: LLMInspectorProps) 
           className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm"
         />
       </Field>
+      <Field label="Description">
+        <textarea
+          value={node.description || ""}
+          onChange={(event) =>
+            updateNode(node.id, (current) =>
+              current.type === "llm" ? { ...current, description: event.target.value || undefined } : current,
+            )
+          }
+          className="min-h-20 w-full resize-y rounded-md border border-slate-200 p-2 text-sm leading-5"
+        />
+      </Field>
       <Field label="Model override">
         <input
           value={node.config.model || ""}

@@ -6,7 +6,8 @@
 fetch calls to the workflow REST API.
 
 - `src/index.ts` exports `createWorkflowClient`, `WorkflowClientError`, client
-  option types, and the typed client interface.
+  option types, and the typed client interface. Run creation forwards the shared
+  request body, including transient model-provider settings.
 - `tests/client.test.ts` covers mocked fetch success/failure behavior and a
   lightweight integration pass against the Hono server app.
 
@@ -21,4 +22,4 @@ auth behavior, or UI state.
 Unit tests use mocked fetch implementations for success, HTTP errors, network
 errors, and malformed responses. Integration tests route requests into
 `@ai-agent-workflow/server` through a test fetch adapter and inject a mocked
-OpenAI-compatible model response for workflow runs.
+model response for workflow runs.

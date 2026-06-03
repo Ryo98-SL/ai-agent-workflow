@@ -7,14 +7,16 @@ import type {
   WorkflowNodeType,
 } from "@ai-agent-workflow/workflow-domain";
 import type { RunInput } from "@ai-agent-workflow/api-contracts";
+import { Button } from "./Button";
 import { DebugPanel } from "./DebugPanel";
 import { FloatingPanel } from "./FloatingPanel";
 import { ModelSettingsPanel } from "./ModelSettingsPanel";
 import { NodeInspector } from "./NodeInspector";
 import { NodePalette } from "./NodePalette";
+import { Popover } from "./Popover";
 import { ProjectFileActions } from "./ProjectFileActions";
 import { WorkflowCanvas } from "./WorkflowCanvas";
-import type { DebugState } from "../types";
+import type { AddNodeOptions, DebugState } from "../types";
 
 type WorkbenchLayoutProps = {
   workflow: WorkflowFile;
@@ -27,14 +29,15 @@ type WorkbenchLayoutProps = {
   settingsOpen: boolean;
   inspectorOpen: boolean;
   debugOpen: boolean;
-  onAddNode: (type: WorkflowNodeType) => void;
+  showDevModelProviders: boolean;
+  onAddNode: (type: WorkflowNodeType, options?: AddNodeOptions) => void;
   onCloseDebug: () => void;
   onCloseInspector: () => void;
   onClosePalette: () => void;
   onCloseSettings: () => void;
   onNewWorkflow: () => void;
   onOpenWorkflow: () => void;
-  onOpenRunPanel: () => void;
+  onToggleRunPanel: () => void;
   onRunWorkflow: (input: RunInput) => void;
   onSaveWorkflow: () => void;
   onSaveWorkflowAs: () => void;
@@ -57,6 +60,7 @@ export function WorkbenchLayout({
   settingsOpen,
   inspectorOpen,
   debugOpen,
+  showDevModelProviders,
   onAddNode,
   onCloseDebug,
   onCloseInspector,
@@ -64,7 +68,7 @@ export function WorkbenchLayout({
   onCloseSettings,
   onNewWorkflow,
   onOpenWorkflow,
-  onOpenRunPanel,
+  onToggleRunPanel,
   onRunWorkflow,
   onSaveWorkflow,
   onSaveWorkflowAs,
@@ -83,6 +87,8 @@ export function WorkbenchLayout({
         <WorkflowCanvas
           workflow={workflow}
           selectedNodeId={selectedNodeId}
+          onAddNode={onAddNode}
+          onClearSelection={onCloseInspector}
           onSelectNode={onSelectNode}
           onWorkflowChange={onWorkflowChange}
         />
@@ -106,74 +112,127 @@ export function WorkbenchLayout({
           onSave={onSaveWorkflow}
           onSaveAs={onSaveWorkflowAs}
         />
-        <button
-          type="button"
-          onClick={onToggleSettings}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-100"
-          aria-expanded={settingsOpen}
-          aria-controls="workbench-model-settings"
-          aria-label="Open model settings"
-          title="Model settings"
+        <Popover
+          id="workbench-model-settings"
+          open={settingsOpen}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) {
+              onCloseSettings();
+            }
+          }}
+          placement="bottom-end"
+          renderTrigger={({ ref, props }) => (
+            <Button
+              {...props}
+              ref={ref}
+              variant="secondary"
+              size="iconMd"
+              onClick={onToggleSettings}
+              aria-label="Open model settings"
+              title="Model settings"
+            >
+              <Settings size={16} aria-hidden />
+            </Button>
+          )}
         >
-          <Settings size={18} aria-hidden />
-        </button>
+          <FloatingPanel
+            title="Model Settings"
+            description="Configure the default model provider."
+            closeLabel="Close model settings"
+            onClose={onCloseSettings}
+            className="w-[360px]"
+          >
+            <ModelSettingsPanel
+              settings={workflow.settings.modelProvider}
+              showDevModelProviders={showDevModelProviders}
+              onChange={onUpdateModelSettings}
+            />
+          </FloatingPanel>
+        </Popover>
       </header>
 
       <div className="absolute left-4 top-24 z-20">
-        <button
-          type="button"
-          onClick={onTogglePalette}
-          className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-800 shadow-lg shadow-slate-900/10 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
-          aria-expanded={paletteOpen}
-          aria-controls="workbench-node-palette"
-          aria-label="Open node palette"
-          title="Node palette"
+        <Popover
+          id="workbench-node-palette"
+          open={paletteOpen}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) {
+              onClosePalette();
+            }
+          }}
+          placement="bottom-start"
+          renderTrigger={({ ref, props }) => (
+            <Button
+              {...props}
+              ref={ref}
+              variant="secondary"
+              size="iconMd"
+              className="text-slate-800 shadow-lg shadow-slate-900/10 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+              onClick={onTogglePalette}
+              aria-label="Open node palette"
+              title="Node palette"
+            >
+              <Plus size={18} aria-hidden />
+            </Button>
+          )}
         >
-          <Plus size={21} aria-hidden />
-        </button>
+          <FloatingPanel
+            title="Node Palette"
+            description="Add nodes to the workflow canvas."
+            closeLabel="Close node palette"
+            onClose={onClosePalette}
+            className="h-[min(70vh,560px)] w-[300px]"
+          >
+            <div className="h-full">
+              <NodePalette hasStartNode={hasStartNode} onAddNode={onAddNode} />
+            </div>
+          </FloatingPanel>
+        </Popover>
       </div>
 
       <div className={["absolute top-24 z-20", inspectorOpen ? "right-[412px]" : "right-4"].join(" ")}>
-        <button
-          type="button"
-          disabled={!hasStartNode || debugState.status === "running"}
-          onClick={onOpenRunPanel}
-          className="inline-flex h-10 items-center gap-2 rounded-full border border-emerald-200 bg-white px-4 text-sm font-medium text-emerald-700 shadow-lg shadow-slate-900/10 hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-          aria-label="Run workflow"
-          title={hasStartNode ? "Run workflow" : "Add a Start node first"}
+        <Popover
+          id="workbench-run-log"
+          open={debugOpen}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) {
+              onCloseDebug();
+            }
+          }}
+          placement="bottom-end"
+          offset={10}
+          renderTrigger={({ ref, props }) => (
+            <Button
+              {...props}
+              ref={ref}
+              variant="successSoft"
+              size="icon"
+              disabled={!hasStartNode || debugState.status === "running"}
+              onClick={onToggleRunPanel}
+              aria-label="Run workflow"
+              title={hasStartNode ? "Run workflow" : "Add a Start node first"}
+            >
+              {debugState.status === "running" ? (
+                <Loader2 size={16} className="animate-spin" aria-hidden />
+              ) : (
+                <Play size={16} aria-hidden />
+              )}
+            </Button>
+          )}
         >
-          {debugState.status === "running" ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Play size={16} aria-hidden />}
-          Run workflow
-        </button>
+          <FloatingPanel
+            title="Run Log"
+            description="Workflow run"
+            closeLabel="Close run log"
+            onClose={onCloseDebug}
+            className={["h-[min(70vh,560px)]", inspectorOpen ? "w-[420px]" : "w-[560px]"].join(" ")}
+          >
+            <div className="h-full overflow-hidden">
+              <DebugPanel workflow={workflow} debugState={debugState} onRun={onRunWorkflow} />
+            </div>
+          </FloatingPanel>
+        </Popover>
       </div>
-
-      {paletteOpen && (
-        <FloatingPanel
-          title="Node Palette"
-          description="Add nodes to the workflow canvas."
-          closeLabel="Close node palette"
-          onClose={onClosePalette}
-          className="absolute left-4 top-40 z-30 h-[min(70vh,560px)] w-[300px]"
-        >
-          <div id="workbench-node-palette" className="h-full">
-            <NodePalette hasStartNode={hasStartNode} onAddNode={onAddNode} />
-          </div>
-        </FloatingPanel>
-      )}
-
-      {settingsOpen && (
-        <FloatingPanel
-          title="Model Settings"
-          description="Configure the default model provider."
-          closeLabel="Close model settings"
-          onClose={onCloseSettings}
-          className="absolute right-4 top-20 z-40 w-[360px]"
-        >
-          <div id="workbench-model-settings">
-            <ModelSettingsPanel settings={workflow.settings.modelProvider} onChange={onUpdateModelSettings} />
-          </div>
-        </FloatingPanel>
-      )}
 
       {inspectorOpen && selectedNode && (
         <FloatingPanel
@@ -189,22 +248,6 @@ export function WorkbenchLayout({
         </FloatingPanel>
       )}
 
-      {debugOpen && (
-        <FloatingPanel
-          title="Run Log"
-          description="Workflow run"
-          closeLabel="Close run log"
-          onClose={onCloseDebug}
-          className={[
-            "absolute top-40 z-40 h-[min(70vh,560px)]",
-            inspectorOpen ? "right-[412px] w-[420px]" : "right-4 w-[560px]",
-          ].join(" ")}
-        >
-          <div className="h-full overflow-hidden">
-            <DebugPanel workflow={workflow} debugState={debugState} onRun={onRunWorkflow} />
-          </div>
-        </FloatingPanel>
-      )}
     </main>
   );
 }

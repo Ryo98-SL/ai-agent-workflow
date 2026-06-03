@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Loader2, Play } from "lucide-react";
 import type { RunInput } from "@ai-agent-workflow/api-contracts";
 import type { StartNode, WorkflowFile } from "@ai-agent-workflow/workflow-domain";
 import type { DebugState } from "../types";
+import { Button } from "./Button";
 
 type DebugPanelProps = {
   workflow: WorkflowFile;
@@ -49,15 +50,15 @@ export function DebugPanel({ workflow, debugState, onRun }: DebugPanelProps) {
             <h2 className="truncate text-sm font-semibold">Workflow Run</h2>
             <p className="mt-1 truncate text-xs text-slate-500">{startNode ? `${startNode.label} inputs` : "No Start node"}</p>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="success"
+            size="md"
             disabled={!startNode || debugState.status === "running"}
             onClick={submitRun}
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {debugState.status === "running" ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
             Run workflow
-          </button>
+          </Button>
         </div>
         {startNode && (
           <div className="mt-4 space-y-2">

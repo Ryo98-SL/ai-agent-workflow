@@ -1,6 +1,7 @@
 import { createDefaultWorkflow } from "@ai-agent-workflow/workflow-domain";
 import { describe, expect, it } from "vitest";
 import {
+  CreateRunRequestSchema,
   CreateRunResponseSchema,
   CreateWorkflowRequestSchema,
   ListWorkflowsResponseSchema,
@@ -66,6 +67,20 @@ describe("api contracts", () => {
     };
 
     expect(CreateRunResponseSchema.parse(response).run.status).toBe("succeeded");
+  });
+
+  it("accepts transient model provider settings on run requests", () => {
+    const parsed = CreateRunRequestSchema.parse({
+      input: { topic: "contracts" },
+      modelProvider: {
+        provider: "deepseek",
+        baseURL: "https://api.deepseek.com",
+        model: "deepseek-chat",
+        apiKey: "secret",
+      },
+    });
+
+    expect(parsed.modelProvider?.apiKey).toBe("secret");
   });
 
   it("creates normalized API errors", () => {

@@ -14,9 +14,15 @@ describe("workflow schema", () => {
     const result = validateWorkflowFile(workflow);
 
     expect(result.ok).toBe(true);
-    expect(workflow.graph.nodes.map((node) => node.type)).toEqual(["start", "llm", "tool"]);
+    expect(workflow.graph.nodes.map((node) => node.type)).toEqual(["start", "llm"]);
     expect(workflow.graph.nodes.map((node) => node.id)).toContain("start1");
     expect(workflow.graph.nodes.map((node) => node.id)).toContain("llm1");
+    expect(workflow.graph.nodes.every((node) => Boolean(node.description))).toBe(true);
+    expect(workflow.settings.modelProvider).toMatchObject({
+      provider: "deepseek",
+      baseURL: "https://api.deepseek.com",
+      model: "deepseek-v4-flash",
+    });
   });
 
   it("accepts Start fields and rejects duplicate or invalid names", () => {
@@ -54,7 +60,10 @@ describe("workflow schema", () => {
     const workflow = createDefaultWorkflow();
 
     expect(createReadableNodeId("llm", workflow.graph.nodes)).toBe("llm2");
-    expect(createNode("llm", { x: 0, y: 0 }, workflow.graph.nodes).id).toBe("llm2");
+    expect(createNode("llm", { x: 0, y: 0 }, workflow.graph.nodes)).toMatchObject({
+      id: "llm2",
+      description: "Generate a response from the configured model.",
+    });
   });
 
   it("rejects unsupported workflow versions", () => {
@@ -90,6 +99,7 @@ describe("workflow schema", () => {
   it("omits API keys during serialization", () => {
     const workflow = createDefaultWorkflow();
     workflow.settings.modelProvider = {
+      provider: "deepseek",
       baseURL: "http://127.0.0.1:8787/v1",
       model: "mock-gpt",
       apiKey: "secret",

@@ -22,6 +22,7 @@ const BaseNodeSchema = z.object({
   id: z.string().min(1),
   position: PositionSchema,
   label: z.string().min(1),
+  description: z.string().optional(),
 });
 
 const StartFieldSchema = z.object({
@@ -103,10 +104,14 @@ export const WorkflowEdgeSchema = z.object({
   label: z.string().optional(),
 });
 
+export const MODEL_PROVIDERS = ["deepseek", "ollama"] as const;
+export const ModelProviderSchema = z.enum(MODEL_PROVIDERS);
+
 export const OpenAICompatibleSettingsSchema = z.object({
-  baseURL: z.string().url().default("http://127.0.0.1:8787/v1"),
+  provider: ModelProviderSchema.default("deepseek"),
+  baseURL: z.string().url().default("https://api.deepseek.com"),
   apiKey: z.string().optional(),
-  model: z.string().min(1).default("mock-gpt"),
+  model: z.string().min(1).default("deepseek-v4-flash"),
 });
 
 export const WorkflowFileSchema = z.object({
@@ -132,6 +137,7 @@ export type StartNode = Extract<WorkflowNode, { type: "start" }>;
 export type LLMNode = Extract<WorkflowNode, { type: "llm" }>;
 export type ToolNode = Extract<WorkflowNode, { type: "tool" }>;
 export type WorkflowEdge = z.infer<typeof WorkflowEdgeSchema>;
+export type ModelProvider = z.infer<typeof ModelProviderSchema>;
 export type OpenAICompatibleSettings = z.infer<typeof OpenAICompatibleSettingsSchema>;
 export type WorkflowFile = z.infer<typeof WorkflowFileSchema>;
 
@@ -194,6 +200,7 @@ export function createDefaultWorkflow(): WorkflowFile {
           id: "start1",
           type: "start",
           label: "Start",
+          description: "Collect the inputs that seed this workflow run.",
           position: { x: 80, y: 120 },
           config: {
             fields: [
@@ -201,7 +208,7 @@ export function createDefaultWorkflow(): WorkflowFile {
                 name: "topic",
                 label: "Topic",
                 required: true,
-                defaultValue: "LLM workflow debugging",
+                defaultValue: "cat",
               },
             ],
           },
@@ -210,34 +217,29 @@ export function createDefaultWorkflow(): WorkflowFile {
           id: "llm1",
           type: "llm",
           label: "LLM",
+          description: "Generate a response from the configured model.",
           position: { x: 360, y: 110 },
           config: {
-            systemPrompt: "You are a precise workflow debugging assistant.",
-            userPrompt: "Explain {{start1.topic}} in one concise paragraph.",
+            systemPrompt: "You are a chat bot",
+            userPrompt: "Tell me a joke about {{start1.topic}}",
             variables: {},
             temperature: 0.7,
             maxTokens: 800,
           },
-        },
-        {
-          id: "tool-current-time",
-          type: "tool",
-          label: "Current Time",
-          position: { x: 360, y: 320 },
-          config: { adapter: "currentTime", timezone: "UTC" },
-        },
+        }
       ],
       edges: [{ id: "edge-start-llm", source: "start1", target: "llm1" }],
     },
     settings: {
       modelProvider: {
-        baseURL: "http://127.0.0.1:8787/v1",
-        model: "mock-gpt",
+        provider: "ollama",
+        baseURL: "http://127.0.0.1:11434",
+        model: "qwen3.5:0.8b",
+        apiKey: "",
       },
     },
   };
 }
-
 export function createReadableNodeId(type: WorkflowNodeType, existingNodes: Pick<WorkflowNode, "id">[] = []): string {
   const base = type;
   const existingIds = new Set(existingNodes.map((node) => node.id));
@@ -256,7 +258,7 @@ export function createNode(
   existingNodes: Pick<WorkflowNode, "id">[] = [],
 ): WorkflowNode {
   const id = createReadableNodeId(type, existingNodes);
-  const base = { id, type, position, label: nodeTypeLabel(type) };
+  const base = { id, type, position, label: nodeTypeLabel(type), description: nodeTypeDescription(type) };
 
   if (type === "llm") {
     return {
@@ -308,4 +310,18 @@ export function nodeTypeLabel(type: WorkflowNodeType): string {
     end: "End",
   };
   return labels[type];
+}
+
+export function nodeTypeDescription(type: WorkflowNodeType): string {
+  const descriptions: Record<WorkflowNodeType, string> = {
+    start: "Collect the inputs that seed this workflow run.",
+    llm: "Generate a response from the configured model.",
+    knowledge: "Provide external context for downstream nodes.",
+    tool: "Call a configured tool through the runtime boundary.",
+    code: "Run custom transformation logic.",
+    ifElse: "Branch the workflow based on a condition.",
+    template: "Shape variables into reusable text.",
+    end: "Mark the workflow output boundary.",
+  };
+  return descriptions[type];
 }

@@ -9,7 +9,8 @@ configuration code.
 
 - `apps/web` mounts `@ai-agent-workflow/workbench-ui` and injects
   `@ai-agent-workflow/workflow-client`.
-- `apps/server` owns deterministic in-memory workflow and mock run routes.
+- `apps/server` owns deterministic in-memory workflow routes and synchronous
+  LangGraph Start-to-LLM run execution.
 - `apps/desktop` preserves Electron as a legacy shell around the same
   server-backed workbench.
 - `packages/workbench-ui` owns React workbench state, panels, ReactFlow canvas
@@ -38,12 +39,15 @@ It uses renderer port `5174` and expects the server to be running separately.
 
 The migrated workbench no longer calls Electron globals or local runtime
 execution. It receives a workflow API dependency, saves workflow files through
-the REST client, and creates mock runs through the server API. Workflow
-serialization still strips `settings.modelProvider.apiKey` before persistence.
+the REST client, and creates server workflow runs through the server API.
+Workflow serialization still strips `settings.modelProvider.apiKey` before
+persistence.
 
 The server remains intentionally temporary: in-memory workflows and runs are
 deterministic for UI integration and tests, not production persistence or
-execution.
+durable execution. Supported runs compile the reachable Start/LLM subset with
+LangGraph and invoke provider-aware LangChain chat models for DeepSeek or
+Ollama.
 
 ## Test Strategy
 

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { StartNode, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import { Button } from "../Button";
 
 type StartInspectorProps = {
   node: StartNode;
@@ -24,7 +25,7 @@ export function StartInspector({ node, updateNode }: StartInspectorProps) {
     while (names.includes(`field${index}`)) {
       index += 1;
     }
-    updateConfig([...node.config.fields, { name: `field${index}`, label: `Field ${index}`, required: false }]);
+    updateConfig([ { name: `field${index}`, label: `Field ${index}`, required: false }, ...node.config.fields]);
   };
 
   const removeField = (index: number) => {
@@ -45,16 +46,27 @@ export function StartInspector({ node, updateNode }: StartInspectorProps) {
           className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm"
         />
       </Field>
+      <Field label="Description">
+        <textarea
+          value={node.description || ""}
+          onChange={(event) =>
+            updateNode(node.id, (current) =>
+              current.type === "start" ? { ...current, description: event.target.value || undefined } : current,
+            )
+          }
+          className="min-h-20 w-full resize-y rounded-md border border-slate-200 p-2 text-sm leading-5"
+        />
+      </Field>
       <section>
         <div className="mb-2 flex items-center justify-between gap-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Input Fields</h3>
-          <button
-            type="button"
+          <Button
+            variant="successSoft"
+            size="sm"
             onClick={addField}
-            className="rounded-md border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
           >
             Add field
-          </button>
+          </Button>
         </div>
         {node.config.fields.length === 0 ? (
           <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">No Start inputs configured.</p>
@@ -103,9 +115,9 @@ export function StartInspector({ node, updateNode }: StartInspectorProps) {
                       />
                       Required
                     </label>
-                    <button type="button" onClick={() => removeField(index)} className="text-xs font-medium text-rose-600">
+                    <Button variant="dangerGhost" size="sm" onClick={() => removeField(index)}>
                       Remove
-                    </button>
+                    </Button>
                   </div>
                 </div>
               );

@@ -16,6 +16,16 @@ export function UnsupportedInspector({ node, updateNode }: UnsupportedInspectorP
           className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm"
         />
       </label>
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-slate-600">Description</span>
+        <textarea
+          value={node.description || ""}
+          onChange={(event) =>
+            updateNode(node.id, (current) => ({ ...current, description: event.target.value || undefined }))
+          }
+          className="min-h-20 w-full resize-y rounded-md border border-slate-200 p-2 text-sm leading-5"
+        />
+      </label>
       <p className="rounded-md bg-slate-50 p-3 text-sm leading-5 text-slate-600">
         This node type is part of the durable workflow schema, but real execution is deferred beyond the MVP.
       </p>

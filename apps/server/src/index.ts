@@ -1,8 +1,11 @@
 import { serve } from "@hono/node-server";
 import { createServerApp } from "./app";
+import { logger } from "./logger";
 
 export { createServerApp } from "./app";
 export type { CreateServerAppOptions } from "./app";
+export { logger } from "./logger";
+export type { Logger, LogLevel, LogMetadata } from "./logger";
 
 const isDirectRun = process.argv[1]?.endsWith("/src/index.ts") ?? false;
 
@@ -16,5 +19,5 @@ if (isDirectRun) {
     port,
   });
 
-  console.log(`Workflow API server listening on http://${host}:${port}`);
+  logger.info("server.started", { host, port, url: `http://${host}:${port}` });
 }

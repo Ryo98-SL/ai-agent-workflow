@@ -17,5 +17,5 @@ runtime behavior retained for regression coverage.
 LLM execution resolves prompt variables before making requests, surfaces
 missing-variable errors without network calls, supports run cancellation, and
 records latency, request details, response text, raw summaries, and normalized
-errors. The migrated workbench no longer calls this path; server execution work
-is deferred in `docs/todo.md`.
+errors. The migrated workbench no longer calls this path; primary execution now
+lives in `apps/server`.

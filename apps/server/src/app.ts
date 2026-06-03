@@ -20,10 +20,15 @@ import {
   type WorkflowRun,
   type WorkflowSummary,
 } from "@ai-agent-workflow/api-contracts";
-import { createDefaultWorkflow, type WorkflowFile } from "@ai-agent-workflow/workflow-domain";
+import {
+  createDefaultWorkflow,
+  type OpenAICompatibleSettings,
+  type WorkflowFile,
+} from "@ai-agent-workflow/workflow-domain";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { z } from "zod";
+import { logger } from "./logger";
 import { executeWorkflowRuntime, type RuntimeExecutionResult } from "./runtime";
 
 const SEED_TIME = "2026-06-01T00:00:00.000Z";
@@ -91,6 +96,20 @@ function workflowSummary(stored: StoredWorkflow): WorkflowSummary {
   };
 }
 
+function workflowForRun(workflow: WorkflowFile, modelProvider?: OpenAICompatibleSettings): WorkflowFile {
+  if (!modelProvider) {
+    return workflow;
+  }
+
+  return {
+    ...cloneWorkflow(workflow),
+    settings: {
+      ...workflow.settings,
+      modelProvider,
+    },
+  };
+}
+
 async function readJsonBody(request: Request): Promise<unknown> {
   const raw = await request.text();
   if (raw.trim() === "") {
@@ -122,6 +141,9 @@ async function parseJsonRequest<T>(
       ),
     };
   } catch (error) {
+    logger.warn("request.json.invalid", {
+      message: error instanceof Error ? error.message : "Invalid JSON body.",
+    });
     return {
       ok: false,
       status: 400,
@@ -250,6 +272,12 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     const stored: StoredWorkflow = { id, workflow };
     state.workflows.set(id, stored);
     const response = responseFromSchema(CreateWorkflowResponseSchema, { workflow: stored });
+    logger.info("workflow.created", {
+      workflowId: id,
+      name: workflow.metadata.name,
+      nodeCount: workflow.graph.nodes.length,
+      edgeCount: workflow.graph.edges.length,
+    });
 
     return c.json(response, 201);
   });
@@ -259,6 +287,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     const workflow = state.workflows.get(id);
 
     if (!workflow) {
+      logger.warn("workflow.not_found", { workflowId: id, route: c.req.path });
       return c.json(normalizedNotFound(`Workflow ${id} was not found.`), 404);
     }
 
@@ -278,6 +307,12 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
 
     const stored: StoredWorkflow = { id, workflow: cloneWorkflow(parsed.data.workflow) };
     state.workflows.set(id, stored);
+    logger.info("workflow.updated", {
+      workflowId: id,
+      name: stored.workflow.metadata.name,
+      nodeCount: stored.workflow.graph.nodes.length,
+      edgeCount: stored.workflow.graph.edges.length,
+    });
 
     return c.json(responseFromSchema(UpdateWorkflowResponseSchema, { workflow: stored }));
   });
@@ -287,6 +322,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     const workflow = state.workflows.get(workflowId);
 
     if (!workflow) {
+      logger.warn("workflow.not_found", { workflowId, route: c.req.path });
       return c.json(normalizedNotFound(`Workflow ${workflowId} was not found.`), 404);
     }
 
@@ -295,8 +331,26 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       return c.json(parsed.body, parsed.status);
     }
 
-    const execution = await executeWorkflowRuntime(workflow.workflow, parsed.data.input, { fetch: options.fetch });
+    logger.info("run.create_requested", {
+      workflowId,
+      inputKeys: Object.keys(parsed.data.input),
+      hasTransientModelProvider: Boolean(parsed.data.modelProvider),
+    });
+    const execution = await executeWorkflowRuntime(
+      workflowForRun(workflow.workflow, parsed.data.modelProvider),
+      parsed.data.input,
+      {
+        fetch: options.fetch,
+      },
+    );
     const run = createRunFromExecution(state, workflow, parsed.data.input, execution);
+    logger.info("run.created", {
+      runId: run.id,
+      workflowId,
+      status: run.status,
+      nodeResultCount: execution.nodeResults.length,
+      errorCode: execution.ok ? null : execution.error.code,
+    });
 
     return c.json(responseFromSchema(CreateRunResponseSchema, { run }), 201);
   });
@@ -306,6 +360,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     const run = state.runs.get(id);
 
     if (!run) {
+      logger.warn("run.not_found", { runId: id, route: c.req.path });
       return c.json(normalizedNotFound(`Run ${id} was not found.`), 404);
     }
 
@@ -317,6 +372,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     const events = state.events.get(id);
 
     if (!events) {
+      logger.warn("run.not_found", { runId: id, route: c.req.path });
       return c.json(normalizedNotFound(`Run ${id} was not found.`), 404);
     }
 
@@ -327,6 +383,10 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
 
   app.onError((error, c) => {
     const body = createApiErrorResponse("internal_error", error.message);
+    logger.error("server.internal_error", {
+      route: c.req.path,
+      message: error.message,
+    });
 
     return c.json(responseFromSchema(ApiErrorResponseSchema, body), 500);
   });

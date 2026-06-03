@@ -11,9 +11,12 @@ describe("MVP smoke loop", () => {
     const { api, workflows, calls } = createMemoryWorkflowApi();
 
     render(<AppWorkbench workflowApi={api} />);
+    expect(screen.queryByText("Untitled Agent Workflow")).not.toBeInTheDocument();
     expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open model settings" }));
-    await user.type(screen.getByPlaceholderText("gpt-4.1-mini"), "-smoke");
+    expect(screen.getByText("deepseek-v4-flash")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Model name"), "-smoke");
+    await user.type(screen.getByLabelText("API Key"), "deepseek-test-key");
     fireEvent.click(screen.getByText("LLM"));
     expect(screen.getByText("Node Inspector")).toBeInTheDocument();
     expect(screen.getByDisplayValue("llm1")).toBeInTheDocument();
@@ -31,7 +34,14 @@ describe("MVP smoke loop", () => {
     await user.type(screen.getByRole("textbox", { name: /Topic/ }), "workbench tests");
     await user.click(screen.getAllByRole("button", { name: "Run workflow" }).at(-1)!);
     expect((await screen.findAllByText("Memory runtime output.")).length).toBeGreaterThan(0);
-    expect(api.createRun).toHaveBeenLastCalledWith("workflow-1", { input: { topic: "workbench tests" } });
+    expect(api.createRun).toHaveBeenLastCalledWith("workflow-1", {
+      input: { topic: "workbench tests" },
+      modelProvider: expect.objectContaining({
+        apiKey: "deepseek-test-key",
+        model: "deepseek-v4-flash-smoke",
+        provider: "deepseek",
+      }),
+    });
     expect(calls.updateWorkflow).toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Save workflow as" }));
@@ -60,6 +70,75 @@ describe("MVP smoke loop", () => {
     const palette = screen.getByText("Node Palette").closest("aside");
     expect(palette).not.toBeNull();
     expect(within(palette!).getByRole("button", { name: /Start/ })).toBeDisabled();
+  });
+
+  it("opens a source-handle palette and connects the source node to the created node", async () => {
+    const user = userEvent.setup();
+    const { api, workflows, calls } = createMemoryWorkflowApi();
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add connected node from LLM" }));
+    const palette = screen.getByText("Node Palette").closest("aside");
+    expect(palette).not.toBeNull();
+    await user.click(within(palette!).getByRole("button", { name: /Code/ }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    const savedWorkflow = workflows.get("workflow-1")?.workflow;
+    expect(calls.updateWorkflow).toHaveBeenCalled();
+    expect(savedWorkflow?.graph.nodes).toEqual(expect.arrayContaining([expect.objectContaining({ id: "code1", type: "code" })]));
+    expect(savedWorkflow?.graph.edges).toEqual(
+      expect.arrayContaining([expect.objectContaining({ source: "llm1", target: "code1" })]),
+    );
+  });
+
+  it("opens a target-handle palette, disables End, and connects the created node into the target node", async () => {
+    const user = userEvent.setup();
+    const { api, workflows } = createMemoryWorkflowApi();
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open node palette" }));
+    let palette = screen.getByText("Node Palette").closest("aside");
+    expect(palette).not.toBeNull();
+    await user.click(within(palette!).getByRole("button", { name: /End/ }));
+    expect(screen.queryByRole("button", { name: "Add connected node from End" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add connected node into LLM" }));
+    palette = screen.getByText("Node Palette").closest("aside");
+    expect(palette).not.toBeNull();
+    expect(within(palette!).getByRole("button", { name: /End/ })).toBeDisabled();
+    await user.click(within(palette!).getByRole("button", { name: /Code/ }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    const savedWorkflow = workflows.get("workflow-1")?.workflow;
+    expect(savedWorkflow?.graph.nodes).toEqual(expect.arrayContaining([expect.objectContaining({ id: "code1", type: "code" })]));
+    expect(savedWorkflow?.graph.edges).toEqual(
+      expect.arrayContaining([expect.objectContaining({ source: "code1", target: "llm1" })]),
+    );
+  });
+
+  it("shows Ollama model options only when dev providers are enabled", async () => {
+    const user = userEvent.setup();
+    const { api } = createMemoryWorkflowApi();
+    const { unmount } = render(<AppWorkbench workflowApi={api} />);
+
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open model settings" }));
+    await user.click(screen.getByRole("button", { name: "Choose model provider and model" }));
+    expect(screen.getAllByText("deepseek").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Ollama")).not.toBeInTheDocument();
+    unmount();
+
+    const { api: devApi } = createMemoryWorkflowApi();
+    render(<AppWorkbench workflowApi={devApi} showDevModelProviders />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open model settings" }));
+    await user.click(screen.getByRole("button", { name: "Choose model provider and model" }));
+    expect(screen.getByText("Ollama")).toBeInTheDocument();
+    await user.click(screen.getByText("llama3.2"));
+    expect(screen.getByDisplayValue("http://127.0.0.1:11434")).toBeInTheDocument();
   });
 });
 

@@ -10,4 +10,6 @@ const workflows = await client.listWorkflows();
 ```
 
 Responses are validated with `@ai-agent-workflow/api-contracts`. Network, HTTP,
-and schema failures are normalized as `WorkflowClientError`.
+and schema failures are normalized as `WorkflowClientError`. `createRun` accepts
+the shared run request shape, including transient model provider settings used
+only for that execution.

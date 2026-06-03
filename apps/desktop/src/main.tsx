@@ -11,6 +11,6 @@ const workflowApi = createWorkflowClient({
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <AppWorkbench workflowApi={workflowApi} />
+    <AppWorkbench workflowApi={workflowApi} showDevModelProviders={import.meta.env.DEV} />
   </React.StrictMode>,
 );
