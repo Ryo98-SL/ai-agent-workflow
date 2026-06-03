@@ -2,19 +2,6 @@
 
 Web-first monorepo for debugging AI agent workflow graphs.
 
-## Shipped MVP
-
-- Primary Vite React web app in `apps/web`.
-- Legacy Electron shell in `apps/desktop` that wraps the same web-first workbench.
-- Reusable workbench UI package with node palette, ReactFlow canvas, inspectors,
-  server-backed save/load, model provider selection, and run rendering.
-- Durable workflow schema package with Start, LLM, Knowledge, Tool, Code,
-  If/Else, Template, and End nodes.
-- Shared REST/Zod API contracts, a deterministic Hono server with LangGraph
-  Start-to-LLM runs, and a typed fetch workflow client.
-- Legacy local runtime adapters remain covered by tests, but the primary
-  workbench now runs through the workflow API boundary.
-
 ## Commands
 
 ```bash
@@ -33,13 +20,18 @@ pnpm build
 `pnpm dev` starts the API server at `http://127.0.0.1:8788` and the web app
 at `http://127.0.0.1:5173`. The web and desktop renderers use
 `VITE_WORKFLOW_API_BASE_URL` when a different API origin is needed.
+
+## 硬性要求
+
 - 不要把docs/文件夹下的文件加入git记录！
-- 调整 ReactFlow 时，优先检查节点、边、handle 的现有配置能否解决问题；
+- 不要尝试绕过库的某些已有功能或者配置实现功能，去自己造轮子，真实案例：调整 ReactFlow 时，优先检查节点、边、handle 的现有配置能否解决问题；
   不要在未排查配置项前自定义渲染器或重新造轮子。
 - 接入模型 provider 时，优先使用对应官方/维护良好的 SDK 或 LangChain
   集成包，例如 `@langchain/deepseek`、`@langchain/openai`、
   `@langchain/anthropic`、`@langchain/ollama`。不要在已有库可用时手写
   Chat Completions、Anthropic Messages 或 Ollama HTTP 协议适配层。
+- 不能只是写代码，还必须思考 UX：主动覆盖加载、流式、空、错误等中间状态，
+  避免界面出现空白、卡死或无任何反馈；在交付前从用户视角检查交互是否顺畅。
 
 ## Packages And Apps
 

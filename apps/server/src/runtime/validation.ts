@@ -17,10 +17,6 @@ export function validateWorkflow(workflow: WorkflowFile) {
 
   const reachableIds = collectReachableNodeIds(workflow, startNodes[0].id);
   const reachableNodes = workflow.graph.nodes.filter((node) => reachableIds.has(node.id));
-  const unsupported = reachableNodes.find((node) => node.type !== "start" && node.type !== "llm");
-  if (unsupported) {
-    throw new RuntimeValidationError(`Node "${unsupported.id}" has unsupported runtime type "${unsupported.type}".`);
-  }
 
   if (reachableNodes.some((node) => node.type !== "start") && !workflow.graph.edges.some((edge) => edge.source === startNodes[0].id)) {
     throw new RuntimeValidationError("Workflow Start node must connect to an executable node.");

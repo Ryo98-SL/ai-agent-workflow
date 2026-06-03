@@ -2,16 +2,20 @@
 
 ## Purpose
 
-`apps/server/src/runtime` owns synchronous server-side execution for the
-supported Start-to-LLM workflow subset.
+`apps/server/src/runtime` owns server-side workflow execution for the current
+runtime subset. The public API is still used by the synchronous run route, but
+the executor itself runs LangGraph streams so future routes can surface live
+progress.
 
 ## Structure
 
 - `index.ts` is the public module entrypoint used by `src/app.ts`.
-- `executor.ts` builds and invokes the LangGraph `StateGraph`, records node
-  results, emits execution/node lifecycle logs, and normalizes run-level
-  failures.
-- `validation.ts` validates the executable graph shape and reachable node set.
+- `executor.ts` builds and streams the LangGraph `StateGraph`, records node
+  results, normalizes stream chunks, emits execution/node lifecycle logs, and
+  normalizes run-level failures. It owns the node-builder registry and
+  placeholder builders.
+- `validation.ts` validates graph shape and reachable node set without
+  hard-coding the executable node type list.
 - `startValues.ts` materializes Start field values from run input.
 - `prompts.ts` resolves namespaced prompt placeholders against runtime state.
 - `models.ts` resolves node-level model settings over workflow defaults and
@@ -19,12 +23,20 @@ supported Start-to-LLM workflow subset.
   from `@langchain/deepseek`, `@langchain/openai`, `@langchain/anthropic`, and
   `@langchain/ollama`. It logs safe provider/model invocation metadata.
 - `errors.ts` defines runtime error classes and API error normalization.
-- `types.ts` defines runtime execution result and executor option types.
+- `types.ts` defines runtime execution result, stream event, and executor option
+  types.
 
 ## Behavior
 
 The runtime accepts a validated workflow payload and run input, compiles the
-reachable Start/LLM nodes into LangGraph, stores each node output under its node
-id in runtime state, and returns structured node results for API persistence.
-Tests can inject `fetch` through `RuntimeExecutorOptions` so DeepSeek and
-other provider calls remain deterministic.
+reachable nodes into LangGraph, stores each node output under its node id in
+runtime state, and returns structured node results for API persistence. Start
+and LLM nodes execute real runtime behavior. Other known node types currently
+save placeholder state containing their type, label, description, and config.
+
+Compiled graphs use a LangGraph checkpointer and execute through `.stream()`
+with `updates`, `messages`, and `values`. `executeWorkflowRuntime` collects
+normalized stream events and can call `RuntimeExecutorOptions.onStreamEvent` for
+each chunk. Tests can inject `fetch`, `checkpointer`, and `threadId` through
+`RuntimeExecutorOptions` so provider calls and checkpoint assertions remain
+deterministic.

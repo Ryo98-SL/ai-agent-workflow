@@ -21,6 +21,7 @@ export function NodeInspector({ workflow, selectedNode, showDevModelProviders = 
     );
   }
 
+
   return (
     <section className="p-4">
       <div className="mb-4">

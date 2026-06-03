@@ -144,6 +144,7 @@ function ModelSettingField({
             ref={ref}
             variant="modelTrigger"
             size="unstyled"
+            className={`!px-2 !h-10`}
             onClick={() => setOpen((current) => !current)}
             aria-label="Open model setting"
           >
@@ -152,12 +153,9 @@ function ModelSettingField({
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold">{modelSettings.model}</span>
-              <span className="block truncate text-[11px] text-slate-500">
-                {hasModelOverride ? "Node override" : "Workflow default"}
-              </span>
+
             </span>
             <ModelCapabilityTags capabilities={capabilities} />
-            <ChevronDown size={16} className="text-slate-400" aria-hidden />
           </Button>
         )}
       >

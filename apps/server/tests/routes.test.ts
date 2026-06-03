@@ -39,6 +39,47 @@ function requestHeader(init: Parameters<typeof fetch>[1] | undefined, name: stri
   return new Headers(init?.headers).get(name);
 }
 
+function createOpenAIStreamResponse(text: string, usage: Record<string, unknown>) {
+  const chunks = [
+    { choices: [{ delta: { role: "assistant" } }] },
+    { choices: [{ delta: { content: text } }] },
+    { choices: [{ delta: {}, finish_reason: "stop" }], usage },
+  ];
+
+  return new Response(`${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")}data: [DONE]\n\n`, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+type HonoApp = ReturnType<typeof createServerApp>;
+
+async function waitForRun(app: HonoApp, runId: string): Promise<unknown> {
+  const streamResponse = await app.request(`/api/runs/${runId}/stream`);
+  const reader = streamResponse.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const event = JSON.parse(line.slice(6)) as { type: string };
+        if (event.type === "run.completed") {
+          reader.cancel().catch(() => {});
+          const runRes = await app.request(`/api/runs/${runId}`);
+          return (await runRes.json() as { run: unknown }).run;
+        }
+      }
+    }
+  }
+  const runRes = await app.request(`/api/runs/${runId}`);
+  return (await runRes.json() as { run: unknown }).run;
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -163,20 +204,22 @@ describe("workflow API server", () => {
     });
 
     expect(createRunResponse.status).toBe(201);
-    const createdRun = (await json(createRunResponse)) as {
-      run: {
-        id: string;
-        status: string;
-        output: { nodeResults: Array<{ nodeId: string; output: string; data?: unknown }> };
-      };
+    const createdRun = (await json(createRunResponse)) as { run: { id: string; status: string } };
+    expect(createdRun.run.id).toBe("run-1");
+    expect(createdRun.run.status).toBe("running");
+
+    const run = (await waitForRun(app, "run-1")) as {
+      id: string;
+      status: string;
+      output: { nodeResults: Array<{ nodeId: string; output: string; data?: unknown }> };
     };
 
-    expect(createdRun.run.id).toBe("run-1");
-    expect(createdRun.run.status).toBe("succeeded");
-    expect(createdRun.run.output.nodeResults).toHaveLength(2);
-    expect(createdRun.run.output.nodeResults.map((result) => result.nodeId)).toEqual(["start1", "llm1"]);
-    expect(createdRun.run.output.nodeResults[1].output).toBe("Server runtime output.");
-    expect(createdRun.run.output.nodeResults[1].data).toMatchObject({
+    expect(run.id).toBe("run-1");
+    expect(run.status).toBe("succeeded");
+    expect(run.output.nodeResults).toHaveLength(2);
+    expect(run.output.nodeResults.map((result) => result.nodeId)).toEqual(["start1", "llm1"]);
+    expect(run.output.nodeResults[1].output).toBe("Server runtime output.");
+    expect(run.output.nodeResults[1].data).toMatchObject({
       text: "Server runtime output.",
       usage: { total_tokens: 42 },
       reasoning: null,
@@ -233,10 +276,14 @@ describe("workflow API server", () => {
         },
       }),
     });
+
+    expect(createRunResponse.status).toBe(201);
+    const createdTransient = (await json(createRunResponse)) as { run: { id: string } };
+    await waitForRun(app, createdTransient.run.id);
+
     const readResponse = await app.request("/api/workflows/workflow-1");
     const stored = (await json(readResponse)) as { workflow: { workflow: { settings: { modelProvider?: { apiKey?: string } } } } };
 
-    expect(createRunResponse.status).toBe(201);
     expect(authorization).toBe("Bearer transient-deepseek-key");
     expect(stored.workflow.workflow.settings.modelProvider?.apiKey).toBeUndefined();
 
@@ -268,13 +315,23 @@ describe("workflow API server", () => {
 
     let authorization = "";
     let requestedUrl = "";
-    let requestedBody = {} as { model?: string; max_completion_tokens?: number; max_tokens?: number; temperature?: number };
+    let requestedBody = {} as {
+      model?: string;
+      max_completion_tokens?: number;
+      max_tokens?: number;
+      stream?: boolean;
+      temperature?: number;
+    };
     const app = createServerApp({
       seedWorkflow: workflow,
       fetch: async (url, init) => {
         requestedUrl = String(url);
         authorization = requestHeader(init, "authorization") ?? "";
         requestedBody = JSON.parse(String(init?.body));
+        if (requestedBody.stream) {
+          return createOpenAIStreamResponse("Node settings output.", { total_tokens: 9 });
+        }
+
         return new Response(
           JSON.stringify({
             choices: [{ message: { content: "Node settings output." } }],
@@ -289,11 +346,16 @@ describe("workflow API server", () => {
       method: "POST",
       body: JSON.stringify({ input: { topic: "node settings" } }),
     });
-    const body = (await json(response)) as { run: { status: string; output: { nodeResults: Array<{ output: string }> } } };
 
     expect(response.status).toBe(201);
-    expect(body.run.status).toBe("succeeded");
-    expect(body.run.output.nodeResults[1].output).toBe("Node settings output.");
+    const createdNodeSettings = (await json(response)) as { run: { id: string } };
+    const nodeSettingsRun = (await waitForRun(app, createdNodeSettings.run.id)) as {
+      status: string;
+      output: { nodeResults: Array<{ output: string }> };
+    };
+
+    expect(nodeSettingsRun.status).toBe("succeeded");
+    expect(nodeSettingsRun.output.nodeResults[1].output).toBe("Node settings output.");
     expect(requestedUrl).toBe("https://api.openai.com/v1/chat/completions");
     expect(authorization).toBe("Bearer provider-openai-key");
     expect(requestedBody).toMatchObject({ model: "gpt-5.2", max_completion_tokens: 1200, temperature: 0.2 });
@@ -318,12 +380,18 @@ describe("workflow API server", () => {
       method: "POST",
       body: JSON.stringify({ input: {} }),
     });
-    const body = (await json(response)) as { run: { status: string; error: { message: string }; output: { nodeResults: unknown[] } } };
 
     expect(response.status).toBe(201);
-    expect(body.run.status).toBe("failed");
-    expect(body.run.error.message).toContain('Missing required Start field "topic"');
-    expect(body.run.output.nodeResults).toHaveLength(1);
+    const createdMissing = (await json(response)) as { run: { id: string } };
+    const missingRun = (await waitForRun(app, createdMissing.run.id)) as {
+      status: string;
+      error: { message: string };
+      output: { nodeResults: unknown[] };
+    };
+
+    expect(missingRun.status).toBe("failed");
+    expect(missingRun.error.message).toContain('Missing required Start field "topic"');
+    expect(missingRun.output.nodeResults).toHaveLength(1);
     expect(called).toBe(false);
   });
 
@@ -346,10 +414,15 @@ describe("workflow API server", () => {
       method: "POST",
       body: JSON.stringify({ input: {} }),
     });
-    const body = (await json(response)) as { run: { status: string; output: { nodeResults: Array<{ data?: Record<string, unknown> }> } } };
+    expect(response.status).toBe(201);
+    const createdDefaults = (await json(response)) as { run: { id: string } };
+    const defaultsRun = (await waitForRun(app, createdDefaults.run.id)) as {
+      status: string;
+      output: { nodeResults: Array<{ data?: Record<string, unknown> }> };
+    };
 
-    expect(body.run.status).toBe("succeeded");
-    expect(body.run.output.nodeResults[0].data).toEqual({ topic: "default topic", audience: null });
+    expect(defaultsRun.status).toBe("succeeded");
+    expect(defaultsRun.output.nodeResults[0].data).toEqual({ topic: "default topic", audience: null });
   });
 
   it("creates workflow runs with Ollama provider settings", async () => {
@@ -382,18 +455,23 @@ describe("workflow API server", () => {
       method: "POST",
       body: JSON.stringify({ input: { topic: "ollama" } }),
     });
-    const body = (await json(response)) as { run: { status: string; output: { nodeResults: Array<{ output: string; data?: unknown }> } } };
+    expect(response.status).toBe(201);
+    const createdOllama = (await json(response)) as { run: { id: string } };
+    const ollamaRun = (await waitForRun(app, createdOllama.run.id)) as {
+      status: string;
+      output: { nodeResults: Array<{ output: string; data?: unknown }> };
+    };
 
-    expect(body.run.status).toBe("succeeded");
+    expect(ollamaRun.status).toBe("succeeded");
     expect(requestedUrl).toContain("/api/chat");
-    expect(body.run.output.nodeResults[1].output).toBe("Ollama runtime output.");
-    expect(body.run.output.nodeResults[1].data).toMatchObject({
+    expect(ollamaRun.output.nodeResults[1].output).toBe("Ollama runtime output.");
+    expect(ollamaRun.output.nodeResults[1].data).toMatchObject({
       text: "Ollama runtime output.",
       reasoning: null,
     });
   });
 
-  it("returns clear failed runs for unsupported reachable nodes", async () => {
+  it("saves placeholder output for reachable node types that do not have runtime implementations yet", async () => {
     const workflow = createDefaultWorkflow();
     workflow.graph.nodes.push({
       id: "tool1",
@@ -409,10 +487,25 @@ describe("workflow API server", () => {
       method: "POST",
       body: JSON.stringify({ input: { topic: "unsupported" } }),
     });
-    const body = (await json(response)) as { run: { status: string; error: { message: string } } };
+    expect(response.status).toBe(201);
+    const createdPlaceholder = (await json(response)) as { run: { id: string } };
+    const placeholderRun = (await waitForRun(app, createdPlaceholder.run.id)) as {
+      status: string;
+      output: { nodeResults: Array<{ nodeId: string; output: string; data?: Record<string, unknown> }> };
+    };
 
-    expect(body.run.status).toBe("failed");
-    expect(body.run.error.message).toContain("unsupported runtime type");
+    expect(placeholderRun.status).toBe("succeeded");
+    expect(placeholderRun.output.nodeResults).toHaveLength(2);
+    expect(placeholderRun.output.nodeResults[1]).toMatchObject({
+      nodeId: "tool1",
+      output: "tool placeholder saved.",
+      data: {
+        type: "tool",
+        label: "Tool",
+        config: { adapter: "currentTime", timezone: "UTC" },
+        placeholder: true,
+      },
+    });
   });
 
   it("fails missing namespaced prompt variables without model calls", async () => {
@@ -434,10 +527,15 @@ describe("workflow API server", () => {
       method: "POST",
       body: JSON.stringify({ input: { topic: "variables" } }),
     });
-    const body = (await json(response)) as { run: { status: string; error: { message: string } } };
+    expect(response.status).toBe(201);
+    const createdVars = (await json(response)) as { run: { id: string } };
+    const varsRun = (await waitForRun(app, createdVars.run.id)) as {
+      status: string;
+      error: { message: string };
+    };
 
-    expect(body.run.status).toBe("failed");
-    expect(body.run.error.message).toContain("start1.missing");
+    expect(varsRun.status).toBe("failed");
+    expect(varsRun.error.message).toContain("start1.missing");
     expect(called).toBe(false);
   });
 
@@ -450,10 +548,16 @@ describe("workflow API server", () => {
       method: "POST",
       body: JSON.stringify({ input: { topic: "model failure" } }),
     });
-    const body = (await json(response)) as { run: { status: string; error: { message: string }; output: { nodeResults: unknown[] } } };
+    expect(response.status).toBe(201);
+    const createdFail = (await json(response)) as { run: { id: string } };
+    const failedRun = (await waitForRun(app, createdFail.run.id)) as {
+      status: string;
+      error: { message: string };
+      output: { nodeResults: unknown[] };
+    };
 
-    expect(body.run.status).toBe("failed");
-    expect(body.run.error.message).toContain("nope");
-    expect(body.run.output.nodeResults).toHaveLength(2);
+    expect(failedRun.status).toBe("failed");
+    expect(failedRun.error.message).toContain("nope");
+    expect(failedRun.output.nodeResults).toHaveLength(2);
   });
 });

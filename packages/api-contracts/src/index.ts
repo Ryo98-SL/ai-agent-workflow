@@ -1,5 +1,6 @@
 import {
   ModelProviderKeysSchema,
+  NODE_TYPES,
   OpenAICompatibleSettingsSchema,
   WorkflowFileSchema,
 } from "@ai-agent-workflow/workflow-domain";
@@ -11,6 +12,7 @@ export const API_ROUTE_TEMPLATES = {
   workflowRuns: "/api/workflows/:id/runs",
   run: "/api/runs/:id",
   runEvents: "/api/runs/:id/events",
+  runStream: "/api/runs/:id/stream",
 } as const;
 
 const encodePathSegment = (value: string) => encodeURIComponent(value);
@@ -21,6 +23,7 @@ export const apiPaths = {
   workflowRuns: (id: string) => `/api/workflows/${encodePathSegment(id)}/runs`,
   run: (id: string) => `/api/runs/${encodePathSegment(id)}`,
   runEvents: (id: string) => `/api/runs/${encodePathSegment(id)}/events`,
+  runStream: (id: string) => `/api/runs/${encodePathSegment(id)}/stream`,
 } as const;
 
 export const ApiIssueSchema = z.object({
@@ -156,6 +159,48 @@ export const ListRunEventsResponseSchema = z.object({
   events: z.array(RunEventSchema),
 });
 
+const WorkflowNodeTypeSchema = z.enum(NODE_TYPES);
+
+export const RunSseEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("run.started"), runId: z.string() }),
+  z.object({
+    type: z.literal("node.started"),
+    runId: z.string(),
+    nodeId: z.string(),
+    nodeType: WorkflowNodeTypeSchema,
+  }),
+  z.object({
+    type: z.literal("node.stream"),
+    runId: z.string(),
+    nodeId: z.string(),
+    delta: z.string(),
+  }),
+  z.object({
+    type: z.literal("node.completed"),
+    runId: z.string(),
+    nodeId: z.string(),
+    nodeType: WorkflowNodeTypeSchema,
+    output: z.string(),
+    data: z.record(z.unknown()).optional(),
+    durationMs: z.number(),
+    inputTokens: z.number().optional(),
+    outputTokens: z.number().optional(),
+  }),
+  z.object({
+    type: z.literal("node.failed"),
+    runId: z.string(),
+    nodeId: z.string(),
+    nodeType: WorkflowNodeTypeSchema,
+    error: z.string(),
+    durationMs: z.number(),
+  }),
+  z.object({
+    type: z.literal("run.completed"),
+    runId: z.string(),
+    status: z.enum(["succeeded", "failed"]),
+  }),
+]);
+
 export type ApiIssue = z.infer<typeof ApiIssueSchema>;
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>;
 export type ApiErrorResponse = z.infer<typeof ApiErrorResponseSchema>;
@@ -177,6 +222,7 @@ export type GetRunResponse = z.infer<typeof GetRunResponseSchema>;
 export type RunEventType = z.infer<typeof RunEventTypeSchema>;
 export type RunEvent = z.infer<typeof RunEventSchema>;
 export type ListRunEventsResponse = z.infer<typeof ListRunEventsResponseSchema>;
+export type RunSseEvent = z.infer<typeof RunSseEventSchema>;
 
 export function createApiErrorResponse(
   code: ApiErrorCode,

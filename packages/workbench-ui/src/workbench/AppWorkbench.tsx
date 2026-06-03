@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type SetStateAction } from "react";
+import { useWorkflowExecution } from "./hooks/useWorkflowExecution";
 import { Loader2 } from "lucide-react";
 import {
   createDefaultWorkflow,
@@ -20,7 +21,7 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
   const [workflow, setWorkflow] = useState<WorkflowFile>(() => createDefaultWorkflow());
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
-  const [debugState, setDebugState] = useState<DebugState>({ status: "idle" });
+  const { nodeStates, debugState, setDebugState, runWorkflow: execRunWorkflow, cleanup: cleanupExecution } = useWorkflowExecution(workflowApi);
   const [workflowId, setWorkflowId] = useState<string | undefined>();
   const [dirty, setDirty] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -233,29 +234,19 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
       }
 
       setDebugOpen(true);
-      setDebugState({ status: "running" });
 
       try {
         const persisted = !workflowId || dirty ? await persistWorkflow("save") : { id: workflowId, workflow };
-        const runResponse = await workflowApi.createRun(persisted.id, {
+        execRunWorkflow(persisted.id, {
           input,
           modelProvider: workflow.settings.modelProvider,
           modelProviderKeys: workflow.settings.modelProviderKeys,
-        });
-        const eventResponse = await workflowApi.listRunEvents(runResponse.run.id);
-
-        setDebugState({
-          status: runResponse.run.status === "failed" ? "error" : "success",
-          result: {
-            run: runResponse.run,
-            events: eventResponse.events,
-          },
         });
       } catch (error) {
         setDebugState({ status: "error", error: errorMessage(error) });
       }
     },
-    [debugState.status, dirty, errorMessage, persistWorkflow, workflow, workflowApi, workflowId],
+    [debugState.status, dirty, errorMessage, execRunWorkflow, persistWorkflow, setDebugState, workflow, workflowId],
   );
 
   if (!initialLoaded) {
@@ -270,6 +261,7 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
       selectedNode={selectedNode}
       selectedNodeId={selectedNodeId}
       debugState={debugState}
+      nodeStates={nodeStates}
       paletteOpen={paletteOpen}
       settingsOpen={settingsOpen}
       inspectorOpen={inspectorOpen}

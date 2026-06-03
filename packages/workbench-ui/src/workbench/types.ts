@@ -7,6 +7,33 @@ import type {
   WorkflowNodeType,
 } from "@ai-agent-workflow/workflow-domain";
 
+type NodeExecutionStateBase = {
+  nodeId: string;
+  status: "running" | "succeeded" | "failed";
+  startedAt: number;
+  completedAt?: number;
+  durationMs?: number;
+};
+
+export type LlmNodeExecutionState = NodeExecutionStateBase & {
+  nodeType: "llm";
+  streamingText: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  output?: string;
+  data?: Record<string, unknown>;
+  error?: string;
+};
+
+export type GenericNodeExecutionState = NodeExecutionStateBase & {
+  nodeType: Exclude<WorkflowNodeType, "llm">;
+  output?: string;
+  data?: Record<string, unknown>;
+  error?: string;
+};
+
+export type NodeExecutionState = LlmNodeExecutionState | GenericNodeExecutionState;
+
 export type WorkbenchStatus = "idle" | "loading" | "running" | "success" | "error";
 
 export type DebugState = {
@@ -24,7 +51,9 @@ export type WorkbenchWorkflowApi = {
   getWorkflow: (id: string) => Promise<{ workflow: WorkflowDto }>;
   updateWorkflow: (id: string, request: { workflow: WorkflowFile }) => Promise<{ workflow: WorkflowDto }>;
   createRun: (workflowId: string, request?: CreateRunRequest) => Promise<{ run: WorkflowRun }>;
+  getRun: (runId: string) => Promise<{ run: WorkflowRun }>;
   listRunEvents: (runId: string) => Promise<{ events: RunEvent[] }>;
+  runStreamUrl: (runId: string) => string;
 };
 
 export type AppWorkbenchProps = {

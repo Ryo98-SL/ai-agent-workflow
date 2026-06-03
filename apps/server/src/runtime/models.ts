@@ -133,7 +133,6 @@ export async function callChatCompletion(
       model: settings.model,
       hasSystemPrompt: Boolean(systemPrompt),
       userPromptLength: userPrompt.length,
-        userPrompt
     });
     response = (await model.invoke(messages)) as Record<string, any>;
   } catch (error) {

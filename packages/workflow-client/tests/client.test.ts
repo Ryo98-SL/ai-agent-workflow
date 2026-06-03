@@ -133,10 +133,17 @@ describe("workflow client", () => {
     const client = createWorkflowClient({ baseUrl: "http://server.test", fetch: fetchFromApp });
 
     const workflows = await client.listWorkflows();
-    const run = await client.createRun(workflows.workflows[0].id, { input: { topic: "client integration" } });
-    const events = await client.listRunEvents(run.run.id);
+    const created = await client.createRun(workflows.workflows[0].id, { input: { topic: "client integration" } });
+    expect(created.run.status).toBe("running");
 
-    expect(run.run.status).toBe("succeeded");
+    // Poll until the run completes
+    let run = created.run;
+    for (let i = 0; i < 50 && run.status === "running"; i++) {
+      run = (await client.getRun(run.id)).run;
+    }
+    const events = await client.listRunEvents(run.id);
+
+    expect(run.status).toBe("succeeded");
     expect(events.events.at(-1)?.type).toBe("run.completed");
   });
 });

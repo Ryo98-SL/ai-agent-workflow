@@ -61,6 +61,7 @@ export type WorkflowClient = {
   createRun: (workflowId: string, request?: CreateRunRequest) => Promise<CreateRunResponse>;
   getRun: (id: string) => Promise<GetRunResponse>;
   listRunEvents: (id: string) => Promise<ListRunEventsResponse>;
+  runStreamUrl: (id: string) => string;
 };
 
 type RequestOptions<TResponse> = {
@@ -199,5 +200,6 @@ export function createWorkflowClient(options: WorkflowClientOptions): WorkflowCl
         path: apiPaths.runEvents(id),
         responseSchema: ListRunEventsResponseSchema,
       }),
+    runStreamUrl: (id) => joinUrl(options.baseUrl, apiPaths.runStream(id)),
   };
 }

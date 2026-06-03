@@ -8,7 +8,12 @@ workflow IO stays behind the injected API.
 ## Structure
 
 - `src/index.ts` exports the public workbench component and types.
-- `src/styles.css` provides Tailwind and base document styles.
+- `src/styles.css` provides Tailwind plus the shadcn CSS-variable theme tokens
+  (zinc base, light + dark) and token-based base document styles.
+- `src/components/ui/` holds the shadcn/ui primitives (new-york style); see its
+  `index.md`. `components.json` configures the shadcn CLI for this package.
+- `src/lib/utils.ts` exposes the `cn` class-merge helper. The `@workbench/*`
+  alias maps to `src/*` (wired in tsconfig, vitest, and the consuming Vite apps).
 - `src/workbench/` contains state, layout, canvas, panels, and UI primitives.
 - `tests/` contains component smoke coverage against a mocked workflow API.
 

@@ -1,2 +1,2 @@
 export { executeWorkflowRuntime } from "./executor";
-export type { RuntimeExecutionResult, RuntimeExecutorOptions, RuntimeNodeResult } from "./types";
+export type { RuntimeExecutionResult, RuntimeExecutorOptions, RuntimeNodeResult, RuntimeStreamEvent } from "./types";

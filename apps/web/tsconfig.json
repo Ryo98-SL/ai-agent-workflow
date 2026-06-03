@@ -1,4 +1,10 @@
 {
   "extends": "@ai-agent-workflow/tsconfig/react.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@workbench/*": ["../../packages/workbench-ui/src/*"]
+    }
+  },
   "include": ["src", "tailwind.config.ts", "vite.config.ts"]
 }

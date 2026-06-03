@@ -28,6 +28,15 @@ type PopoverProps = {
   offset?: number;
   className?: string;
   matchReferenceWidth?: boolean;
+  /**
+   * Stretch the floating element to fill the available space between the trigger
+   * and the viewport edge (in the placement direction). The height is recomputed
+   * on every reposition via the floating-ui `size` middleware, so the panel bottom
+   * stays flush with the window bottom as it resizes.
+   */
+  fillAvailableHeight?: boolean;
+  /** Gap (px) left between the filled floating element and the viewport edge. */
+  availableHeightPadding?: number;
   preserveNestedPopoverPress?: boolean;
   referenceElement?: HTMLElement | null;
 };
@@ -42,6 +51,8 @@ export function Popover({
   offset = 8,
   className = "",
   matchReferenceWidth = false,
+  fillAvailableHeight = false,
+  availableHeightPadding = 12,
   preserveNestedPopoverPress = true,
   referenceElement,
 }: PopoverProps) {
@@ -63,8 +74,23 @@ export function Popover({
           }),
         ]
       : []),
-    flip(),
+    // When filling height we always want the panel to stay below the trigger and
+    // grow downward, so we skip `flip` (which would otherwise flip it upward once
+    // its natural height overflows the viewport before `size` constrains it).
+    ...(fillAvailableHeight ? [] : [flip()]),
     shift({ padding: 12 }),
+    ...(fillAvailableHeight
+      ? [
+          floatingSize({
+            padding: availableHeightPadding,
+            apply({ availableHeight, elements }) {
+              Object.assign(elements.floating.style, {
+                height: `${Math.max(0, Math.floor(availableHeight))}px`,
+              });
+            },
+          }),
+        ]
+      : []),
   ];
   const { context, floatingStyles, update } = useFloating({
     elements: {

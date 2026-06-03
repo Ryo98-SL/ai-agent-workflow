@@ -16,14 +16,21 @@ Focused React components for the server-backed workbench shell.
   normalizes their mixed source dimensions in the model UI.
 - `WorkbenchLayout.tsx` owns the canvas-first shell and panel placement.
 - `Popover.tsx` and `FloatingPanel.tsx` provide the shared body-level floating
-  surfaces.
+  surfaces. `Popover` supports `matchReferenceWidth` and `fillAvailableHeight`
+  (the latter uses the floating-ui `size` middleware to stretch the panel from
+  the trigger down to the viewport edge, recomputed on every reposition).
 - `InlineNodePalettePopover.tsx` anchors node creation to a ReactFlow handle.
 - `ModelSettingsEditor.tsx` is the reusable provider/model/base URL/API key
   editor shared by global settings and LLM node overrides.
 - `ModelSettingsPanel.tsx` edits workflow-level provider-aware settings and the
   provider keyring. DeepSeek is the fallback; OpenAI and Anthropic are
   available by default; Ollama is development-only.
-- `DebugPanel.tsx` gathers Start inputs, triggers runs, and renders run output.
+- `DebugPanel.tsx` gathers Start inputs, triggers runs, and renders streaming
+  run progress: a persistent run-status header (running/succeeded/failed
+  variants) plus per-node cards that show the node icon, duration, status, live
+  LLM text, and collapsible Input / Process Data / Out Data JSON sections.
+- `JsonViewer.tsx` is a read-only Monaco editor for inspecting JSON payloads
+  with syntax highlighting; height auto-fits content up to a cap, then scrolls.
 - `NodeInspector.tsx` selects the inspector for the active node type when a node is selected.
 - `NodePalette.tsx` lists creatable schema nodes and prevents duplicate Start.
 - `ProjectFileActions.tsx`, `Button.tsx`, `inspectors/`, and `workflowNodes/`

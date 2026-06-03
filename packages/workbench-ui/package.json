@@ -22,10 +22,16 @@
     "@ai-agent-workflow/api-contracts": "workspace:*",
     "@ai-agent-workflow/workflow-domain": "workspace:*",
     "@floating-ui/react": "^0.27.19",
+    "@monaco-editor/react": "^4.7.0",
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-slot": "^1.2.4",
     "@xyflow/react": "^12.9.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "lucide-react": "^0.511.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^3.3.0"
   },
   "devDependencies": {
     "@ai-agent-workflow/tsconfig": "workspace:*",

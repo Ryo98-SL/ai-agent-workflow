@@ -16,6 +16,7 @@ import {
   zodIssuesToApiIssues,
   type RunEvent,
   type RunInput,
+  type RunSseEvent,
   type WorkflowDto,
   type WorkflowRun,
   type WorkflowSummary,
@@ -26,6 +27,7 @@ import {
   type OpenAICompatibleSettings,
   type WorkflowFile,
 } from "@ai-agent-workflow/workflow-domain";
+import { MemorySaver, type BaseCheckpointSaver } from "@langchain/langgraph";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { z } from "zod";
@@ -36,10 +38,18 @@ const SEED_TIME = "2026-06-01T00:00:00.000Z";
 
 type StoredWorkflow = WorkflowDto;
 
+type RunStreamBuffer = {
+  events: RunSseEvent[];
+  done: boolean;
+  listeners: Set<(event: RunSseEvent) => void>;
+};
+
 type ServerState = {
   workflows: Map<string, StoredWorkflow>;
   runs: Map<string, WorkflowRun>;
   events: Map<string, RunEvent[]>;
+  streamBuffers: Map<string, RunStreamBuffer>;
+  checkpointer: BaseCheckpointSaver;
   nextWorkflowNumber: number;
   nextRunNumber: number;
 };
@@ -81,6 +91,8 @@ function createState(options: CreateServerAppOptions = {}): ServerState {
     workflows,
     runs: new Map(),
     events: new Map(),
+    streamBuffers: new Map(),
+    checkpointer: new MemorySaver(),
     nextWorkflowNumber: 2,
     nextRunNumber: 1,
   };
@@ -242,13 +254,20 @@ function createRunFromExecution(
       execution.ok ? "run.completed" : "run.failed",
       `Run ${runId} ${execution.ok ? "completed" : "failed"}.`,
       completedAt,
-      { status: run.status },
+      { status: run.status, streamEventCount: execution.streamEvents.length },
     ),
   ];
 
   state.runs.set(runId, run);
   state.events.set(runId, events);
   return run;
+}
+
+function pushToBuffer(buffer: RunStreamBuffer, event: RunSseEvent) {
+  buffer.events.push(event);
+  for (const listener of buffer.listeners) {
+    listener(event);
+  }
 }
 
 function normalizedNotFound(message: string) {
@@ -340,29 +359,162 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       return c.json(parsed.body, parsed.status);
     }
 
+    const runNumber = state.nextRunNumber;
+    state.nextRunNumber += 1;
+    const runId = `run-${runNumber}`;
+    const createdAt = secondAt(runNumber * 10);
+    const startedAt = secondAt(runNumber * 10 + 1);
+
+    const pendingRun: WorkflowRun = {
+      id: runId,
+      workflowId: workflow.id,
+      status: "running",
+      input: parsed.data.input,
+      output: null,
+      error: null,
+      createdAt,
+      startedAt,
+      completedAt: null,
+    };
+    state.runs.set(runId, pendingRun);
+    state.events.set(runId, [
+      createEvent(runId, 0, "run.created", `Run ${runId} created.`, createdAt, { workflowId: workflow.id }),
+      createEvent(runId, 1, "run.started", `Run ${runId} started.`, startedAt),
+    ]);
+
+    const buffer: RunStreamBuffer = { events: [], done: false, listeners: new Set() };
+    state.streamBuffers.set(runId, buffer);
+    pushToBuffer(buffer, { type: "run.started", runId });
+
     logger.info("run.create_requested", {
+      runId,
       workflowId,
       inputKeys: Object.keys(parsed.data.input),
       hasTransientModelProvider: Boolean(parsed.data.modelProvider),
       hasTransientModelProviderKeys: Boolean(parsed.data.modelProviderKeys),
     });
-    const execution = await executeWorkflowRuntime(
+
+    const nodeOutputs = new Map<string, { output: string; data?: Record<string, unknown>; inputTokens?: number; outputTokens?: number }>();
+
+    void executeWorkflowRuntime(
       workflowForRun(workflow.workflow, parsed.data.modelProvider, parsed.data.modelProviderKeys),
       parsed.data.input,
       {
+        checkpointer: state.checkpointer,
         fetch: options.fetch,
+        threadId: runId,
+        onStreamEvent: (event) => {
+          const buf = state.streamBuffers.get(runId);
+          if (!buf) return;
+
+          if (event.type === "node.started" && event.nodeId && event.nodeType) {
+            pushToBuffer(buf, {
+              type: "node.started",
+              runId,
+              nodeId: event.nodeId,
+              nodeType: event.nodeType as RunSseEvent extends { type: "node.started"; nodeType: infer T } ? T : never,
+            });
+          } else if (event.type === "node.stream" && event.nodeId && event.message) {
+            pushToBuffer(buf, { type: "node.stream", runId, nodeId: event.nodeId, delta: event.message });
+          } else if (event.type === "node.completed" && event.nodeId && event.nodeType) {
+            const stored = nodeOutputs.get(event.nodeId);
+            pushToBuffer(buf, {
+              type: "node.completed",
+              runId,
+              nodeId: event.nodeId,
+              nodeType: event.nodeType as RunSseEvent extends { type: "node.completed"; nodeType: infer T } ? T : never,
+              output: event.output ?? stored?.output ?? "",
+              data: event.data ?? stored?.data,
+              durationMs: event.durationMs ?? 0,
+              inputTokens: stored?.inputTokens,
+              outputTokens: stored?.outputTokens,
+            });
+          } else if (event.type === "node.failed" && event.nodeId && event.nodeType) {
+            pushToBuffer(buf, {
+              type: "node.failed",
+              runId,
+              nodeId: event.nodeId,
+              nodeType: event.nodeType as RunSseEvent extends { type: "node.failed"; nodeType: infer T } ? T : never,
+              error: "Node execution failed.",
+              durationMs: event.durationMs ?? 0,
+            });
+          } else if (event.type === "node.tokens" && event.nodeId && event.tokenUsage) {
+            const existing = nodeOutputs.get(event.nodeId) ?? { output: "" };
+            nodeOutputs.set(event.nodeId, { ...existing, ...event.tokenUsage });
+          }
+        },
       },
-    );
-    const run = createRunFromExecution(state, workflow, parsed.data.input, execution);
-    logger.info("run.created", {
-      runId: run.id,
-      workflowId,
-      status: run.status,
-      nodeResultCount: execution.nodeResults.length,
-      errorCode: execution.ok ? null : execution.error.code,
+    ).then((execution) => {
+      for (const result of execution.nodeResults) {
+        const existing = nodeOutputs.get(result.nodeId) ?? {};
+        nodeOutputs.set(result.nodeId, { ...existing, output: result.output, data: result.data });
+      }
+
+      const completedAt = secondAt(runNumber * 10 + execution.nodeResults.length + 2);
+      const status = execution.ok ? "succeeded" : "failed";
+      const finalRun: WorkflowRun = {
+        ...pendingRun,
+        status,
+        output: {
+          summary: execution.ok
+            ? `Workflow run completed for ${workflow.workflow.metadata.name}.`
+            : `Workflow run failed for ${workflow.workflow.metadata.name}.`,
+          nodeResults: execution.nodeResults,
+        },
+        error: execution.ok ? null : execution.error,
+        completedAt,
+      };
+      state.runs.set(runId, finalRun);
+
+      const existingEvents = state.events.get(runId) ?? [];
+      const nodeEvents = execution.nodeResults.map((result, index) =>
+        createEvent(
+          runId,
+          index + 2,
+          result.status === "failed" ? "node.failed" : "node.completed",
+          `${result.label} ${result.status === "failed" ? "failed" : "completed"}.`,
+          secondAt(runNumber * 10 + index + 2),
+          { nodeId: result.nodeId, output: result.output, data: result.data },
+        ),
+      );
+      const completionEvent = createEvent(
+        runId,
+        execution.nodeResults.length + 2,
+        execution.ok ? "run.completed" : "run.failed",
+        `Run ${runId} ${execution.ok ? "completed" : "failed"}.`,
+        completedAt,
+        { status, streamEventCount: execution.streamEvents.length },
+      );
+      state.events.set(runId, [...existingEvents, ...nodeEvents, completionEvent]);
+
+      const buf = state.streamBuffers.get(runId);
+      if (buf) {
+        pushToBuffer(buf, { type: "run.completed", runId, status: status === "succeeded" ? "succeeded" : "failed" });
+        buf.done = true;
+        buf.listeners.clear();
+        setTimeout(() => state.streamBuffers.delete(runId), 30_000);
+      }
+
+      logger.info("run.created", {
+        runId,
+        workflowId,
+        status,
+        nodeResultCount: execution.nodeResults.length,
+        errorCode: execution.ok ? null : execution.error.code,
+      });
+    }).catch((error) => {
+      const buf = state.streamBuffers.get(runId);
+      const message = error instanceof Error ? error.message : "Execution failed.";
+      if (buf) {
+        pushToBuffer(buf, { type: "run.completed", runId, status: "failed" });
+        buf.done = true;
+        buf.listeners.clear();
+        setTimeout(() => state.streamBuffers.delete(runId), 30_000);
+      }
+      logger.error("run.execution_error", { runId, message });
     });
 
-    return c.json(responseFromSchema(CreateRunResponseSchema, { run }), 201);
+    return c.json(responseFromSchema(CreateRunResponseSchema, { run: pendingRun }), 201);
   });
 
   app.get(API_ROUTE_TEMPLATES.run, (c) => {
@@ -387,6 +539,106 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     }
 
     return c.json(responseFromSchema(ListRunEventsResponseSchema, { events }));
+  });
+
+  app.get(API_ROUTE_TEMPLATES.runStream, (c) => {
+    const id = c.req.param("id");
+    const run = state.runs.get(id);
+
+    if (!run) {
+      logger.warn("run.not_found", { runId: id, route: c.req.path });
+      return c.json(normalizedNotFound(`Run ${id} was not found.`), 404);
+    }
+
+    const buffer = state.streamBuffers.get(id);
+
+    c.header("Content-Type", "text/event-stream");
+    c.header("Cache-Control", "no-cache");
+    c.header("Connection", "keep-alive");
+
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+
+    const sendEvent = (event: RunSseEvent) => {
+      const data = `data: ${JSON.stringify(event)}\n\n`;
+      writer.write(encoder.encode(data)).catch(() => {});
+    };
+
+    const closeStream = () => {
+      writer.close().catch(() => {});
+    };
+
+    if (!buffer) {
+      // Run completed, replay from snapshot events
+      const snapshotEvents = state.events.get(id) ?? [];
+      const isCompleted = run.status === "succeeded" || run.status === "failed";
+      if (isCompleted) {
+        (async () => {
+          sendEvent({ type: "run.started", runId: id });
+          for (const snapEvent of snapshotEvents) {
+            if (snapEvent.type === "node.completed" || snapEvent.type === "node.failed") {
+              const payload = snapEvent.payload ?? {};
+              const nodeId = typeof payload.nodeId === "string" ? payload.nodeId : "";
+              const node = run.output?.nodeResults.find((r) => r.nodeId === nodeId);
+              if (snapEvent.type === "node.completed" && node) {
+                const workflowNode = state.workflows.get(run.workflowId)?.workflow.graph.nodes.find((n) => n.id === nodeId);
+                if (workflowNode) {
+                  sendEvent({
+                    type: "node.completed",
+                    runId: id,
+                    nodeId,
+                    nodeType: workflowNode.type as RunSseEvent extends { type: "node.completed"; nodeType: infer T } ? T : never,
+                    output: node.output,
+                    durationMs: 0,
+                  });
+                }
+              }
+            }
+          }
+          sendEvent({ type: "run.completed", runId: id, status: run.status === "succeeded" ? "succeeded" : "failed" });
+          closeStream();
+        })().catch(() => {});
+      } else {
+        closeStream();
+      }
+      return new Response(readable as unknown as ReadableStream, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    }
+
+    // Stream in-progress run
+    for (const event of buffer.events) {
+      sendEvent(event);
+    }
+
+    if (buffer.done) {
+      closeStream();
+    } else {
+      const listener = (event: RunSseEvent) => {
+        sendEvent(event);
+        if (event.type === "run.completed") {
+          buffer.listeners.delete(listener);
+          closeStream();
+        }
+      };
+      buffer.listeners.add(listener);
+
+      c.req.raw.signal.addEventListener("abort", () => {
+        buffer.listeners.delete(listener);
+        closeStream();
+      });
+    }
+
+    return new Response(readable as unknown as ReadableStream, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
   });
 
   app.notFound((c) => c.json(normalizedNotFound(`Route ${c.req.path} was not found.`), 404));

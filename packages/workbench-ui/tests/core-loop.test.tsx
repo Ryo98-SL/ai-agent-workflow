@@ -259,6 +259,7 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
     ],
   ]);
   const events = new Map<string, RunEvent[]>();
+  const runs = new Map<string, WorkflowRun>();
   let nextWorkflowNumber = 2;
   let nextRunNumber = 1;
   const calls = {
@@ -327,6 +328,7 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
         startedAt: "2026-06-01T00:00:01.000Z",
         completedAt: "2026-06-01T00:00:02.000Z",
       };
+      runs.set(id, run);
       events.set(id, [
         {
           id: `${id}-event-1`,
@@ -339,7 +341,13 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
       ]);
       return { run };
     }),
+    getRun: vi.fn(async (runId) => {
+      const run = runs.get(runId);
+      if (!run) throw new Error(`Run ${runId} was not found.`);
+      return { run };
+    }),
     listRunEvents: vi.fn(async (runId) => ({ events: events.get(runId) ?? [] })),
+    runStreamUrl: vi.fn((runId) => `http://test/api/runs/${runId}/stream`),
   };
 
   return { api, workflows, calls };
