@@ -9,26 +9,38 @@ type FloatingPanelProps = {
   onClose: () => void;
   children: ReactNode;
   className?: string;
+  headerContent?: ReactNode;
   /** Optional visual rendered to the left of the title (e.g. a node-type icon). */
   titleIcon?: ReactNode;
 };
 
-export function FloatingPanel({ title, description, closeLabel, onClose, children, className = "", titleIcon }: FloatingPanelProps) {
+export function FloatingPanel({
+  title,
+  description,
+  closeLabel,
+  onClose,
+  children,
+  className = "",
+  headerContent,
+  titleIcon,
+}: FloatingPanelProps) {
   return (
     <aside
       className={[
-        "flex flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-xl shadow-slate-900/10",
+        "flex flex-col overflow-hidden rounded-md border border-border bg-card text-card-foreground shadow-xl shadow-black/20",
         className,
       ].join(" ")}
     >
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          {titleIcon}
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-slate-950">{title}</h2>
-            {description && <p className="truncate leading-3 text-xs text-slate-500">{description}</p>}
+      <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+        {headerContent ?? (
+          <div className="flex min-w-0 items-center gap-2.5">
+            {titleIcon}
+            <div className="min-w-0">
+              <h2 className="truncate text-sm font-semibold text-foreground">{title}</h2>
+              {description && <p className="truncate text-xs leading-3 text-muted-foreground">{description}</p>}
+            </div>
           </div>
-        </div>
+        )}
         <Button
           variant="ghost"
           size="iconSm"

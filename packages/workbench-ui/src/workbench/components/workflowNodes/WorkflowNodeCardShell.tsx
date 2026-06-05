@@ -43,16 +43,16 @@ export function WorkflowNodeCardShell({ children, noSourceHandle, noTargetHandle
     <div
       className={[
         getWorkflowNodeCardClassName(node.type),
-        selected ? "border-emerald-500 ring-2 ring-emerald-100" : "border-slate-200",
-        executionStatus === "running" ? "ring-2 ring-emerald-400 animate-pulse" : "",
+        selected ? "border-brand ring-2 ring-brand/20" : "border-border",
+        executionStatus === "running" ? "ring-2 ring-brand animate-pulse" : "",
       ].join(" ")}
       title={node.label}
     >
       {executionStatus === "succeeded" && (
-        <CheckCircle2 size={14} className="absolute -right-1.5 -top-1.5 text-emerald-600 bg-white rounded-full" aria-hidden />
+        <CheckCircle2 size={14} className="absolute -right-1.5 -top-1.5 text-brand bg-card rounded-full" aria-hidden />
       )}
       {executionStatus === "failed" && (
-        <AlertCircle size={14} className="absolute -right-1.5 -top-1.5 text-rose-600 bg-white rounded-full" aria-hidden />
+        <AlertCircle size={14} className="absolute -right-1.5 -top-1.5 text-destructive bg-card rounded-full" aria-hidden />
       )}
       {!noTargetHandle && (
         <Handle type="target" position={Position.Left} className={handleClassName}>
@@ -74,7 +74,7 @@ export function WorkflowNodeCardShell({ children, noSourceHandle, noTargetHandle
         <p className="ml-2 truncate text-sm font-semibold">{node.label}</p>
       </div>
 
-      {children ?? <p className="mt-1 text-xs uppercase text-slate-500">{node.type}</p>}
+      {children ?? <p className="mt-1 text-xs uppercase text-muted-foreground">{node.type}</p>}
       {!noSourceHandle && (
         <Handle type="source" position={Position.Right} className={handleClassName}>
           <PlusNode label={`Add connected node from ${node.label}`} onClick={(anchor) => openNodePalette("source", anchor)} />

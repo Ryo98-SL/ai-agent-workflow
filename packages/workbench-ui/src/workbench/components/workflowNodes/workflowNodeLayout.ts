@@ -82,5 +82,5 @@ export function getWorkflowNodeHandles(node: WorkflowNode) {
 
 export function getWorkflowNodeCardClassName(type: WorkflowNodeType) {
   const sizeClassName = type === "start" || type === "llm" ? "w-[220px]" : "w-[184px]";
-  return `${sizeClassName} rounded-md border bg-white p-3 shadow-sm`;
+  return `${sizeClassName} rounded-md border bg-card text-card-foreground p-3 shadow-sm`;
 }

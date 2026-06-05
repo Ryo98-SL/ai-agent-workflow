@@ -12,11 +12,15 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "dev": "tsx src/index.ts",
+    "build": "prisma generate && tsc -p tsconfig.build.json",
+    "dev": "tsx --env-file=.env src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@ai-agent-workflow/api-contracts": "workspace:*",
@@ -26,13 +30,20 @@
     "@langchain/core": "^1.1.48",
     "@langchain/deepseek": "^1.0.27",
     "@langchain/langgraph": "^1.3.2",
+    "@langchain/langgraph-checkpoint-postgres": "^1.0.2",
     "@langchain/ollama": "^1.2.7",
     "@langchain/openai": "^1.4.7",
+    "@prisma/client": "^6.19.3",
+    "better-auth": "^1.6.14",
+    "dotenv": "^17.4.2",
+    "dotenv-expand": "^13.0.0",
     "hono": "^4.7.11",
+    "undici": "^8.3.0",
     "zod": "^3.25.42"
   },
   "devDependencies": {
     "@ai-agent-workflow/tsconfig": "workspace:*",
+    "prisma": "^6.19.3",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4"

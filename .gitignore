@@ -7,3 +7,8 @@ coverage/
 .DS_Store
 *.log
 docs/
+
+# Environment files — never commit real secrets. Keep .env.example tracked.
+.env
+.env.*
+!.env.example

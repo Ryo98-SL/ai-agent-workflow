@@ -13,6 +13,10 @@ export const API_ROUTE_TEMPLATES = {
   run: "/api/runs/:id",
   runEvents: "/api/runs/:id/events",
   runStream: "/api/runs/:id/stream",
+  providerKeys: "/api/provider-keys",
+  providerKey: "/api/provider-keys/:provider",
+  customModels: "/api/custom-models",
+  customModel: "/api/custom-models/:id",
 } as const;
 
 const encodePathSegment = (value: string) => encodeURIComponent(value);
@@ -24,6 +28,10 @@ export const apiPaths = {
   run: (id: string) => `/api/runs/${encodePathSegment(id)}`,
   runEvents: (id: string) => `/api/runs/${encodePathSegment(id)}/events`,
   runStream: (id: string) => `/api/runs/${encodePathSegment(id)}/stream`,
+  providerKeys: () => API_ROUTE_TEMPLATES.providerKeys,
+  providerKey: (provider: string) => `/api/provider-keys/${encodePathSegment(provider)}`,
+  customModels: () => API_ROUTE_TEMPLATES.customModels,
+  customModel: (id: string) => `/api/custom-models/${encodePathSegment(id)}`,
 } as const;
 
 export const ApiIssueSchema = z.object({
@@ -33,9 +41,11 @@ export const ApiIssueSchema = z.object({
 
 export const ApiErrorCodeSchema = z.enum([
   "bad_request",
+  "unauthorized",
   "not_found",
   "method_not_allowed",
   "validation_error",
+  "conflict",
   "internal_error",
 ]);
 
@@ -101,6 +111,9 @@ export const CreateRunRequestSchema = z.object({
   input: RunInputSchema.default({}),
   modelProvider: OpenAICompatibleSettingsSchema.optional(),
   modelProviderKeys: ModelProviderKeysSchema.optional(),
+  // Inline workflow definition for anonymous/unsaved runs. When present the
+  // server executes it directly; otherwise it looks the workflow up by id.
+  workflow: WorkflowFileSchema.optional(),
 });
 
 export const WorkflowRunOutputSchema = z.object({
@@ -126,6 +139,10 @@ export const WorkflowRunSchema = z.object({
   createdAt: z.string().datetime(),
   startedAt: z.string().datetime().nullable(),
   completedAt: z.string().datetime().nullable(),
+});
+
+export const ListWorkflowRunsResponseSchema = z.object({
+  runs: z.array(WorkflowRunSchema),
 });
 
 export const CreateRunResponseSchema = z.object({
@@ -201,6 +218,66 @@ export const RunSseEventSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+// ---------------------------------------------------------------------------
+// Provider API keys (user-private, server-encrypted). Plaintext is never
+// returned to the client — only a masked representation.
+// ---------------------------------------------------------------------------
+
+export const ProviderKeyDtoSchema = z.object({
+  provider: z.string().min(1),
+  last4: z.string(),
+  hasKey: z.literal(true),
+});
+
+export const ListProviderKeysResponseSchema = z.object({
+  keys: z.array(ProviderKeyDtoSchema),
+});
+
+export const PutProviderKeyRequestSchema = z.object({
+  apiKey: z.string().min(1),
+});
+
+export const PutProviderKeyResponseSchema = z.object({
+  key: ProviderKeyDtoSchema,
+});
+
+// ---------------------------------------------------------------------------
+// Custom models (user-private). userId is server-derived, never client-sent.
+// ---------------------------------------------------------------------------
+
+export const CustomModelDtoSchema = z.object({
+  id: z.string(),
+  provider: z.string().min(1),
+  model: z.string().min(1),
+  baseURL: z.string().url().nullable().optional(),
+  label: z.string().nullable().optional(),
+  createdAt: z.string(),
+});
+
+export const ListCustomModelsResponseSchema = z.object({
+  models: z.array(CustomModelDtoSchema),
+});
+
+export const CreateCustomModelRequestSchema = z.object({
+  provider: z.string().min(1),
+  model: z.string().min(1),
+  baseURL: z.string().url().optional(),
+  label: z.string().optional(),
+});
+
+export const CreateCustomModelResponseSchema = z.object({
+  model: CustomModelDtoSchema,
+});
+
+export type ProviderKeyDto = z.infer<typeof ProviderKeyDtoSchema>;
+export type ListProviderKeysResponse = z.infer<typeof ListProviderKeysResponseSchema>;
+export type PutProviderKeyRequest = z.input<typeof PutProviderKeyRequestSchema>;
+export type PutProviderKeyResponse = z.infer<typeof PutProviderKeyResponseSchema>;
+export type CustomModelDto = z.infer<typeof CustomModelDtoSchema>;
+export type ListCustomModelsResponse = z.infer<typeof ListCustomModelsResponseSchema>;
+export type CreateCustomModelRequest = z.input<typeof CreateCustomModelRequestSchema>;
+export type CreateCustomModelResponse = z.infer<typeof CreateCustomModelResponseSchema>;
+
 export type ApiIssue = z.infer<typeof ApiIssueSchema>;
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>;
 export type ApiErrorResponse = z.infer<typeof ApiErrorResponseSchema>;
@@ -218,6 +295,7 @@ export type CreateRunRequest = z.input<typeof CreateRunRequestSchema>;
 export type WorkflowRunOutput = z.infer<typeof WorkflowRunOutputSchema>;
 export type WorkflowRun = z.infer<typeof WorkflowRunSchema>;
 export type CreateRunResponse = z.infer<typeof CreateRunResponseSchema>;
+export type ListWorkflowRunsResponse = z.infer<typeof ListWorkflowRunsResponseSchema>;
 export type GetRunResponse = z.infer<typeof GetRunResponseSchema>;
 export type RunEventType = z.infer<typeof RunEventTypeSchema>;
 export type RunEvent = z.infer<typeof RunEventSchema>;

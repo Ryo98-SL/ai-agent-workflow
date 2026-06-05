@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import Editor from "@monaco-editor/react";
+import { useTheme } from "../../theme/ThemeProvider";
 
 type JsonViewerProps = {
   value: unknown;
@@ -15,6 +16,7 @@ const VERTICAL_PADDING = 16;
  * Height auto-fits the content up to `maxHeight`, then scrolls internally.
  */
 export function JsonViewer({ value, maxHeight = 240 }: JsonViewerProps) {
+  const { resolvedTheme } = useTheme();
   const text = useMemo(() => {
     try {
       return JSON.stringify(value, null, 2);
@@ -27,11 +29,11 @@ export function JsonViewer({ value, maxHeight = 240 }: JsonViewerProps) {
   const height = Math.min(maxHeight, lineCount * LINE_HEIGHT + VERTICAL_PADDING);
 
   return (
-    <div className="overflow-hidden rounded-md border border-slate-800 bg-[#1e1e1e]">
+    <div className="overflow-hidden rounded-md border border-border bg-card">
       <Editor
         value={text}
         language="json"
-        theme="vs-dark"
+        theme={resolvedTheme === "dark" ? "vs-dark" : "light"}
         height={height}
         options={{
           readOnly: true,

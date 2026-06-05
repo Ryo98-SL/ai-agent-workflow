@@ -13,10 +13,13 @@ Components are themed entirely through the CSS-variable tokens declared in
 - `button.tsx` — `Button` + `buttonVariants` (variant: default/destructive/
   outline/secondary/ghost/link; size: default/sm/lg/icon). Supports `asChild`
   via Radix `Slot`.
+- `button-group.tsx` — `ButtonGroup` composition primitive for adjacent action
+  buttons and separators.
 - `card.tsx` — `Card` and `CardHeader`/`CardTitle`/`CardDescription`/
   `CardContent`/`CardFooter` content containers.
 - `input.tsx` — `Input` themed text field.
 - `label.tsx` — `Label` built on `@radix-ui/react-label`.
+- `separator.tsx` — `Separator` built on `@radix-ui/react-separator`.
 - `badge.tsx` — `Badge` + `badgeVariants` status indicator.
 
 ## Conventions

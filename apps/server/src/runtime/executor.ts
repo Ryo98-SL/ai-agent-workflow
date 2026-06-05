@@ -61,6 +61,11 @@ export async function executeWorkflowRuntime(
   const checkpointer = options.checkpointer ?? new MemorySaver();
   const threadId = options.threadId ?? randomUUID();
 
+  // Hoisted so the catch block can emit a node.failed for the running node.
+  const nodeById = new Map(workflow.graph.nodes.map((node) => [node.id, node]));
+  const nodeStartTimes = new Map<string, number>();
+  let runningNodeId: string | undefined;
+
   try {
     logger.info("runtime.execution.started", {
       workflowName: workflow.metadata.name,
@@ -70,7 +75,6 @@ export async function executeWorkflowRuntime(
       threadId,
     });
     const { startNode, reachableNodes } = validateWorkflow(workflow);
-    const nodeById = new Map(workflow.graph.nodes.map((node) => [node.id, node]));
     const reachableNodeIds = new Set(reachableNodes.map((node) => node.id));
     const graph = new StateGraph(RuntimeStateAnnotation) as any;
     const context: RuntimeNodeBuildContext = { fetchImpl, input, workflow };
@@ -141,7 +145,6 @@ export async function executeWorkflowRuntime(
 
     const compiled = graph.compile({ checkpointer });
     let finalGraphState: RuntimeGraphState = { values: {} };
-    const nodeStartTimes = new Map<string, number>();
 
     const streamEventsIterable = compiled.streamEvents(
       { values: {} },
@@ -162,6 +165,7 @@ export async function executeWorkflowRuntime(
 
       if (langEvent.event === "on_chain_start" && nodeId) {
         nodeStartTimes.set(nodeId, Date.now());
+        runningNodeId = nodeId;
         const node = nodeById.get(nodeId)!;
         const event: RuntimeStreamEvent = { type: "node.started", payload: langEvent, nodeId, nodeType: node.type };
         streamEvents.push(event);
@@ -174,6 +178,7 @@ export async function executeWorkflowRuntime(
           await options.onStreamEvent?.(event);
         }
       } else if (langEvent.event === "on_chain_end" && nodeId) {
+        if (runningNodeId === nodeId) runningNodeId = undefined;
         const startTime = nodeStartTimes.get(nodeId) ?? Date.now();
         const durationMs = Date.now() - startTime;
         const node = nodeById.get(nodeId)!;
@@ -190,6 +195,7 @@ export async function executeWorkflowRuntime(
         streamEvents.push(event);
         await options.onStreamEvent?.(event);
       } else if (langEvent.event === "on_chain_error" && nodeId) {
+        if (runningNodeId === nodeId) runningNodeId = undefined;
         const startTime = nodeStartTimes.get(nodeId) ?? Date.now();
         const durationMs = Date.now() - startTime;
         const node = nodeById.get(nodeId)!;
@@ -221,6 +227,29 @@ export async function executeWorkflowRuntime(
     return { ok: true, state: finalGraphState.values, nodeResults, streamEvents };
   } catch (error) {
     const normalizedError = normalizeRuntimeError(error);
+
+    // The streaming iterator aborts on a node error without emitting
+    // on_chain_error, so the node that was running never got a node.failed
+    // event. Emit one now so the client can render the failure on that node
+    // instead of leaving it stuck "running".
+    if (runningNodeId && nodeById.has(runningNodeId)) {
+      const node = nodeById.get(runningNodeId)!;
+      const durationMs = Date.now() - (nodeStartTimes.get(runningNodeId) ?? Date.now());
+      const failedEvent: RuntimeStreamEvent = {
+        type: "node.failed",
+        payload: { message: normalizedError.message },
+        nodeId: runningNodeId,
+        nodeType: node.type,
+        durationMs,
+      };
+      streamEvents.push(failedEvent);
+      try {
+        await options.onStreamEvent?.(failedEvent);
+      } catch {
+        // Ignore listener failures during teardown.
+      }
+    }
+
     logger.error("runtime.execution.failed", {
       workflowName: workflow.metadata.name,
       nodeResultCount: nodeResults.length,

@@ -1,11 +1,21 @@
 import { ChevronDown, KeyRound } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
-import type { LLMModelSettings, OpenAICompatibleSettings } from "@ai-agent-workflow/workflow-domain";
+import type { LLMModelSettings, ModelProvider, OpenAICompatibleSettings } from "@ai-agent-workflow/workflow-domain";
+import { Input } from "@workbench/components/ui/input";
 import { Button } from "./Button";
+import { FIELD_INPUT_CLASS, FIELD_SHELL_CLASS, FIELD_SHELL_INPUT_CLASS } from "./fieldStyles";
 import { ModelSelectorField } from "./ModelSelectorField";
 import { getProviderOption, PROVIDER_OPTIONS, type ProviderOption } from "./modelCatalog";
 
 export type EditableModelSettings = OpenAICompatibleSettings | LLMModelSettings;
+
+/** A user-saved custom model surfaced in the selector (authenticated users). */
+export type SelectorCustomModel = {
+  id: string;
+  provider: ModelProvider;
+  model: string;
+  baseURL?: string;
+};
 
 type ModelSettingsEditorProps = {
   settings: EditableModelSettings;
@@ -16,6 +26,13 @@ type ModelSettingsEditorProps = {
   showAdvanced?: boolean;
   onApiKeyChange?: (apiKey: string) => void;
   onChange: (settings: EditableModelSettings) => void;
+  /** Overrides the default API key input (e.g. a server-managed key field). */
+  renderApiKeyField?: () => ReactNode;
+  /** User-saved custom models to show in the selector. */
+  customModels?: SelectorCustomModel[];
+  /** When provided, "Add custom model" persists via this instead of just selecting. */
+  onAddCustomModel?: (provider: ModelProvider, model: string, baseURL?: string) => void;
+  onRemoveCustomModel?: (id: string) => void;
 };
 
 export function ModelSettingsEditor({
@@ -27,6 +44,10 @@ export function ModelSettingsEditor({
   showAdvanced = false,
   onApiKeyChange,
   onChange,
+  renderApiKeyField,
+  customModels,
+  onAddCustomModel,
+  onRemoveCustomModel,
 }: ModelSettingsEditorProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const availableProviders = useMemo(
@@ -68,27 +89,37 @@ export function ModelSettingsEditor({
         selectedProvider={selectedProvider}
         selectorId={selectorId}
         value={settings}
-        onModelNameChange={(model) => update({ model })}
         onSelectModel={selectModel}
+        customModels={customModels}
+        onAddCustomModel={onAddCustomModel}
+        onRemoveCustomModel={onRemoveCustomModel}
       />
 
-      <Field label="Base URL">
-        <input
+      <Field label="Custom API endpoint URL (optional)">
+        <Input
           value={settings.baseURL}
           onChange={(event) => update({ baseURL: event.target.value })}
-          className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm"
+          className={FIELD_INPUT_CLASS}
           placeholder={selectedProvider.defaultBaseURL}
         />
       </Field>
 
-      {settings.provider !== "ollama" && (
+      {settings.provider === "ollama" ? (
         <Field label="API Key">
-          <div className="flex items-center gap-2 rounded-md border border-slate-200 px-2">
-            <KeyRound size={14} className="text-slate-400" aria-hidden />
+          <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+            Ollama runs locally — no API key needed.
+          </p>
+        </Field>
+      ) : renderApiKeyField ? (
+        <Field label="API Key">{renderApiKeyField()}</Field>
+      ) : (
+        <Field label="API Key">
+          <div className={FIELD_SHELL_CLASS}>
+            <KeyRound size={14} className="text-muted-foreground" aria-hidden />
             <input
               value={selectedApiKey}
               onChange={(event) => changeApiKey(event.target.value)}
-              className="h-9 min-w-0 flex-1 text-sm outline-none"
+              className={FIELD_SHELL_INPUT_CLASS}
               placeholder={apiKeyPlaceholder}
               type="password"
             />
@@ -97,28 +128,28 @@ export function ModelSettingsEditor({
       )}
 
       {showAdvanced && (
-        <section className="rounded-md border border-slate-200 bg-slate-50">
+        <section className="rounded-md border border-border bg-muted/50">
           <Button
             variant="ghost"
             size="unstyled"
-            className="flex h-10 w-full items-center justify-between px-3 text-sm font-semibold text-slate-700"
+            className="flex h-10 w-full items-center justify-between px-3 text-sm font-semibold text-foreground"
             onClick={() => setAdvancedOpen((current) => !current)}
             aria-expanded={advancedOpen}
           >
             <span>Advanced</span>
             <ChevronDown
               size={16}
-              className={["text-slate-400 transition-transform", advancedOpen ? "rotate-180" : ""].join(" ")}
+              className={["text-muted-foreground transition-transform", advancedOpen ? "rotate-180" : ""].join(" ")}
               aria-hidden
             />
           </Button>
           {advancedOpen && (
-            <div className="grid grid-cols-2 gap-3 border-t border-slate-200 p-3">
+            <div className="grid grid-cols-2 gap-3 border-t border-border p-3">
               <Field label="Temperature">
-                <input
+                <Input
                   value={(settings as LLMModelSettings).temperature ?? 0.7}
                   onChange={(event) => update({ temperature: Number(event.target.value) })}
-                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+                  className={FIELD_INPUT_CLASS}
                   min={0}
                   max={2}
                   step={0.1}
@@ -126,10 +157,10 @@ export function ModelSettingsEditor({
                 />
               </Field>
               <Field label="Max tokens">
-                <input
+                <Input
                   value={(settings as LLMModelSettings).maxTokens ?? 800}
                   onChange={(event) => update({ maxTokens: Number(event.target.value) })}
-                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+                  className={FIELD_INPUT_CLASS}
                   min={1}
                   type="number"
                 />
@@ -145,7 +176,7 @@ export function ModelSettingsEditor({
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-slate-600">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
       {children}
     </label>
   );

@@ -49,6 +49,12 @@ durable execution. Supported runs compile the reachable Start/LLM subset with
 LangGraph and invoke provider-aware LangChain chat models for DeepSeek or
 Ollama.
 
+Workbench run history has two separate views: the Node Inspector History tab
+queries all runs for the active workflow and filters them to the selected node,
+while the header run-history menu opens a read-only Debug Panel for that run.
+The header view does not show Start inputs and does not replace the live debug
+state or mutate the current workflow.
+
 ## Test Strategy
 
 - Root legacy tests cover the old local runtime adapters.

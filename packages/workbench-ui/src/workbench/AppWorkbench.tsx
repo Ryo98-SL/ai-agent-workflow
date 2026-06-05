@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type SetStateAction } from "react";
 import { useWorkflowExecution } from "./hooks/useWorkflowExecution";
+import { useWorkflowGraphHistory } from "./hooks/useWorkflowGraphHistory";
 import { Loader2 } from "lucide-react";
 import {
   createDefaultWorkflow,
@@ -15,19 +16,51 @@ import {
 import type { WorkflowDto } from "@ai-agent-workflow/api-contracts";
 import type { RunInput } from "@ai-agent-workflow/api-contracts";
 import { WorkbenchLayout } from "./components/WorkbenchLayout";
+import { ThemeProvider } from "../theme/ThemeProvider";
+import { WorkbenchDataProvider, useWorkbenchData } from "../data/WorkbenchDataProvider";
+import { useActiveWorkflowApi } from "../data/useActiveWorkflowApi";
+import { useSession } from "../data/useAccount";
+import { useQueryClient } from "@tanstack/react-query";
+import type { WorkflowMetaPatch } from "./components/WorkflowMetaEditor";
+import { ImportLocalDataPrompt } from "../auth/ImportLocalDataPrompt";
 import type { AddNodeOptions, AppWorkbenchProps, DebugState } from "./types";
+import { workflowDirtySnapshot } from "./workflowDirtySnapshot";
 
-export function AppWorkbench({ workflowApi, showDevModelProviders = false }: AppWorkbenchProps) {
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:8788";
+
+export function AppWorkbench({ apiBaseUrl, ...props }: AppWorkbenchProps) {
+  return (
+    <ThemeProvider>
+      <WorkbenchDataProvider workflowApi={props.workflowApi} apiBaseUrl={apiBaseUrl ?? DEFAULT_API_BASE_URL}>
+        <ImportLocalDataPrompt />
+        <WorkbenchApp {...props} />
+      </WorkbenchDataProvider>
+    </ThemeProvider>
+  );
+}
+
+function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
+  // Server-backed when signed in, localStorage-backed when anonymous.
+  const workflowApi = useActiveWorkflowApi();
+  const { isPending: sessionPending } = useSession();
+  const { workflowRefreshNonce } = useWorkbenchData();
+  const queryClient = useQueryClient();
   const [workflow, setWorkflow] = useState<WorkflowFile>(() => createDefaultWorkflow());
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
-  const { nodeStates, debugState, setDebugState, runWorkflow: execRunWorkflow, cleanup: cleanupExecution } = useWorkflowExecution(workflowApi);
+  const { nodeStates, debugState, setDebugState, runWorkflow: execRunWorkflow } = useWorkflowExecution(workflowApi);
   const [workflowId, setWorkflowId] = useState<string | undefined>();
-  const [dirty, setDirty] = useState(false);
+  const [savedWorkflowSnapshot, setSavedWorkflowSnapshot] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [viewedDebugState, setViewedDebugState] = useState<DebugState | undefined>();
+  const { canRedo, canUndo, commitGraphHistoryEntry, redo, resetHistory, undo } = useWorkflowGraphHistory({
+    setWorkflow,
+  });
+  const currentWorkflowSnapshot = useMemo(() => workflowDirtySnapshot(workflow), [workflow]);
+  const dirty = savedWorkflowSnapshot !== null && currentWorkflowSnapshot !== savedWorkflowSnapshot;
 
   const selectedNode = useMemo(
     () => workflow.graph.nodes.find((node) => node.id === selectedNodeId),
@@ -38,22 +71,25 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
     setSelectedNodeId("");
     setInspectorOpen(false);
     setDebugOpen(false);
+    setViewedDebugState(undefined);
   }, []);
 
   const applyWorkflowDto = useCallback(
     (dto: WorkflowDto) => {
       setWorkflow(dto.workflow);
       setWorkflowId(dto.id);
-      setDirty(false);
+      setSavedWorkflowSnapshot(workflowDirtySnapshot(dto.workflow));
+      resetHistory();
       resetSelectionPanels();
     },
-    [resetSelectionPanels],
+    [resetHistory, resetSelectionPanels],
   );
 
   const applySavedWorkflowDto = useCallback((dto: WorkflowDto, previousWorkflow: WorkflowFile) => {
-    setWorkflow(preserveTransientModelProvider(dto.workflow, previousWorkflow));
+    const nextWorkflow = preserveTransientModelProvider(dto.workflow, previousWorkflow);
+    setWorkflow(nextWorkflow);
     setWorkflowId(dto.id);
-    setDirty(false);
+    setSavedWorkflowSnapshot(workflowDirtySnapshot(nextWorkflow));
   }, []);
 
   const errorMessage = useCallback((error: unknown) => {
@@ -82,17 +118,37 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
   useEffect(() => {
     let cancelled = false;
 
+    // Wait until the session is resolved before bootstrapping. Otherwise the
+    // brief "pending" window is treated as anonymous and would persist a junk
+    // default workflow to localStorage (re-populating it right after import).
+    if (sessionPending) {
+      return;
+    }
+
     async function loadInitialWorkflow() {
       setDebugState({ status: "loading" });
       try {
         const list = await workflowApi.listWorkflows();
         const first = list.workflows[0];
-        const response = first
-          ? await workflowApi.getWorkflow(first.id)
-          : await workflowApi.createWorkflow({ workflow: workflowForServer(createDefaultWorkflow()) });
+
+        if (first) {
+          const response = await workflowApi.getWorkflow(first.id);
+          if (!cancelled) {
+            applyWorkflowDto(response.workflow);
+          }
+        } else if (!cancelled) {
+          // No workflows yet: show an unsaved draft (workflowId undefined). It is
+          // only persisted on the first save/run, so an untouched session leaves
+          // nothing behind.
+          const nextWorkflow = createDefaultWorkflow();
+          setWorkflow(nextWorkflow);
+          setWorkflowId(undefined);
+          setSavedWorkflowSnapshot(workflowDirtySnapshot(nextWorkflow));
+          resetHistory();
+          resetSelectionPanels();
+        }
 
         if (!cancelled) {
-          applyWorkflowDto(response.workflow);
           setDebugState({ status: "idle" });
           setInitialLoaded(true);
         }
@@ -108,11 +164,10 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
     return () => {
       cancelled = true;
     };
-  }, [applyWorkflowDto, errorMessage, workflowApi, workflowForServer]);
+  }, [applyWorkflowDto, errorMessage, resetHistory, workflowApi, resetSelectionPanels, sessionPending, workflowRefreshNonce]);
 
   const markWorkflow = useCallback((updater: SetStateAction<WorkflowFile>) => {
     setWorkflow(updater);
-    setDirty(true);
   }, []);
 
   const updateNode = useCallback(
@@ -160,20 +215,13 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
         : { x: 180 + workflow.graph.nodes.length * 32, y: 120 + workflow.graph.nodes.length * 24 };
       const node = createNode(type, position, workflow.graph.nodes);
       const edge = anchorNode ? createConnectedNodeEdge(anchorNode.id, node.id, options?.handleType) : undefined;
-      markWorkflow((current) => ({
-        ...current,
-        graph: {
-          ...current.graph,
-          nodes: [...current.graph.nodes, node],
-          edges: edge ? [...current.graph.edges, edge] : current.graph.edges,
-        },
-      }));
+      commitGraphHistoryEntry({ type: "addNode", node, edges: edge ? [edge] : [] });
       setSelectedNodeId(node.id);
       setInspectorOpen(true);
       setDebugOpen(false);
       setPaletteOpen(false);
     },
-    [markWorkflow, workflow.graph.nodes],
+    [commitGraphHistoryEntry, workflow.graph.nodes],
   );
 
   const handleSelectNode = useCallback((nodeId: string) => {
@@ -192,39 +240,107 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
     setWorkflow(next);
     resetSelectionPanels();
     setDebugState({ status: "idle" });
+    setViewedDebugState(undefined);
     setWorkflowId(undefined);
-    setDirty(false);
-  }, [resetSelectionPanels]);
+    setSavedWorkflowSnapshot(workflowDirtySnapshot(next));
+    resetHistory();
+  }, [resetHistory, resetSelectionPanels]);
 
-  const handleOpenWorkflow = useCallback(async () => {
-    setDebugState({ status: "loading" });
-    try {
-      const list = await workflowApi.listWorkflows();
-      const first = list.workflows[0];
-      if (!first) {
-        const created = await workflowApi.createWorkflow({ workflow: workflowForServer(createDefaultWorkflow()) });
-        applyWorkflowDto(created.workflow);
-      } else {
-        const response = await workflowApi.getWorkflow(first.id);
+  const invalidateWorkflowList = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["workflows"] });
+  }, [queryClient]);
+
+  const switchWorkflow = useCallback(
+    async (id: string) => {
+      if (id === workflowId) return;
+      setDebugState({ status: "loading" });
+      setViewedDebugState(undefined);
+      try {
+        const response = await workflowApi.getWorkflow(id);
         applyWorkflowDto(response.workflow);
+        setDebugState({ status: "idle" });
+      } catch (error) {
+        setDebugState({ status: "error", error: errorMessage(error) });
       }
-      setDebugState({ status: "idle" });
-    } catch (error) {
-      setDebugState({ status: "error", error: errorMessage(error) });
-    }
-  }, [applyWorkflowDto, errorMessage, workflowApi, workflowForServer]);
+    },
+    [applyWorkflowDto, errorMessage, workflowApi, workflowId],
+  );
+
+  const deleteWorkflowById = useCallback(
+    async (id: string) => {
+      try {
+        await workflowApi.deleteWorkflow(id);
+        invalidateWorkflowList();
+        if (id === workflowId) {
+          // Deleted the open workflow — load another, or start a fresh draft.
+          const list = await workflowApi.listWorkflows();
+          const next = list.workflows[0];
+          if (next) {
+            const response = await workflowApi.getWorkflow(next.id);
+            applyWorkflowDto(response.workflow);
+          } else {
+            handleNewWorkflow();
+          }
+        }
+      } catch (error) {
+        setDebugState({ status: "error", error: errorMessage(error) });
+      }
+    },
+    [applyWorkflowDto, errorMessage, handleNewWorkflow, invalidateWorkflowList, workflowApi, workflowId],
+  );
+
+  const updateWorkflowMeta = useCallback(
+    (patch: WorkflowMetaPatch) => {
+      markWorkflow((current) => ({
+        ...current,
+        metadata: { ...current.metadata, ...patch },
+      }));
+    },
+    [markWorkflow],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || isWorkflowShortcutEditableTarget(event.target)) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      if (key === "z" && event.shiftKey) {
+        event.preventDefault();
+        redo();
+        return;
+      }
+
+      if (key === "z") {
+        event.preventDefault();
+        undo();
+        return;
+      }
+
+      if (key === "y" && !event.shiftKey) {
+        event.preventDefault();
+        redo();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [redo, undo]);
+
 
   const saveWorkflow = useCallback(
     async (mode: "save" | "saveAs") => {
       setDebugState({ status: "loading" });
       try {
         await persistWorkflow(mode);
+        invalidateWorkflowList();
         setDebugState({ status: "idle" });
       } catch (error) {
         setDebugState({ status: "error", error: errorMessage(error) });
       }
     },
-    [errorMessage, persistWorkflow],
+    [errorMessage, invalidateWorkflowList, persistWorkflow],
   );
 
   const runWorkflow = useCallback(
@@ -233,6 +349,7 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
         return;
       }
 
+      setViewedDebugState(undefined);
       setDebugOpen(true);
 
       try {
@@ -249,6 +366,38 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
     [debugState.status, dirty, errorMessage, execRunWorkflow, persistWorkflow, setDebugState, workflow, workflowId],
   );
 
+  const openHistoricalRun = useCallback(
+    async (runId: string) => {
+      setInspectorOpen(false);
+      setSelectedNodeId("");
+      setDebugOpen(true);
+      setViewedDebugState({ status: "loading" });
+      try {
+        const [runResponse, eventsResponse] = await Promise.all([
+          workflowApi.getRun(runId),
+          workflowApi.listRunEvents(runId),
+        ]);
+        setViewedDebugState({
+          status: runResponse.run.status === "failed" ? "error" : "success",
+          result: { run: runResponse.run, events: eventsResponse.events },
+        });
+      } catch (error) {
+        setViewedDebugState({ status: "error", error: errorMessage(error) });
+      }
+    },
+    [errorMessage, workflowApi],
+  );
+
+  const closeDebug = useCallback(() => {
+    setDebugOpen(false);
+    setViewedDebugState(undefined);
+  }, []);
+
+  const toggleRunPanel = useCallback(() => {
+    setViewedDebugState(undefined);
+    setDebugOpen((state) => !state);
+  }, []);
+
   if (!initialLoaded) {
     return <WorkbenchStartupState error={debugState.error} />;
   }
@@ -261,6 +410,7 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
       selectedNode={selectedNode}
       selectedNodeId={selectedNodeId}
       debugState={debugState}
+      viewedDebugState={viewedDebugState}
       nodeStates={nodeStates}
       paletteOpen={paletteOpen}
       settingsOpen={settingsOpen}
@@ -268,24 +418,48 @@ export function AppWorkbench({ workflowApi, showDevModelProviders = false }: App
       debugOpen={debugOpen}
       showDevModelProviders={showDevModelProviders}
       onAddNode={addNode}
-      onCloseDebug={() => setDebugOpen(false)}
+      onCloseDebug={closeDebug}
       onCloseInspector={handleCloseInspector}
+      canRedo={canRedo}
+      canUndo={canUndo}
       onClosePalette={() => setPaletteOpen(false)}
       onCloseSettings={() => setSettingsOpen(false)}
-      onNewWorkflow={handleNewWorkflow}
-      onOpenWorkflow={handleOpenWorkflow}
-      onToggleRunPanel={() => setDebugOpen((state) => !state)}
+      onCommitGraphHistoryEntry={commitGraphHistoryEntry}
+      onRedo={redo}
+      onToggleRunPanel={toggleRunPanel}
       onRunWorkflow={runWorkflow}
+      onOpenHistoricalRun={openHistoricalRun}
+      onSwitchWorkflow={switchWorkflow}
+      onCreateWorkflow={handleNewWorkflow}
+      onDeleteWorkflow={deleteWorkflowById}
+      onUpdateWorkflowMeta={updateWorkflowMeta}
       onSaveWorkflow={() => saveWorkflow("save")}
-      onSaveWorkflowAs={() => saveWorkflow("saveAs")}
       onSelectNode={handleSelectNode}
       onTogglePalette={() => setPaletteOpen((current) => !current)}
       onToggleSettings={() => setSettingsOpen((current) => !current)}
+      onUndo={undo}
       onUpdateModelSettings={updateModelSettings}
       onUpdateNode={updateNode}
-      onWorkflowChange={markWorkflow}
     />
   );
+}
+
+function isWorkflowShortcutEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (target.isContentEditable || target.closest("[contenteditable='true']")) {
+    return true;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+  if (tagName === "input" || tagName === "textarea" || tagName === "select") {
+    return true;
+  }
+
+  const role = target.getAttribute("role");
+  return role === "textbox" || role === "combobox" || role === "searchbox";
 }
 
 function createConnectedNodeEdge(
@@ -305,18 +479,18 @@ function createConnectedNodeEdge(
 
 function WorkbenchStartupState({ error }: { error?: string }) {
   return (
-    <main className="flex h-full min-h-0 items-center justify-center bg-slate-50 p-6 text-slate-950">
-      <section className="w-full max-w-sm rounded-md border border-slate-200 bg-white p-5 text-center shadow-sm">
+    <main className="flex h-full min-h-0 items-center justify-center bg-background p-6 text-foreground">
+      <section className="w-full max-w-sm rounded-md border border-border bg-card p-5 text-center shadow-sm">
         {error ? (
           <>
-            <h1 className="text-sm font-semibold text-slate-900">Workflow load failed</h1>
-            <p className="mt-2 text-sm leading-5 text-rose-600">{error}</p>
+            <h1 className="text-sm font-semibold text-foreground">Workflow load failed</h1>
+            <p className="mt-2 text-sm leading-5 text-destructive">{error}</p>
           </>
         ) : (
           <>
-            <Loader2 size={22} className="mx-auto animate-spin text-slate-500" aria-hidden />
-            <h1 className="mt-3 text-sm font-semibold text-slate-900">Loading workflow</h1>
-            <p className="mt-2 text-sm leading-5 text-slate-500">Syncing workflow state with the server.</p>
+            <Loader2 size={22} className="mx-auto animate-spin text-muted-foreground" aria-hidden />
+            <h1 className="mt-3 text-sm font-semibold text-foreground">Loading workflow</h1>
+            <p className="mt-2 text-sm leading-5 text-muted-foreground">Syncing workflow state with the server.</p>
           </>
         )}
       </section>

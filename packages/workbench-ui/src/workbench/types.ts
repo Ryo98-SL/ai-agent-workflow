@@ -1,4 +1,13 @@
-import type { CreateRunRequest, RunEvent, WorkflowDto, WorkflowRun, WorkflowSummary } from "@ai-agent-workflow/api-contracts";
+import type {
+  CreateCustomModelRequest,
+  CreateRunRequest,
+  CustomModelDto,
+  ProviderKeyDto,
+  RunEvent,
+  WorkflowDto,
+  WorkflowRun,
+  WorkflowSummary,
+} from "@ai-agent-workflow/api-contracts";
 import type {
   ModelProviderKeys,
   OpenAICompatibleSettings,
@@ -50,15 +59,28 @@ export type WorkbenchWorkflowApi = {
   createWorkflow: (request?: { workflow?: WorkflowFile }) => Promise<{ workflow: WorkflowDto }>;
   getWorkflow: (id: string) => Promise<{ workflow: WorkflowDto }>;
   updateWorkflow: (id: string, request: { workflow: WorkflowFile }) => Promise<{ workflow: WorkflowDto }>;
+  deleteWorkflow: (id: string) => Promise<void>;
   createRun: (workflowId: string, request?: CreateRunRequest) => Promise<{ run: WorkflowRun }>;
+  listWorkflowRuns: (workflowId: string) => Promise<{ runs: WorkflowRun[] }>;
   getRun: (runId: string) => Promise<{ run: WorkflowRun }>;
   listRunEvents: (runId: string) => Promise<{ events: RunEvent[] }>;
   runStreamUrl: (runId: string) => string;
+  listProviderKeys: () => Promise<{ keys: ProviderKeyDto[] }>;
+  putProviderKey: (provider: string, request: { apiKey: string }) => Promise<{ key: ProviderKeyDto }>;
+  deleteProviderKey: (provider: string) => Promise<void>;
+  listCustomModels: () => Promise<{ models: CustomModelDto[] }>;
+  createCustomModel: (request: CreateCustomModelRequest) => Promise<{ model: CustomModelDto }>;
+  deleteCustomModel: (id: string) => Promise<void>;
 };
 
 export type AppWorkbenchProps = {
   workflowApi: WorkbenchWorkflowApi;
   showDevModelProviders?: boolean;
+  /**
+   * Base URL of the auth/api server, used to construct the Better Auth client.
+   * Defaults to VITE_WORKFLOW_API_BASE_URL semantics on the host app side.
+   */
+  apiBaseUrl?: string;
 };
 
 export type WorkflowNodePaletteHandleType = "target" | "source";

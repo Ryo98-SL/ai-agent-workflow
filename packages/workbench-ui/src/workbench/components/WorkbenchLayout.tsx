@@ -1,5 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
-import { FilePlus2, Loader2, Play, Plus, Settings } from "lucide-react";
+import { Loader2, Play, Plus, Settings } from "lucide-react";
 import type {
   ModelProviderKeys,
   OpenAICompatibleSettings,
@@ -12,12 +11,17 @@ import { Button } from "./Button";
 import { DebugPanel } from "./DebugPanel";
 import { FloatingPanel } from "./FloatingPanel";
 import { ModelSettingsPanel } from "./ModelSettingsPanel";
-import { NodeInspector } from "./NodeInspector";
+import { NodeInspector, NodeInspectorPanelTitle } from "./NodeInspector";
 import { NodePalette } from "./NodePalette";
-import { NodeTypeIcon } from "./NodeTypeIcon";
 import { Popover } from "./Popover";
 import { ProjectFileActions } from "./ProjectFileActions";
+import { ThemeMenu } from "../../theme/ThemeMenu";
+import { AuthMenu } from "../../auth/AuthMenu";
+import { RunHistoryMenu } from "./RunHistoryMenu";
+import { WorkflowSwitcher } from "./WorkflowSwitcher";
+import { WorkflowMetaEditor, type WorkflowMetaPatch } from "./WorkflowMetaEditor";
 import { WorkflowCanvas } from "./WorkflowCanvas";
+import type { WorkflowGraphHistoryEntry } from "../hooks/useWorkflowGraphHistory";
 import type { AddNodeOptions, DebugState, NodeExecutionState } from "../types";
 
 type WorkbenchLayoutProps = {
@@ -27,29 +31,36 @@ type WorkbenchLayoutProps = {
   selectedNode?: WorkflowNode;
   selectedNodeId: string;
   debugState: DebugState;
+  viewedDebugState?: DebugState;
   nodeStates: Map<string, NodeExecutionState>;
   paletteOpen: boolean;
   settingsOpen: boolean;
   inspectorOpen: boolean;
   debugOpen: boolean;
   showDevModelProviders: boolean;
+  canRedo: boolean;
+  canUndo: boolean;
   onAddNode: (type: WorkflowNodeType, options?: AddNodeOptions) => void;
   onCloseDebug: () => void;
   onCloseInspector: () => void;
   onClosePalette: () => void;
   onCloseSettings: () => void;
-  onNewWorkflow: () => void;
-  onOpenWorkflow: () => void;
+  onCommitGraphHistoryEntry: (entry: WorkflowGraphHistoryEntry) => void;
+  onRedo: () => void;
   onToggleRunPanel: () => void;
   onRunWorkflow: (input: RunInput) => void;
+  onOpenHistoricalRun: (runId: string) => void;
+  onSwitchWorkflow: (id: string) => void;
+  onCreateWorkflow: () => void;
+  onDeleteWorkflow: (id: string) => void;
+  onUpdateWorkflowMeta: (patch: WorkflowMetaPatch) => void;
   onSaveWorkflow: () => void;
-  onSaveWorkflowAs: () => void;
   onSelectNode: (nodeId: string) => void;
   onTogglePalette: () => void;
   onToggleSettings: () => void;
+  onUndo: () => void;
   onUpdateModelSettings: (settings: OpenAICompatibleSettings, providerKeys: ModelProviderKeys) => void;
   onUpdateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
-  onWorkflowChange: Dispatch<SetStateAction<WorkflowFile>>;
 };
 
 export function WorkbenchLayout({
@@ -59,52 +70,59 @@ export function WorkbenchLayout({
   selectedNode,
   selectedNodeId,
   debugState,
+  viewedDebugState,
   nodeStates,
   paletteOpen,
   settingsOpen,
   inspectorOpen,
   debugOpen,
   showDevModelProviders,
+  canRedo,
+  canUndo,
   onAddNode,
   onCloseDebug,
   onCloseInspector,
   onClosePalette,
   onCloseSettings,
-  onNewWorkflow,
-  onOpenWorkflow,
+  onCommitGraphHistoryEntry,
+  onRedo,
   onToggleRunPanel,
   onRunWorkflow,
+  onOpenHistoricalRun,
+  onSwitchWorkflow,
+  onCreateWorkflow,
+  onDeleteWorkflow,
+  onUpdateWorkflowMeta,
   onSaveWorkflow,
-  onSaveWorkflowAs,
   onSelectNode,
   onTogglePalette,
   onToggleSettings,
+  onUndo,
   onUpdateModelSettings,
   onUpdateNode,
-  onWorkflowChange,
 }: WorkbenchLayoutProps) {
   const hasStartNode = workflow.graph.nodes.some((node) => node.type === "start");
+  const debugPanelState = viewedDebugState ?? debugState;
+  const debugPanelNodeStates = viewedDebugState ? new Map<string, NodeExecutionState>() : nodeStates;
+  const debugPanelReadOnly = Boolean(viewedDebugState);
 
   return (
-    <main className="relative h-full min-h-0 flex flex-col overflow-hidden bg-slate-50 text-slate-950">
-      <header className="z-30 flex h-12 shrink-0 items-center gap-3 border-b border-slate-200 bg-white/95 px-4 shadow-sm backdrop-blur">
-        <div className="flex size-8 items-center justify-center rounded-md bg-emerald-600 text-white">
-          <FilePlus2 size={16} aria-hidden />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-sm leading-4 font-semibold">{workflow.metadata.name}</h1>
-          <p className="truncate leading-3 text-xs text-slate-500">
-            {workflowId ? `Server workflow: ${workflowId}` : "Unsaved server workflow"} {dirty ? "• unsaved changes" : ""}
-          </p>
-        </div>
-        <ProjectFileActions
-            dirty={dirty}
-            filePath={workflowId}
-            onNew={onNewWorkflow}
-            onOpen={onOpenWorkflow}
-            onSave={onSaveWorkflow}
-            onSaveAs={onSaveWorkflowAs}
+    <main className="relative h-full min-h-0 flex flex-col overflow-hidden bg-background text-foreground">
+      <header className="z-30 flex h-12 shrink-0 items-center gap-3 border-b border-border bg-card/95 px-4 shadow-sm backdrop-blur">
+        <WorkflowSwitcher
+          workflow={workflow}
+          workflowId={workflowId}
+          dirty={dirty}
+          onSwitch={onSwitchWorkflow}
+          onCreate={onCreateWorkflow}
+          onDelete={onDeleteWorkflow}
         />
+        <WorkflowMetaEditor workflow={workflow} onUpdateMeta={onUpdateWorkflowMeta} />
+        <div className="min-w-0 flex-1" />
+        <ProjectFileActions dirty={dirty} filePath={workflowId} onSave={onSaveWorkflow} />
+        <RunHistoryMenu workflowId={workflowId} onOpenRun={onOpenHistoricalRun} />
+        <ThemeMenu />
+        <AuthMenu />
         <Popover
             id="workbench-model-settings"
             open={settingsOpen}
@@ -150,10 +168,14 @@ export function WorkbenchLayout({
           workflow={workflow}
           selectedNodeId={selectedNodeId}
           nodeStates={nodeStates}
+          canRedo={canRedo}
+          canUndo={canUndo}
           onAddNode={onAddNode}
           onClearSelection={onCloseInspector}
+          onCommitGraphHistoryEntry={onCommitGraphHistoryEntry}
+          onRedo={onRedo}
           onSelectNode={onSelectNode}
-          onWorkflowChange={onWorkflowChange}
+          onUndo={onUndo}
         />
       </section>
 
@@ -168,14 +190,14 @@ export function WorkbenchLayout({
               onClosePalette();
             }
           }}
-          placement="bottom-start"
+          placement="right"
           renderTrigger={({ ref, props }) => (
             <Button
               {...props}
               ref={ref}
               variant="secondary"
               size="iconMd"
-              className="text-slate-800 shadow-lg shadow-slate-900/10 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+              className="text-foreground shadow-lg shadow-black/10"
               onClick={onTogglePalette}
               aria-label="Open node palette"
               title="Node palette"
@@ -233,14 +255,20 @@ export function WorkbenchLayout({
             )}
           >
             <FloatingPanel
-              title="Run Log"
-              description="Workflow run"
+              title={debugPanelReadOnly ? "Run History" : "Run Log"}
+              description={debugPanelReadOnly ? "Historical run" : "Workflow run"}
               closeLabel="Close run log"
               onClose={onCloseDebug}
               className="h-full w-[560px]"
             >
               <div className="h-full overflow-hidden">
-                <DebugPanel workflow={workflow} debugState={debugState} nodeStates={nodeStates} onRun={onRunWorkflow} />
+                <DebugPanel
+                  workflow={workflow}
+                  debugState={debugPanelState}
+                  nodeStates={debugPanelNodeStates}
+                  onRun={onRunWorkflow}
+                  readOnly={debugPanelReadOnly}
+                />
               </div>
             </FloatingPanel>
           </Popover>
@@ -249,17 +277,19 @@ export function WorkbenchLayout({
 
       {inspectorOpen && selectedNode && (
         <FloatingPanel
-          title="Node Inspector"
-          description={selectedNode.label}
-          titleIcon={<NodeTypeIcon type={selectedNode.type} size={28} iconSize={16} />}
+          title={selectedNode.label}
+          headerContent={<NodeInspectorPanelTitle node={selectedNode} updateNode={onUpdateNode} />}
           closeLabel="Close node inspector"
           onClose={onCloseInspector}
-          className="absolute bottom-4 right-4 top-20 z-30 w-[380px]"
+          className="absolute bottom-4 right-4 top-[58px] z-30 w-[380px]"
         >
-          <div className="h-full overflow-y-auto">
+          <div className="h-full overflow-hidden">
             <NodeInspector
               workflow={workflow}
+              workflowId={workflowId}
               selectedNode={selectedNode}
+              debugState={debugState}
+              nodeStates={nodeStates}
               showDevModelProviders={showDevModelProviders}
               updateNode={onUpdateNode}
             />

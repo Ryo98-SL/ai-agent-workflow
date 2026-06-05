@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
 import { parsePromptVariableReferences, resolveLLMModelSettings } from "@ai-agent-workflow/workflow-domain";
 import type { LLMModelSettings, LLMNode, WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import { Textarea } from "@workbench/components/ui/textarea";
 import { Button } from "../Button";
 import { ModelCapabilityTags } from "../ModelCapabilityTags";
 import { DEFAULT_MODEL_SETTINGS } from "../ModelSettingsPanel";
@@ -31,29 +31,6 @@ export function LLMInspector({ workflow, node, showDevModelProviders = false, up
 
   return (
     <div className="space-y-4">
-      <Field label="Node id">
-        <input value={node.id} readOnly className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm" />
-      </Field>
-      <Field label="Label">
-        <input
-          value={node.label}
-          onChange={(event) =>
-            updateNode(node.id, (current) => (current.type === "llm" ? { ...current, label: event.target.value } : current))
-          }
-          className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm"
-        />
-      </Field>
-      <Field label="Description">
-        <textarea
-          value={node.description || ""}
-          onChange={(event) =>
-            updateNode(node.id, (current) =>
-              current.type === "llm" ? { ...current, description: event.target.value || undefined } : current,
-            )
-          }
-          className="min-h-20 w-full resize-y rounded-md border border-slate-200 p-2 text-sm leading-5"
-        />
-      </Field>
       <ModelSettingField
         hasModelOverride={hasModelOverride}
         modelSettings={modelSettings}
@@ -68,35 +45,35 @@ export function LLMInspector({ workflow, node, showDevModelProviders = false, up
         onReset={() => updateConfig({ model: undefined, modelSettings: undefined })}
       />
       <Field label="System prompt">
-        <textarea
+        <Textarea
           value={node.config.systemPrompt || ""}
           onChange={(event) => updateConfig({ systemPrompt: event.target.value })}
-          className="min-h-24 w-full resize-y rounded-md border border-slate-200 p-2 text-sm leading-5"
+          className="min-h-24 resize-y leading-5"
         />
       </Field>
       <Field label="User prompt">
-        <textarea
+        <Textarea
           value={node.config.userPrompt}
           onChange={(event) => updateConfig({ userPrompt: event.target.value })}
-          className="min-h-28 w-full resize-y rounded-md border border-slate-200 p-2 text-sm leading-5"
+          className="min-h-28 resize-y leading-5"
         />
       </Field>
       <section>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Prompt Variables</h3>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prompt Variables</h3>
         {variables.length === 0 ? (
-          <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Use {"{{start1.topic}}"} in prompts.</p>
+          <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">Use {"{{start1.topic}}"} in prompts.</p>
         ) : (
           <div className="space-y-2">
             {variables.map((variable) => {
               const status = variable.ok ? referenceStatus(workflow, variable.nodeId, variable.path) : variable.error;
               return (
-                <div key={variable.value} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                <div key={variable.value} className="rounded-md border border-border bg-muted p-3">
                   <div className="flex items-center justify-between gap-3">
-                    <code className="truncate text-xs font-semibold text-slate-700">{variable.value}</code>
+                    <code className="truncate text-xs font-semibold text-foreground">{variable.value}</code>
                     <span
                       className={[
                         "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
-                        status === "resolvable" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800",
+                        status === "resolvable" ? "bg-brand/15 text-brand" : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
                       ].join(" ")}
                     >
                       {status}
@@ -132,7 +109,7 @@ function ModelSettingField({
 
   return (
     <div>
-      <span className="mb-1 block text-xs font-medium text-slate-600">Model Setting</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">Model Setting</span>
       <Popover
         id={`llm-model-setting-${nodeId}`}
         open={open}
@@ -148,7 +125,7 @@ function ModelSettingField({
             onClick={() => setOpen((current) => !current)}
             aria-label="Open model setting"
           >
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background">
               <ModelProviderLogo provider={modelSettings.provider} />
             </span>
             <span className="min-w-0 flex-1">
@@ -159,8 +136,8 @@ function ModelSettingField({
           </Button>
         )}
       >
-        <div className="w-[360px] overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-xl shadow-slate-900/10">
-          <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div className="w-[360px] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl shadow-black/20">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <h3 className="text-sm font-semibold">Model Setting</h3>
             <Button variant="ghost" size="sm" onClick={onReset} disabled={!hasModelOverride}>
               Use workflow default
@@ -228,7 +205,7 @@ function referenceStatus(workflow: WorkflowFile, nodeId: string, path: string[])
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-slate-600">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
       {children}
     </label>
   );

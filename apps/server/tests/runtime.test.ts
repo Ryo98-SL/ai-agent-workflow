@@ -46,4 +46,25 @@ describe("workflow runtime executor", () => {
       llm1: { text: "Runtime stream output." },
     });
   });
+
+  it("streams node.failed for the running node when the model call throws", async () => {
+    const streamEvents: RuntimeStreamEvent[] = [];
+
+    const execution = await executeWorkflowRuntime(createDefaultWorkflow(), { topic: "boom" }, {
+      checkpointer: new MemorySaver(),
+      // Simulate the "fetch failed" network error the LLM node hit in production.
+      fetch: async () => {
+        throw new Error("fetch failed");
+      },
+      onStreamEvent: (event) => {
+        streamEvents.push(event);
+      },
+      threadId: "runtime-failure-test",
+    });
+
+    expect(execution.ok).toBe(false);
+    // The failing node must emit node.failed so the client can render it instead
+    // of leaving the node stuck "running".
+    expect(streamEvents.some((event) => event.type === "node.failed" && event.nodeId === "llm1")).toBe(true);
+  });
 });

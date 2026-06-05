@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:18.4-alpine3.23
+    container_name: ai-agent-workflow-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: workflow
+      POSTGRES_PASSWORD: workflow
+      POSTGRES_DB: workflow
+    ports:
+      - "5432:5432"
+    volumes:
+      # Postgres 18+ stores data in a version-specific subdir; mount the parent
+      # dir (NOT /data) per the official image guidance.
+      - workflow-db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workflow -d workflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  workflow-db-data:

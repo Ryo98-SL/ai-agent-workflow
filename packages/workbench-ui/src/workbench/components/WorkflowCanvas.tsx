@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
   Background,
-  Controls,
   MarkerType,
   MiniMap,
+  Panel,
   ReactFlow,
   type Connection,
   type Edge,
@@ -15,7 +15,9 @@ import {
 } from "@xyflow/react";
 import { resolveLLMModelSettings } from "@ai-agent-workflow/workflow-domain";
 import type { WorkflowEdge, WorkflowFile, WorkflowNode, WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
+import type { WorkflowGraphHistoryEntry } from "../hooks/useWorkflowGraphHistory";
 import type { AddNodeOptions, NodeExecutionState } from "../types";
+import { useTheme } from "../../theme/ThemeProvider";
 import { InlineNodePalettePopover, type InlineNodePaletteState } from "./InlineNodePalettePopover";
 import {
   CodeWorkflowNode,
@@ -31,15 +33,20 @@ import {
   type OpenWorkflowNodePalette,
   type WorkflowReactNode,
 } from "./workflowNodes";
+import { WorkflowCanvasControls } from "./WorkflowCanvasControls";
 
 type WorkflowCanvasProps = {
   workflow: WorkflowFile;
   selectedNodeId?: string;
   nodeStates: Map<string, NodeExecutionState>;
+  canRedo: boolean;
+  canUndo: boolean;
   onAddNode: (type: WorkflowNodeType, options?: AddNodeOptions) => void;
   onClearSelection: () => void;
+  onCommitGraphHistoryEntry: (entry: WorkflowGraphHistoryEntry) => void;
+  onRedo: () => void;
   onSelectNode: (nodeId: string) => void;
-  onWorkflowChange: Dispatch<SetStateAction<WorkflowFile>>;
+  onUndo: () => void;
 };
 
 const nodeTypes = {
@@ -54,6 +61,15 @@ const nodeTypes = {
 };
 
 type WorkflowFlowNode = WorkflowReactNode;
+
+const CANVAS_MIN_ZOOM = 0.4;
+const CANVAS_MAX_ZOOM = 1.6;
+const CANVAS_PANEL_INSET = 16;
+const CANVAS_CONTROL_HEIGHT = 36;
+const CANVAS_CONTROL_GAP = 12;
+const MINI_MAP_WIDTH = 160;
+const MINI_MAP_HEIGHT = 120;
+const MINI_MAP_BOTTOM_OFFSET = CANVAS_PANEL_INSET + CANVAS_CONTROL_HEIGHT + CANVAS_CONTROL_GAP;
 
 function toFlowNode(
   workflow: WorkflowFile,
@@ -107,8 +123,8 @@ function toFlowEdges(edges: WorkflowEdge[], selectedEdgeIds: Set<string>, hovere
   });
 }
 
-function toWorkflowEdges(edges: Edge[]): WorkflowEdge[] {
-  return edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target }));
+function toWorkflowEdge(edge: Edge): WorkflowEdge {
+  return { id: edge.id, source: edge.source, target: edge.target };
 }
 
 function isConnectedToHoveredNode(edge: WorkflowEdge, hoveredNodeId?: string) {
@@ -119,14 +135,21 @@ export function WorkflowCanvas({
   workflow,
   selectedNodeId,
   nodeStates,
+  canRedo,
+  canUndo,
   onAddNode,
   onClearSelection,
+  onCommitGraphHistoryEntry,
+  onRedo,
   onSelectNode,
-  onWorkflowChange,
+  onUndo,
 }: WorkflowCanvasProps) {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   const [selectedEdgeIds, setSelectedEdgeIds] = useState(() => new Set<string>());
   const [hoveredNodeId, setHoveredNodeId] = useState<string>();
   const [inlinePalette, setInlinePalette] = useState<InlineNodePaletteState | null>(null);
+  const [isInteractive, setIsInteractive] = useState(true);
   const openInlinePalette = useCallback<OpenWorkflowNodePalette>((sourceNode, handleType, anchorElement) => {
     setInlinePalette({
       sourceNodeId: sourceNode.id,
@@ -189,47 +212,51 @@ export function WorkflowCanvas({
         if (selectedNodeId && removedNodeIds.has(selectedNodeId)) {
           onClearSelection();
         }
-        onWorkflowChange((current) => ({
-          ...current,
-          graph: {
-            ...current.graph,
-            nodes: current.graph.nodes.filter((node) => !removedNodeIds.has(node.id)),
-            edges: current.graph.edges.filter((edge) => !removedNodeIds.has(edge.source) && !removedNodeIds.has(edge.target)),
-          },
-        }));
+        const removedNodes = workflow.graph.nodes.filter((node) => removedNodeIds.has(node.id));
+        const removedEdges = workflow.graph.edges.filter(
+          (edge) => removedNodeIds.has(edge.source) || removedNodeIds.has(edge.target),
+        );
+        if (removedNodes.length > 0) {
+          onCommitGraphHistoryEntry({ type: "removeNodes", nodes: removedNodes, edges: removedEdges });
+        }
       }
     },
-    [edges, onClearSelection, onWorkflowChange, selectedNodeId],
+    [edges, onClearSelection, onCommitGraphHistoryEntry, selectedNodeId, workflow.graph.edges, workflow.graph.nodes],
   );
 
-  const persistNodePositions = useCallback(
+  const commitNodePositions = useCallback(
     (nextNodes: WorkflowFlowNode[]) => {
-      onWorkflowChange((current) => ({
-        ...current,
-        graph: {
-          ...current.graph,
-          nodes: current.graph.nodes.map((node) => {
-            const next = nextNodes.find((candidate) => candidate.id === node.id);
-            return next ? { ...node, position: next.position } : node;
-          }),
-        },
-      }));
+      const nextNodesById = new Map(nextNodes.map((node) => [node.id, node]));
+      const positions = workflow.graph.nodes.flatMap((node) => {
+        const next = nextNodesById.get(node.id);
+        if (!next || (next.position.x === node.position.x && next.position.y === node.position.y)) {
+          return [];
+        }
+
+        return [{ nodeId: node.id, before: node.position, after: next.position }];
+      });
+
+      if (positions.length > 0) {
+        onCommitGraphHistoryEntry({ type: "moveNodes", positions });
+      }
     },
-    [onWorkflowChange],
+    [onCommitGraphHistoryEntry, workflow.graph.nodes],
   );
 
   const onConnect = useCallback(
     (connection: Connection) => {
-      const nextEdges = addEdge({ ...connection, id: `edge-${connection.source}-${connection.target}-${Date.now()}` }, edges);
-      onWorkflowChange((current) => ({
-        ...current,
-        graph: {
-          ...current.graph,
-          edges: toWorkflowEdges(nextEdges),
-        },
-      }));
+      if (!connection.source || !connection.target) {
+        return;
+      }
+
+      const edgeId = `edge-${connection.source}-${connection.target}-${Date.now()}`;
+      const nextEdges = addEdge({ ...connection, id: edgeId }, edges);
+      const addedEdge = nextEdges.find((edge) => edge.id === edgeId);
+      if (addedEdge && nextEdges.length > edges.length) {
+        onCommitGraphHistoryEntry({ type: "addEdge", edge: toWorkflowEdge(addedEdge) });
+      }
     },
-    [edges, onWorkflowChange],
+    [edges, onCommitGraphHistoryEntry],
   );
 
   const onEdgesChange = useCallback(
@@ -254,59 +281,84 @@ export function WorkflowCanvas({
       }
 
       const nextEdges = applyEdgeChanges(changes, edges);
+      const removedEdgeIds = new Set(changes.filter((change) => change.type === "remove").map((change) => change.id));
+      const removedEdges = workflow.graph.edges.filter((edge) => removedEdgeIds.has(edge.id));
       setSelectedEdgeIds((current) => {
         const nextEdgeIds = new Set(nextEdges.map((edge) => edge.id));
         return new Set([...current].filter((edgeId) => nextEdgeIds.has(edgeId)));
       });
-      onWorkflowChange((current) => ({
-        ...current,
-        graph: {
-          ...current.graph,
-          edges: toWorkflowEdges(nextEdges),
-        },
-      }));
+      if (removedEdges.length > 0) {
+        onCommitGraphHistoryEntry({ type: "removeEdges", edges: removedEdges });
+      }
     },
-    [edges, onWorkflowChange],
+    [edges, onCommitGraphHistoryEntry, workflow.graph.edges],
   );
 
   return (
     <div className="h-full">
       <ReactFlow
         key={flowKey}
+        colorMode={resolvedTheme}
+        proOptions={{ hideAttribution: true }}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
-        nodesConnectable
-        nodesDraggable
-        nodesFocusable
-        edgesFocusable
+        elementsSelectable={isInteractive}
+        nodesConnectable={isInteractive}
+        nodesDraggable={isInteractive}
+        nodesFocusable={isInteractive}
+        edgesFocusable={isInteractive}
         edgesReconnectable={false}
         connectionRadius={24}
         deleteKeyCode={["Backspace", "Delete"]}
+        panOnDrag={isInteractive}
+        panOnScroll={isInteractive}
         selectNodesOnDrag={false}
-        minZoom={0.4}
-        maxZoom={1.6}
+        zoomOnDoubleClick={isInteractive}
+        zoomOnPinch={isInteractive}
+        zoomOnScroll={isInteractive}
+        minZoom={CANVAS_MIN_ZOOM}
+        maxZoom={CANVAS_MAX_ZOOM}
         onConnect={onConnect}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onNodeDragStop={(_event, _node, nextNodes) => persistNodePositions(nextNodes as WorkflowFlowNode[])}
+        onNodeDragStop={(_event, _node, nextNodes) => commitNodePositions(nextNodes as WorkflowFlowNode[])}
         onNodeClick={(_event, node) => onSelectNode(node.id)}
         onNodeMouseEnter={(_event, node) => setHoveredNodeId(node.id)}
         onNodeMouseLeave={() => setHoveredNodeId(undefined)}
       >
-        <Background color="#cbd5e1" gap={22} />
+        <Background color={isDark ? "#3f3f46" : "#cbd5e1"} gap={22} />
         <MiniMap
-          pannable
-          zoomable
-          nodeColor={(node) => (node.id === selectedNodeId ? "#10b981" : "#e2e8f0")}
-          nodeStrokeColor={(node) => (node.id === selectedNodeId ? "#047857" : "#94a3b8")}
+          pannable={isInteractive}
+          position="bottom-right"
+          zoomable={isInteractive}
+          nodeColor={(node) => (node.id === selectedNodeId ? "#10b981" : isDark ? "#3f3f46" : "#e2e8f0")}
+          nodeStrokeColor={(node) => (node.id === selectedNodeId ? "#047857" : isDark ? "#52525b" : "#94a3b8")}
           nodeStrokeWidth={3}
           nodeBorderRadius={8}
-          maskColor="rgba(248, 250, 252, 0.72)"
-          className="!bg-white !shadow-sm"
+          maskColor={isDark ? "rgba(148, 163, 184, 0.22)" : "rgba(15, 23, 42, 0.18)"}
+          style={{
+            width: MINI_MAP_WIDTH,
+            height: MINI_MAP_HEIGHT,
+            right: CANVAS_PANEL_INSET,
+            bottom: MINI_MAP_BOTTOM_OFFSET,
+            margin: 0,
+          }}
+          className="!bg-card"
         />
-        <Controls className={`rounded-md overflow-hidden`} />
+        <Panel position="bottom-right" style={{ right: CANVAS_PANEL_INSET, bottom: CANVAS_PANEL_INSET, margin: 0 }}>
+          <WorkflowCanvasControls
+            canRedo={canRedo}
+            canUndo={canUndo}
+            isInteractive={isInteractive}
+            maxZoom={CANVAS_MAX_ZOOM}
+            minZoom={CANVAS_MIN_ZOOM}
+            onRedo={onRedo}
+            onToggleInteractive={() => setIsInteractive((current) => !current)}
+            onUndo={onUndo}
+          />
+        </Panel>
         <InlineNodePalettePopover
           hasStartNode={hasStartNode}
           palette={inlinePalette}

@@ -3,10 +3,12 @@ import anthropicIconUrl from "../assets/anthropic.ico";
 import deepseekIconUrl from "../assets/deepseek.ico";
 import ollamaIconUrl from "../assets/ollama.png";
 import openaiIconUrl from "../assets/openai.svg";
+import {cn} from "@workbench/lib/utils";
 
 type ModelProviderIcon = {
   label: string;
   src: string;
+  className?: string;
 };
 
 const modelProviderIcons: Record<ModelProvider, ModelProviderIcon> = {
@@ -25,6 +27,7 @@ const modelProviderIcons: Record<ModelProvider, ModelProviderIcon> = {
   ollama: {
     label: "Ollama",
     src: ollamaIconUrl,
+    className: 'bg-white'
   },
 };
 
@@ -39,7 +42,7 @@ export function ModelProviderLogo({ provider }: { provider?: ModelProvider }) {
     <img
       src={icon.src}
       alt={icon.label}
-      className="max-h-5 max-w-5 object-contain"
+      className={cn("max-h-5 max-w-5 object-contain", icon.className)}
       draggable={false}
     />
   );

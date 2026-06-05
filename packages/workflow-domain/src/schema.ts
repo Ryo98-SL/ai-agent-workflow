@@ -134,6 +134,9 @@ export const WorkflowFileSchema = z.object({
   metadata: z.object({
     name: z.string().min(1),
     description: z.string().optional(),
+    // Optional icon key (maps to a lucide icon on the client). Defaults applied
+    // in the UI when absent.
+    icon: z.string().optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
   }),

@@ -82,6 +82,24 @@ export function getProviderOption(provider: ModelProvider) {
   return PROVIDER_OPTIONS.find((option) => option.provider === provider);
 }
 
+/**
+ * A model is "custom" when it is not part of the curated catalog for its
+ * provider — i.e. the user typed their own model id against a preset provider.
+ * Derived rather than stored, so settings stay a plain `model` string.
+ */
+export function isCustomModel(model: string | undefined, provider?: ModelProvider): boolean {
+  if (!model) {
+    return false;
+  }
+
+  const option = provider ? getProviderOption(provider) : undefined;
+  if (!option) {
+    return false;
+  }
+
+  return !option.models.some((candidate) => candidate.id === model);
+}
+
 export function getModelCapabilities(model?: string, provider?: ModelProvider): ModelCapability[] {
   if (!model) {
     return chatOnly;

@@ -8,6 +8,7 @@ import {
   GetRunResponseSchema,
   GetWorkflowResponseSchema,
   ListRunEventsResponseSchema,
+  ListWorkflowRunsResponseSchema,
   ListWorkflowsResponseSchema,
   UpdateWorkflowRequestSchema,
   UpdateWorkflowResponseSchema,
@@ -15,7 +16,6 @@ import {
   createApiErrorResponse,
   zodIssuesToApiIssues,
   type RunEvent,
-  type RunInput,
   type RunSseEvent,
   type WorkflowDto,
   type WorkflowRun,
@@ -28,15 +28,22 @@ import {
   type WorkflowFile,
 } from "@ai-agent-workflow/workflow-domain";
 import { MemorySaver, type BaseCheckpointSaver } from "@langchain/langgraph";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import type { z } from "zod";
+import { auth } from "./auth/auth";
+import { resolveUserId } from "./auth/middleware";
 import { logger } from "./logger";
-import { executeWorkflowRuntime, type RuntimeExecutionResult } from "./runtime";
+import { createAccountRoutes, loadDecryptedProviderKey } from "./routes/account";
+import { executeWorkflowRuntime } from "./runtime";
+import { frontendOrigins } from "./config";
+import { createPrismaWorkflowRepository, type WorkflowRepository } from "./workflows/repository";
+import { createPrismaRunRepository, type RunRepository } from "./runs/repository";
+import { randomUUID } from "node:crypto";
 
-const SEED_TIME = "2026-06-01T00:00:00.000Z";
-
-type StoredWorkflow = WorkflowDto;
+// How long a completed run lingers in memory before eviction (authed runs are
+// durable in Postgres; anonymous runs are gone after this).
+const RUN_MEMORY_TTL_MS = 10 * 60 * 1000;
 
 type RunStreamBuffer = {
   events: RunSseEvent[];
@@ -45,60 +52,43 @@ type RunStreamBuffer = {
 };
 
 type ServerState = {
-  workflows: Map<string, StoredWorkflow>;
+  // Live + recently-completed runs, source for SSE and immediate reads. Authed
+  // runs are also persisted to Postgres; anonymous runs live only here.
   runs: Map<string, WorkflowRun>;
   events: Map<string, RunEvent[]>;
   streamBuffers: Map<string, RunStreamBuffer>;
+  // Effective workflow used for each run, kept for SSE replay; keyed by runId.
+  runWorkflows: Map<string, WorkflowFile>;
   checkpointer: BaseCheckpointSaver;
-  nextWorkflowNumber: number;
-  nextRunNumber: number;
 };
 
 export type CreateServerAppOptions = {
-  seedWorkflow?: WorkflowFile;
   fetch?: typeof fetch;
+  /** Workflow persistence. Defaults to the Prisma-backed repository. */
+  workflows?: WorkflowRepository;
+  /** Run persistence (authed runs). Defaults to the Prisma-backed repository. */
+  runs?: RunRepository;
+  /** Durable LangGraph checkpointer for authed runs. Anonymous runs use MemorySaver. */
+  authedCheckpointer?: BaseCheckpointSaver;
+  /** Resolves the session userId. Defaults to the Better Auth resolver. */
+  resolveUserId?: (c: Context) => Promise<string | null>;
 };
 
 function cloneWorkflow(workflow: WorkflowFile): WorkflowFile {
   return JSON.parse(JSON.stringify(workflow)) as WorkflowFile;
 }
 
-function withFixedMetadata(workflow: WorkflowFile, name = workflow.metadata.name): WorkflowFile {
+function createState(): ServerState {
   return {
-    ...cloneWorkflow(workflow),
-    metadata: {
-      ...workflow.metadata,
-      name,
-      createdAt: SEED_TIME,
-      updatedAt: SEED_TIME,
-    },
-  };
-}
-
-function createState(options: CreateServerAppOptions = {}): ServerState {
-  const seedWorkflow = withFixedMetadata(options.seedWorkflow ?? createDefaultWorkflow(), "Seed Workflow");
-  const workflows = new Map<string, StoredWorkflow>([
-    [
-      "workflow-1",
-      {
-        id: "workflow-1",
-        workflow: seedWorkflow,
-      },
-    ],
-  ]);
-
-  return {
-    workflows,
     runs: new Map(),
     events: new Map(),
     streamBuffers: new Map(),
+    runWorkflows: new Map(),
     checkpointer: new MemorySaver(),
-    nextWorkflowNumber: 2,
-    nextRunNumber: 1,
   };
 }
 
-function workflowSummary(stored: StoredWorkflow): WorkflowSummary {
+function workflowSummary(stored: WorkflowDto): WorkflowSummary {
   return {
     id: stored.id,
     name: stored.workflow.metadata.name,
@@ -177,11 +167,6 @@ function responseFromSchema<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, valu
   return schema.parse(value);
 }
 
-function secondAt(offset: number): string {
-  const date = new Date(SEED_TIME);
-  date.setUTCSeconds(date.getUTCSeconds() + offset);
-  return date.toISOString();
-}
 
 function createEvent(
   runId: string,
@@ -202,67 +187,6 @@ function createEvent(
   };
 }
 
-function createRunFromExecution(
-  state: ServerState,
-  workflow: StoredWorkflow,
-  input: RunInput,
-  execution: RuntimeExecutionResult,
-): WorkflowRun {
-  const runNumber = state.nextRunNumber;
-  state.nextRunNumber += 1;
-
-  const runId = `run-${runNumber}`;
-  const createdAt = secondAt(runNumber * 10);
-  const startedAt = secondAt(runNumber * 10 + 1);
-  const completedAt = secondAt(runNumber * 10 + execution.nodeResults.length + 2);
-  const status = execution.ok ? "succeeded" : "failed";
-  const run: WorkflowRun = {
-    id: runId,
-    workflowId: workflow.id,
-    status,
-    input,
-    output: execution.ok
-      ? {
-          summary: `Workflow run completed for ${workflow.workflow.metadata.name}.`,
-          nodeResults: execution.nodeResults,
-        }
-      : {
-          summary: `Workflow run failed for ${workflow.workflow.metadata.name}.`,
-          nodeResults: execution.nodeResults,
-        },
-    error: execution.ok ? null : execution.error,
-    createdAt,
-    startedAt,
-    completedAt,
-  };
-  const events = [
-    createEvent(runId, 0, "run.created", `Run ${runId} created.`, run.createdAt, { workflowId: workflow.id }),
-    createEvent(runId, 1, "run.started", `Run ${runId} started.`, startedAt),
-    ...execution.nodeResults.map((result, index) => ({
-      ...createEvent(
-        runId,
-        index + 2,
-        result.status === "failed" ? "node.failed" : "node.completed",
-        `${result.label} ${result.status === "failed" ? "failed" : "completed"}.`,
-        secondAt(runNumber * 10 + index + 2),
-        { nodeId: result.nodeId, output: result.output, data: result.data },
-      ),
-    })),
-    createEvent(
-      runId,
-      execution.nodeResults.length + 2,
-      execution.ok ? "run.completed" : "run.failed",
-      `Run ${runId} ${execution.ok ? "completed" : "failed"}.`,
-      completedAt,
-      { status: run.status, streamEventCount: execution.streamEvents.length },
-    ),
-  ];
-
-  state.runs.set(runId, run);
-  state.events.set(runId, events);
-  return run;
-}
-
 function pushToBuffer(buffer: RunStreamBuffer, event: RunSseEvent) {
   buffer.events.push(event);
   for (const listener of buffer.listeners) {
@@ -274,46 +198,91 @@ function normalizedNotFound(message: string) {
   return responseFromSchema(ApiErrorResponseSchema, createApiErrorResponse("not_found", message));
 }
 
+function normalizedUnauthorized() {
+  return responseFromSchema(
+    ApiErrorResponseSchema,
+    createApiErrorResponse("unauthorized", "Authentication is required for this resource."),
+  );
+}
+
 export function createServerApp(options: CreateServerAppOptions = {}) {
-  const state = createState(options);
+  const state = createState();
+  const workflows = options.workflows ?? createPrismaWorkflowRepository();
+  const runRepo = options.runs ?? createPrismaRunRepository();
+  const resolveUser = options.resolveUserId ?? resolveUserId;
   const app = new Hono();
 
-  app.use("*", cors());
+  function evictRunFromMemory(runId: string) {
+    setTimeout(() => {
+      state.runs.delete(runId);
+      state.events.delete(runId);
+      state.runWorkflows.delete(runId);
+      state.streamBuffers.delete(runId);
+    }, RUN_MEMORY_TTL_MS);
+  }
 
-  app.get(apiPaths.workflows(), (c) => {
-    const response = responseFromSchema(ListWorkflowsResponseSchema, {
-      workflows: Array.from(state.workflows.values()).map(workflowSummary),
-    });
+  // Credentialed CORS locked to the frontend origin so the Better Auth session
+  // cookie can be sent cross-origin (shared parent domain in production).
+  app.use(
+    "*",
+    cors({
+      origin: frontendOrigins,
+      credentials: true,
+      allowHeaders: ["Content-Type", "Authorization"],
+      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    }),
+  );
 
-    return c.json(response);
+  // Better Auth handles /api/auth/* (sign-in, sign-up, OAuth callbacks, session).
+  app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+
+  // User-private account resources (provider keys, custom models).
+  app.route("/", createAccountRoutes());
+
+  app.get(apiPaths.workflows(), async (c) => {
+    const userId = await resolveUser(c);
+    if (!userId) {
+      return c.json(normalizedUnauthorized(), 401);
+    }
+
+    const list = await workflows.list(userId);
+    return c.json(
+      responseFromSchema(ListWorkflowsResponseSchema, {
+        workflows: list.map(workflowSummary),
+      }),
+    );
   });
 
   app.post(apiPaths.workflows(), async (c) => {
+    const userId = await resolveUser(c);
+    if (!userId) {
+      return c.json(normalizedUnauthorized(), 401);
+    }
+
     const parsed = await parseJsonRequest(c.req.raw, CreateWorkflowRequestSchema);
     if (!parsed.ok) {
       return c.json(parsed.body, parsed.status);
     }
 
-    const id = `workflow-${state.nextWorkflowNumber}`;
-    state.nextWorkflowNumber += 1;
-    const workflow = withFixedMetadata(parsed.data.workflow ?? createDefaultWorkflow());
-    const stored: StoredWorkflow = { id, workflow };
-    state.workflows.set(id, stored);
-    const response = responseFromSchema(CreateWorkflowResponseSchema, { workflow: stored });
+    const created = await workflows.create(userId, parsed.data.workflow ?? createDefaultWorkflow());
     logger.info("workflow.created", {
-      workflowId: id,
-      name: workflow.metadata.name,
-      nodeCount: workflow.graph.nodes.length,
-      edgeCount: workflow.graph.edges.length,
+      workflowId: created.id,
+      name: created.workflow.metadata.name,
+      nodeCount: created.workflow.graph.nodes.length,
+      edgeCount: created.workflow.graph.edges.length,
     });
 
-    return c.json(response, 201);
+    return c.json(responseFromSchema(CreateWorkflowResponseSchema, { workflow: created }), 201);
   });
 
-  app.get(API_ROUTE_TEMPLATES.workflow, (c) => {
-    const id = c.req.param("id");
-    const workflow = state.workflows.get(id);
+  app.get(API_ROUTE_TEMPLATES.workflow, async (c) => {
+    const userId = await resolveUser(c);
+    if (!userId) {
+      return c.json(normalizedUnauthorized(), 401);
+    }
 
+    const id = c.req.param("id");
+    const workflow = await workflows.get(userId, id);
     if (!workflow) {
       logger.warn("workflow.not_found", { workflowId: id, route: c.req.path });
       return c.json(normalizedNotFound(`Workflow ${id} was not found.`), 404);
@@ -323,51 +292,93 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
   });
 
   app.put(API_ROUTE_TEMPLATES.workflow, async (c) => {
-    const id = c.req.param("id");
-    if (!state.workflows.has(id)) {
-      return c.json(normalizedNotFound(`Workflow ${id} was not found.`), 404);
+    const userId = await resolveUser(c);
+    if (!userId) {
+      return c.json(normalizedUnauthorized(), 401);
     }
 
+    const id = c.req.param("id");
     const parsed = await parseJsonRequest(c.req.raw, UpdateWorkflowRequestSchema);
     if (!parsed.ok) {
       return c.json(parsed.body, parsed.status);
     }
 
-    const stored: StoredWorkflow = { id, workflow: cloneWorkflow(parsed.data.workflow) };
-    state.workflows.set(id, stored);
+    const updated = await workflows.update(userId, id, parsed.data.workflow);
+    if (!updated) {
+      return c.json(normalizedNotFound(`Workflow ${id} was not found.`), 404);
+    }
+
     logger.info("workflow.updated", {
-      workflowId: id,
-      name: stored.workflow.metadata.name,
-      nodeCount: stored.workflow.graph.nodes.length,
-      edgeCount: stored.workflow.graph.edges.length,
+      workflowId: updated.id,
+      name: updated.workflow.metadata.name,
+      nodeCount: updated.workflow.graph.nodes.length,
+      edgeCount: updated.workflow.graph.edges.length,
     });
 
-    return c.json(responseFromSchema(UpdateWorkflowResponseSchema, { workflow: stored }));
+    return c.json(responseFromSchema(UpdateWorkflowResponseSchema, { workflow: updated }));
+  });
+
+  app.delete(API_ROUTE_TEMPLATES.workflow, async (c) => {
+    const userId = await resolveUser(c);
+    if (!userId) {
+      return c.json(normalizedUnauthorized(), 401);
+    }
+
+    const id = c.req.param("id");
+    const deleted = await workflows.delete(userId, id);
+    if (!deleted) {
+      return c.json(normalizedNotFound(`Workflow ${id} was not found.`), 404);
+    }
+
+    logger.info("workflow.deleted", { workflowId: id });
+    return c.body(null, 204);
   });
 
   app.post(API_ROUTE_TEMPLATES.workflowRuns, async (c) => {
     const workflowId = c.req.param("id");
-    const workflow = state.workflows.get(workflowId);
-
-    if (!workflow) {
-      logger.warn("workflow.not_found", { workflowId, route: c.req.path });
-      return c.json(normalizedNotFound(`Workflow ${workflowId} was not found.`), 404);
-    }
 
     const parsed = await parseJsonRequest(c.req.raw, CreateRunRequestSchema);
     if (!parsed.ok) {
       return c.json(parsed.body, parsed.status);
     }
 
-    const runNumber = state.nextRunNumber;
-    state.nextRunNumber += 1;
-    const runId = `run-${runNumber}`;
-    const createdAt = secondAt(runNumber * 10);
-    const startedAt = secondAt(runNumber * 10 + 1);
+    const userId = await resolveUser(c);
+
+    // Resolve the workflow to execute: an inline definition (anonymous/unsaved
+    // runs) wins; otherwise look it up by id for the authenticated user.
+    let runWorkflow = parsed.data.workflow ?? null;
+    // The stored-workflow row id, used as the run's FK. Null for inline runs.
+    let runWorkflowRowId: string | null = null;
+    if (!runWorkflow && userId) {
+      const stored = await workflows.get(userId, workflowId);
+      runWorkflow = stored?.workflow ?? null;
+      runWorkflowRowId = stored ? workflowId : null;
+    }
+    if (!runWorkflow) {
+      logger.warn("workflow.not_found", { workflowId, route: c.req.path });
+      return c.json(normalizedNotFound(`Workflow ${workflowId} was not found.`), 404);
+    }
+
+    // Inject the authenticated user's stored provider key when the request did
+    // not supply a transient one for the run's provider. The plaintext key is
+    // decrypted here just-in-time and never leaves the server.
+    let effectiveProviderKeys = parsed.data.modelProviderKeys;
+    const runProvider = parsed.data.modelProvider?.provider ?? runWorkflow.settings.modelProvider?.provider;
+    if (runProvider && runProvider !== "ollama" && !effectiveProviderKeys?.[runProvider] && userId) {
+      const storedKey = await loadDecryptedProviderKey(userId, runProvider);
+      if (storedKey) {
+        effectiveProviderKeys = { ...effectiveProviderKeys, [runProvider]: storedKey };
+      }
+    }
+
+    const runId = randomUUID();
+    state.runWorkflows.set(runId, runWorkflow);
+    const createdAt = new Date().toISOString();
+    const startedAt = new Date().toISOString();
 
     const pendingRun: WorkflowRun = {
       id: runId,
-      workflowId: workflow.id,
+      workflowId,
       status: "running",
       input: parsed.data.input,
       output: null,
@@ -378,9 +389,21 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     };
     state.runs.set(runId, pendingRun);
     state.events.set(runId, [
-      createEvent(runId, 0, "run.created", `Run ${runId} created.`, createdAt, { workflowId: workflow.id }),
+      createEvent(runId, 0, "run.created", `Run ${runId} created.`, createdAt, { workflowId }),
       createEvent(runId, 1, "run.started", `Run ${runId} started.`, startedAt),
     ]);
+
+    // Persist authed runs (durable history). Failures must not break the run.
+    if (userId) {
+      try {
+        await runRepo.create(userId, pendingRun, runWorkflowRowId);
+      } catch (error) {
+        logger.error("run.persist_create_failed", {
+          runId,
+          message: error instanceof Error ? error.message : "persist failed",
+        });
+      }
+    }
 
     const buffer: RunStreamBuffer = { events: [], done: false, listeners: new Set() };
     state.streamBuffers.set(runId, buffer);
@@ -396,11 +419,15 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
 
     const nodeOutputs = new Map<string, { output: string; data?: Record<string, unknown>; inputTokens?: number; outputTokens?: number }>();
 
+    // Authed runs use the durable Postgres checkpointer (when available);
+    // anonymous runs use the ephemeral in-memory MemorySaver.
+    const checkpointer = userId && options.authedCheckpointer ? options.authedCheckpointer : state.checkpointer;
+
     void executeWorkflowRuntime(
-      workflowForRun(workflow.workflow, parsed.data.modelProvider, parsed.data.modelProviderKeys),
+      workflowForRun(runWorkflow, parsed.data.modelProvider, effectiveProviderKeys),
       parsed.data.input,
       {
-        checkpointer: state.checkpointer,
+        checkpointer,
         fetch: options.fetch,
         threadId: runId,
         onStreamEvent: (event) => {
@@ -450,15 +477,15 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
         nodeOutputs.set(result.nodeId, { ...existing, output: result.output, data: result.data });
       }
 
-      const completedAt = secondAt(runNumber * 10 + execution.nodeResults.length + 2);
+      const completedAt = new Date().toISOString();
       const status = execution.ok ? "succeeded" : "failed";
       const finalRun: WorkflowRun = {
         ...pendingRun,
         status,
         output: {
           summary: execution.ok
-            ? `Workflow run completed for ${workflow.workflow.metadata.name}.`
-            : `Workflow run failed for ${workflow.workflow.metadata.name}.`,
+            ? `Workflow run completed for ${runWorkflow.metadata.name}.`
+            : `Workflow run failed for ${runWorkflow.metadata.name}.`,
           nodeResults: execution.nodeResults,
         },
         error: execution.ok ? null : execution.error,
@@ -473,7 +500,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
           index + 2,
           result.status === "failed" ? "node.failed" : "node.completed",
           `${result.label} ${result.status === "failed" ? "failed" : "completed"}.`,
-          secondAt(runNumber * 10 + index + 2),
+          new Date().toISOString(),
           { nodeId: result.nodeId, output: result.output, data: result.data },
         ),
       );
@@ -485,7 +512,8 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
         completedAt,
         { status, streamEventCount: execution.streamEvents.length },
       );
-      state.events.set(runId, [...existingEvents, ...nodeEvents, completionEvent]);
+      const allEvents = [...existingEvents, ...nodeEvents, completionEvent];
+      state.events.set(runId, allEvents);
 
       const buf = state.streamBuffers.get(runId);
       if (buf) {
@@ -494,6 +522,17 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
         buf.listeners.clear();
         setTimeout(() => state.streamBuffers.delete(runId), 30_000);
       }
+
+      // Persist the final state for authed runs, then evict from memory.
+      if (userId) {
+        runRepo.complete(userId, finalRun, allEvents).catch((error) => {
+          logger.error("run.persist_complete_failed", {
+            runId,
+            message: error instanceof Error ? error.message : "persist failed",
+          });
+        });
+      }
+      evictRunFromMemory(runId);
 
       logger.info("run.created", {
         runId,
@@ -517,9 +556,28 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     return c.json(responseFromSchema(CreateRunResponseSchema, { run: pendingRun }), 201);
   });
 
-  app.get(API_ROUTE_TEMPLATES.run, (c) => {
+  // List a workflow's run history (authed; durable). Anonymous runs have no
+  // history (memory-only), so this requires a session.
+  app.get(API_ROUTE_TEMPLATES.workflowRuns, async (c) => {
+    const userId = await resolveUser(c);
+    if (!userId) {
+      return c.json(normalizedUnauthorized(), 401);
+    }
+    const workflowId = c.req.param("id");
+    const runs = await runRepo.listRuns(userId, workflowId);
+    return c.json(responseFromSchema(ListWorkflowRunsResponseSchema, { runs }));
+  });
+
+  app.get(API_ROUTE_TEMPLATES.run, async (c) => {
     const id = c.req.param("id");
-    const run = state.runs.get(id);
+    // Memory first (live + recent); fall back to the durable store for authed.
+    let run = state.runs.get(id) ?? null;
+    if (!run) {
+      const userId = await resolveUser(c);
+      if (userId) {
+        run = await runRepo.get(userId, id);
+      }
+    }
 
     if (!run) {
       logger.warn("run.not_found", { runId: id, route: c.req.path });
@@ -529,9 +587,15 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     return c.json(responseFromSchema(GetRunResponseSchema, { run }));
   });
 
-  app.get(API_ROUTE_TEMPLATES.runEvents, (c) => {
+  app.get(API_ROUTE_TEMPLATES.runEvents, async (c) => {
     const id = c.req.param("id");
-    const events = state.events.get(id);
+    let events = state.events.get(id) ?? null;
+    if (!events) {
+      const userId = await resolveUser(c);
+      if (userId) {
+        events = await runRepo.listEvents(userId, id);
+      }
+    }
 
     if (!events) {
       logger.warn("run.not_found", { runId: id, route: c.req.path });
@@ -582,7 +646,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
               const nodeId = typeof payload.nodeId === "string" ? payload.nodeId : "";
               const node = run.output?.nodeResults.find((r) => r.nodeId === nodeId);
               if (snapEvent.type === "node.completed" && node) {
-                const workflowNode = state.workflows.get(run.workflowId)?.workflow.graph.nodes.find((n) => n.id === nodeId);
+                const workflowNode = state.runWorkflows.get(id)?.graph.nodes.find((n) => n.id === nodeId);
                 if (workflowNode) {
                   sendEvent({
                     type: "node.completed",

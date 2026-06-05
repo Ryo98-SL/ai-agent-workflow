@@ -21,7 +21,7 @@ export function ModelCapabilityTags({ capabilities }: { capabilities: ModelCapab
           <span
             key={capability}
             aria-label={label}
-            className="flex size-5 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500"
+            className="flex size-5 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground"
             role="img"
             title={label}
           >

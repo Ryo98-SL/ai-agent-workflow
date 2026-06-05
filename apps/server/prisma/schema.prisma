@@ -1,0 +1,164 @@
+// Prisma schema for the AI Agent Workflow server.
+//
+// Single Postgres database shared by Better Auth (user/session/account/
+// verification) and the application tables. LangGraph checkpoint tables are NOT
+// modelled here — they are owned by PostgresSaver.setup() at runtime.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Better Auth managed tables
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String   @id
+  name          String?
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions     Session[]
+  accounts     Account[]
+  providerKeys ProviderKey[]
+  customModels CustomModel[]
+  workflows    Workflow[]
+  runs         Run[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}
+
+// ---------------------------------------------------------------------------
+// Application tables
+// ---------------------------------------------------------------------------
+
+model ProviderKey {
+  id         String   @id @default(cuid())
+  userId     String
+  provider   String
+  ciphertext Bytes
+  iv         Bytes
+  authTag    Bytes
+  last4      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@map("provider_key")
+}
+
+model CustomModel {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String
+  model     String
+  baseURL   String?
+  label     String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, model])
+  @@map("custom_model")
+}
+
+model Workflow {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  document  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runs      Run[]
+
+  @@index([userId])
+  @@map("workflow")
+}
+
+model Run {
+  id          String     @id
+  userId      String
+  // Nullable: a run may execute an inline/unsaved workflow with no stored row.
+  workflowId  String?
+  status      String
+  input       Json
+  output      Json?
+  error       Json?
+  createdAt   DateTime   @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workflow    Workflow?  @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+  events      RunEvent[]
+
+  @@index([userId])
+  @@index([workflowId])
+  @@map("run")
+}
+
+model RunEvent {
+  id        String   @id @default(cuid())
+  runId     String
+  sequence  Int
+  type      String
+  message   String
+  payload   Json?
+  createdAt DateTime @default(now())
+  run       Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, sequence])
+  @@map("run_event")
+}

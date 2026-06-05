@@ -6,6 +6,9 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
   const [nodeStates, setNodeStates] = useState<Map<string, NodeExecutionState>>(() => new Map());
   const [debugState, setDebugState] = useState<DebugState>({ status: "idle" });
   const eventSourceRef = useRef<EventSource | null>(null);
+  // Once a run reaches a terminal state, ignore further stream events — a closed
+  // SSE stream can still fire a reconnect/onerror that would clobber the result.
+  const finishedRef = useRef(false);
 
   const runWorkflow = useCallback(
     (workflowId: string, request: CreateRunRequest) => {
@@ -14,6 +17,7 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
         eventSourceRef.current = null;
       }
 
+      finishedRef.current = false;
       setNodeStates(new Map());
       setDebugState({ status: "running" });
 
@@ -24,6 +28,7 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
           eventSourceRef.current = source;
 
           source.onmessage = (msgEvent) => {
+            if (finishedRef.current) return;
             const parsed = RunSseEventSchema.safeParse(JSON.parse(String(msgEvent.data)));
             if (!parsed.success) return;
             const sseEvent = parsed.data;
@@ -83,6 +88,7 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
                 return next;
               });
             } else if (sseEvent.type === "run.completed") {
+              finishedRef.current = true;
               source.close();
               eventSourceRef.current = null;
               const runStatus = sseEvent.status;
@@ -93,13 +99,21 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
                     result: { run: runRes.run, events: eventsRes.events },
                   });
                 })
-                .catch((err: unknown) => {
+                .catch(() => {
                   setDebugState({ status: runStatus === "failed" ? "error" : "success", result: { run, events: [] } });
                 });
             }
           };
 
           source.onerror = () => {
+            // The stream closes normally after run.completed; don't treat that as
+            // an error or overwrite the final result.
+            if (finishedRef.current) {
+              source.close();
+              eventSourceRef.current = null;
+              return;
+            }
+            finishedRef.current = true;
             source.close();
             eventSourceRef.current = null;
             setDebugState({ status: "error", error: "SSE connection failed." });

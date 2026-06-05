@@ -1,22 +1,34 @@
 import {
   ApiErrorResponseSchema,
+  CreateCustomModelResponseSchema,
   CreateRunResponseSchema,
   CreateWorkflowResponseSchema,
   GetRunResponseSchema,
   GetWorkflowResponseSchema,
+  ListCustomModelsResponseSchema,
+  ListProviderKeysResponseSchema,
   ListRunEventsResponseSchema,
+  ListWorkflowRunsResponseSchema,
   ListWorkflowsResponseSchema,
+  PutProviderKeyResponseSchema,
   UpdateWorkflowResponseSchema,
   apiPaths,
   type ApiErrorResponse,
+  type CreateCustomModelRequest,
+  type CreateCustomModelResponse,
   type CreateRunRequest,
   type CreateRunResponse,
   type CreateWorkflowRequest,
   type CreateWorkflowResponse,
   type GetRunResponse,
   type GetWorkflowResponse,
+  type ListCustomModelsResponse,
+  type ListProviderKeysResponse,
   type ListRunEventsResponse,
+  type ListWorkflowRunsResponse,
   type ListWorkflowsResponse,
+  type PutProviderKeyRequest,
+  type PutProviderKeyResponse,
   type UpdateWorkflowRequest,
   type UpdateWorkflowResponse,
 } from "@ai-agent-workflow/api-contracts";
@@ -58,17 +70,25 @@ export type WorkflowClient = {
   createWorkflow: (request?: CreateWorkflowRequest) => Promise<CreateWorkflowResponse>;
   getWorkflow: (id: string) => Promise<GetWorkflowResponse>;
   updateWorkflow: (id: string, request: UpdateWorkflowRequest) => Promise<UpdateWorkflowResponse>;
+  deleteWorkflow: (id: string) => Promise<void>;
   createRun: (workflowId: string, request?: CreateRunRequest) => Promise<CreateRunResponse>;
+  listWorkflowRuns: (workflowId: string) => Promise<ListWorkflowRunsResponse>;
   getRun: (id: string) => Promise<GetRunResponse>;
   listRunEvents: (id: string) => Promise<ListRunEventsResponse>;
   runStreamUrl: (id: string) => string;
+  listProviderKeys: () => Promise<ListProviderKeysResponse>;
+  putProviderKey: (provider: string, request: PutProviderKeyRequest) => Promise<PutProviderKeyResponse>;
+  deleteProviderKey: (provider: string) => Promise<void>;
+  listCustomModels: () => Promise<ListCustomModelsResponse>;
+  createCustomModel: (request: CreateCustomModelRequest) => Promise<CreateCustomModelResponse>;
+  deleteCustomModel: (id: string) => Promise<void>;
 };
 
 type RequestOptions<TResponse> = {
-  method?: "GET" | "POST" | "PUT";
+  method?: "GET" | "POST" | "PUT" | "DELETE";
   path: string;
   body?: unknown;
-  responseSchema: z.ZodType<TResponse, z.ZodTypeDef, unknown>;
+  responseSchema?: z.ZodType<TResponse, z.ZodTypeDef, unknown>;
 };
 
 function joinUrl(baseUrl: string, path: string): string {
@@ -108,6 +128,8 @@ export function createWorkflowClient(options: WorkflowClientOptions): WorkflowCl
     try {
       response = await fetchImpl(joinUrl(options.baseUrl, requestOptions.path), {
         method: requestOptions.method ?? "GET",
+        // Cross-origin cookie auth (Better Auth session under shared parent domain).
+        credentials: "include",
         headers:
           requestOptions.body === undefined
             ? undefined
@@ -150,6 +172,10 @@ export function createWorkflowClient(options: WorkflowClientOptions): WorkflowCl
       });
     }
 
+    if (!requestOptions.responseSchema) {
+      return undefined as TResponse;
+    }
+
     const parsed = requestOptions.responseSchema.safeParse(payload);
     if (!parsed.success) {
       throw schemaError("Response body did not match the API contract.", parsed.error);
@@ -183,12 +209,22 @@ export function createWorkflowClient(options: WorkflowClientOptions): WorkflowCl
         body,
         responseSchema: UpdateWorkflowResponseSchema,
       }),
+    deleteWorkflow: (id) =>
+      request<void>({
+        method: "DELETE",
+        path: apiPaths.workflow(id),
+      }),
     createRun: (workflowId, body = { input: {} }) =>
       request({
         method: "POST",
         path: apiPaths.workflowRuns(workflowId),
         body,
         responseSchema: CreateRunResponseSchema,
+      }),
+    listWorkflowRuns: (workflowId) =>
+      request({
+        path: apiPaths.workflowRuns(workflowId),
+        responseSchema: ListWorkflowRunsResponseSchema,
       }),
     getRun: (id) =>
       request({
@@ -201,5 +237,39 @@ export function createWorkflowClient(options: WorkflowClientOptions): WorkflowCl
         responseSchema: ListRunEventsResponseSchema,
       }),
     runStreamUrl: (id) => joinUrl(options.baseUrl, apiPaths.runStream(id)),
+    listProviderKeys: () =>
+      request({
+        path: apiPaths.providerKeys(),
+        responseSchema: ListProviderKeysResponseSchema,
+      }),
+    putProviderKey: (provider, body) =>
+      request({
+        method: "PUT",
+        path: apiPaths.providerKey(provider),
+        body,
+        responseSchema: PutProviderKeyResponseSchema,
+      }),
+    deleteProviderKey: (provider) =>
+      request<void>({
+        method: "DELETE",
+        path: apiPaths.providerKey(provider),
+      }),
+    listCustomModels: () =>
+      request({
+        path: apiPaths.customModels(),
+        responseSchema: ListCustomModelsResponseSchema,
+      }),
+    createCustomModel: (body) =>
+      request({
+        method: "POST",
+        path: apiPaths.customModels(),
+        body,
+        responseSchema: CreateCustomModelResponseSchema,
+      }),
+    deleteCustomModel: (id) =>
+      request<void>({
+        method: "DELETE",
+        path: apiPaths.customModel(id),
+      }),
   };
 }

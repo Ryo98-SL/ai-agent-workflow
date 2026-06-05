@@ -13,8 +13,10 @@
     "@ai-agent-workflow/workbench-ui": "workspace:*",
     "@ai-agent-workflow/workflow-client": "workspace:*",
     "@xyflow/react": "^12.9.3",
+    "lucide-react": "^0.511.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.0"
   },
   "devDependencies": {
     "@ai-agent-workflow/tsconfig": "workspace:*",

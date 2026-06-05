@@ -20,22 +20,22 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const baseClassName =
-  "inline-flex shrink-0 items-center gap-2 rounded-md font-medium tracking-normal transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 disabled:cursor-not-allowed";
+  "inline-flex shrink-0 items-center gap-2 rounded-md font-medium tracking-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed";
 
 const variantClassNames: Record<ButtonVariant, string> = {
-  primary: "justify-center bg-slate-900 text-white hover:bg-slate-700 disabled:bg-slate-300",
+  primary: "justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
   secondary:
-    "justify-center border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-100 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400",
-  success: "justify-center bg-emerald-600 text-white hover:bg-emerald-500 disabled:bg-slate-300",
+    "justify-center border border-border bg-card text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground disabled:opacity-50",
+  success: "justify-center bg-brand text-brand-foreground hover:bg-brand/90 disabled:opacity-50",
   successSoft:
-    "justify-center border border-emerald-200 bg-white text-emerald-700 shadow-lg shadow-slate-900/10 hover:border-emerald-300 hover:bg-emerald-50 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400",
-  ghost: "justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:text-slate-300",
-  dangerGhost: "justify-center text-rose-600 hover:bg-rose-50 disabled:text-slate-300",
+    "justify-center border border-brand/30 bg-card text-brand hover:border-brand/50 hover:bg-brand/10 disabled:opacity-50",
+  ghost: "justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50",
+  dangerGhost: "justify-center text-destructive hover:bg-destructive/10 disabled:opacity-50",
   modelTrigger:
-    "h-12 w-full justify-start gap-3 rounded-lg border border-slate-200 bg-white px-3 text-left text-slate-900 shadow-sm hover:border-slate-300 hover:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400",
-  modelOption: "h-10 w-full justify-start gap-3 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:text-slate-400",
+    "h-12 w-full justify-start gap-3 rounded-lg border border-input bg-transparent px-3 text-left text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground disabled:opacity-50",
+  modelOption: "h-10 w-full justify-start gap-3 text-left text-sm text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50",
   nodePalette:
-    "justify-start gap-3 border border-slate-200 bg-white p-3 text-left hover:border-emerald-300 hover:bg-emerald-50 disabled:bg-slate-100 disabled:text-slate-400",
+    "justify-start gap-3 border border-border bg-card p-3 text-left hover:border-brand/40 hover:bg-brand/10 disabled:opacity-50",
 };
 
 const sizeClassNames: Record<ButtonSize, string> = {

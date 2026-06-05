@@ -14,16 +14,16 @@ export function LlmWorkflowNode(props: WorkflowNodeProps) {
     <WorkflowNodeCardShell {...props} Icon={Brain}>
       <div className="mt-3 space-y-2">
         <div
-          className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2"
+          className="flex h-9 items-center gap-2 rounded-md border border-border bg-muted px-2"
           title={`Model: ${modelLabel}`}
         >
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white">
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-background">
             <ModelProviderLogo provider={activeModelProvider} />
           </span>
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{modelLabel}</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{modelLabel}</span>
           <ModelCapabilityTags capabilities={capabilities} />
         </div>
-        {node.description && <p className="text-xs leading-4 text-slate-500">{node.description}</p>}
+        {node.description && <p className="text-xs leading-4 text-muted-foreground">{node.description}</p>}
       </div>
     </WorkflowNodeCardShell>
   );

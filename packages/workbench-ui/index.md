@@ -25,4 +25,6 @@ Node creation, model settings, and run output use body-level popovers; node
 inspection follows selection. DeepSeek is the default provider, OpenAI and
 Anthropic are available in the selector, Ollama is development-only, and API
 keys are saved in the workflow provider keyring unless an LLM node carries its
-own Model Setting API key override.
+own Model Setting API key override. Canvas structure edits have local undo/redo
+for node/edge creation, deletion, and movement; form-based inspector changes and
+model settings stay outside that history.

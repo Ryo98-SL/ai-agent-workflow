@@ -30,6 +30,14 @@
     "tailwind-merge": "^3.3.0",
     "zod": "^3.25.42"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "prisma",
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild"
+    ]
+  },
   "devDependencies": {
     "@ai-agent-workflow/workflow-domain": "workspace:*",
     "@eslint/js": "^9.28.0",

@@ -1,6 +1,8 @@
 import { createDefaultWorkflow } from "@ai-agent-workflow/workflow-domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createServerApp } from "@ai-agent-workflow/server";
+import { createServerApp as buildServerApp } from "@ai-agent-workflow/server";
+import { createInMemoryWorkflowRepository } from "../src/workflows/repository";
+import { createInMemoryRunRepository } from "../src/runs/repository";
 
 async function json(response: Response) {
   return response.json() as Promise<unknown>;
@@ -52,7 +54,31 @@ function createOpenAIStreamResponse(text: string, usage: Record<string, unknown>
   });
 }
 
-type HonoApp = ReturnType<typeof createServerApp>;
+type HonoApp = ReturnType<typeof buildServerApp>;
+
+const SEED_TIME = "2026-06-01T00:00:00.000Z";
+const TEST_USER = "test-user";
+
+function withSeedMetadata(workflow: ReturnType<typeof createDefaultWorkflow>) {
+  return {
+    ...workflow,
+    metadata: { ...workflow.metadata, name: "Seed Workflow", createdAt: SEED_TIME, updatedAt: SEED_TIME },
+  };
+}
+
+// Builds the app with an in-memory workflow repo (seeded as "workflow-1") and a
+// fake authenticated user, so route tests stay DB-free.
+function createTestApp(
+  options: { seedWorkflow?: ReturnType<typeof createDefaultWorkflow>; fetch?: typeof fetch } = {},
+): HonoApp {
+  const seed = withSeedMetadata(options.seedWorkflow ?? createDefaultWorkflow());
+  return buildServerApp({
+    fetch: options.fetch,
+    resolveUserId: async () => TEST_USER,
+    workflows: createInMemoryWorkflowRepository({ id: "workflow-1", userId: TEST_USER, workflow: seed }),
+    runs: createInMemoryRunRepository(),
+  });
+}
 
 async function waitForRun(app: HonoApp, runId: string): Promise<unknown> {
   const streamResponse = await app.request(`/api/runs/${runId}/stream`);
@@ -86,7 +112,7 @@ afterEach(() => {
 
 describe("workflow API server", () => {
   it("responds to browser CORS requests", async () => {
-    const app = createServerApp();
+    const app = createTestApp();
     const preflightResponse = await app.request("/api/workflows", {
       method: "OPTIONS",
       headers: {
@@ -102,14 +128,17 @@ describe("workflow API server", () => {
     });
 
     expect(preflightResponse.status).toBe(204);
-    expect(preflightResponse.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    // Credentialed CORS reflects the configured frontend origin (not "*"), so
+    // the Better Auth session cookie can be sent cross-origin.
+    expect(preflightResponse.headers.get("Access-Control-Allow-Origin")).toBe("http://127.0.0.1:5173");
+    expect(preflightResponse.headers.get("Access-Control-Allow-Credentials")).toBe("true");
     expect(preflightResponse.headers.get("Access-Control-Allow-Methods")).toContain("POST");
-    expect(preflightResponse.headers.get("Access-Control-Allow-Headers")).toBe("content-type");
-    expect(getResponse.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(preflightResponse.headers.get("Access-Control-Allow-Headers")).toContain("Content-Type");
+    expect(getResponse.headers.get("Access-Control-Allow-Origin")).toBe("http://127.0.0.1:5173");
   });
 
   it("lists the deterministic seed workflow", async () => {
-    const app = createServerApp();
+    const app = createTestApp();
     const response = await app.request("/api/workflows");
 
     expect(response.status).toBe(200);
@@ -128,7 +157,7 @@ describe("workflow API server", () => {
   });
 
   it("creates, reads, and updates workflows", async () => {
-    const app = createServerApp();
+    const app = createTestApp();
     const workflow = createDefaultWorkflow();
     workflow.metadata.name = "Created Workflow";
 
@@ -174,7 +203,7 @@ describe("workflow API server", () => {
   });
 
   it("normalizes validation and not found errors", async () => {
-    const app = createServerApp();
+    const app = createTestApp();
     const invalidResponse = await app.request("/api/workflows", {
       method: "POST",
       body: JSON.stringify({ workflow: { version: "2" } }),
@@ -197,7 +226,7 @@ describe("workflow API server", () => {
   });
 
   it("creates LangGraph workflow runs and events", async () => {
-    const app = createServerApp({ fetch: createModelFetch("Server runtime output.") });
+    const app = createTestApp({ fetch: createModelFetch("Server runtime output.") });
     const createRunResponse = await app.request("/api/workflows/workflow-1/runs", {
       method: "POST",
       body: JSON.stringify({ input: { topic: "server tests" } }),
@@ -205,16 +234,17 @@ describe("workflow API server", () => {
 
     expect(createRunResponse.status).toBe(201);
     const createdRun = (await json(createRunResponse)) as { run: { id: string; status: string } };
-    expect(createdRun.run.id).toBe("run-1");
+    const runId = createdRun.run.id;
+    expect(runId).toBeTruthy();
     expect(createdRun.run.status).toBe("running");
 
-    const run = (await waitForRun(app, "run-1")) as {
+    const run = (await waitForRun(app, runId)) as {
       id: string;
       status: string;
       output: { nodeResults: Array<{ nodeId: string; output: string; data?: unknown }> };
     };
 
-    expect(run.id).toBe("run-1");
+    expect(run.id).toBe(runId);
     expect(run.status).toBe("succeeded");
     expect(run.output.nodeResults).toHaveLength(2);
     expect(run.output.nodeResults.map((result) => result.nodeId)).toEqual(["start1", "llm1"]);
@@ -225,17 +255,17 @@ describe("workflow API server", () => {
       reasoning: null,
     });
 
-    const getRunResponse = await app.request("/api/runs/run-1");
+    const getRunResponse = await app.request(`/api/runs/${runId}`);
     expect(getRunResponse.status).toBe(200);
     expect(await json(getRunResponse)).toMatchObject({
       run: {
-        id: "run-1",
+        id: runId,
         workflowId: "workflow-1",
-        createdAt: "2026-06-01T00:00:10.000Z",
+        createdAt: expect.any(String),
       },
     });
 
-    const eventsResponse = await app.request("/api/runs/run-1/events");
+    const eventsResponse = await app.request(`/api/runs/${runId}/events`);
     expect(eventsResponse.status).toBe(200);
     const events = (await json(eventsResponse)) as { events: Array<{ type: string }> };
     expect(events.events.map((event) => event.type)).toEqual([
@@ -251,7 +281,7 @@ describe("workflow API server", () => {
     const infoLog = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
     let authorization = "";
-    const app = createServerApp({
+    const app = createTestApp({
       fetch: async (_url, init) => {
         authorization = requestHeader(init, "authorization") ?? "";
         return new Response(
@@ -322,7 +352,7 @@ describe("workflow API server", () => {
       stream?: boolean;
       temperature?: number;
     };
-    const app = createServerApp({
+    const app = createTestApp({
       seedWorkflow: workflow,
       fetch: async (url, init) => {
         requestedUrl = String(url);
@@ -368,7 +398,7 @@ describe("workflow API server", () => {
     if (start?.type === "start") {
       start.config.fields = [{ name: "topic", required: true }];
     }
-    const app = createServerApp({
+    const app = createTestApp({
       seedWorkflow: workflow,
       fetch: async () => {
         called = true;
@@ -409,7 +439,7 @@ describe("workflow API server", () => {
       llm.config.userPrompt = "Explain {{start1.topic}} to {{start1.audience}}.";
     }
 
-    const app = createServerApp({ seedWorkflow: workflow, fetch: createModelFetch("Defaulted output.") });
+    const app = createTestApp({ seedWorkflow: workflow, fetch: createModelFetch("Defaulted output.") });
     const response = await app.request("/api/workflows/workflow-1/runs", {
       method: "POST",
       body: JSON.stringify({ input: {} }),
@@ -433,7 +463,7 @@ describe("workflow API server", () => {
       model: "llama3.2",
     };
     let requestedUrl = "";
-    const app = createServerApp({
+    const app = createTestApp({
       seedWorkflow: workflow,
       fetch: async (url) => {
         requestedUrl = String(url);
@@ -481,7 +511,7 @@ describe("workflow API server", () => {
       config: { adapter: "currentTime", timezone: "UTC" },
     });
     workflow.graph.edges = [{ id: "edge-start-tool", source: "start1", target: "tool1" }];
-    const app = createServerApp({ seedWorkflow: workflow, fetch: createModelFetch() });
+    const app = createTestApp({ seedWorkflow: workflow, fetch: createModelFetch() });
 
     const response = await app.request("/api/workflows/workflow-1/runs", {
       method: "POST",
@@ -515,7 +545,7 @@ describe("workflow API server", () => {
     if (llm?.type === "llm") {
       llm.config.userPrompt = "Explain {{start1.missing}}.";
     }
-    const app = createServerApp({
+    const app = createTestApp({
       seedWorkflow: workflow,
       fetch: async () => {
         called = true;
@@ -540,7 +570,7 @@ describe("workflow API server", () => {
   });
 
   it("captures model endpoint failures as failed runs", async () => {
-    const app = createServerApp({
+    const app = createTestApp({
       fetch: async () => new Response(JSON.stringify({ error: "nope" }), { status: 503 }),
     });
 
@@ -559,5 +589,78 @@ describe("workflow API server", () => {
     expect(failedRun.status).toBe("failed");
     expect(failedRun.error.message).toContain("nope");
     expect(failedRun.output.nodeResults).toHaveLength(2);
+  });
+
+  it("deletes a workflow (authed, owner-scoped)", async () => {
+    const app = createTestApp();
+
+    const created = await app.request("/api/workflows", {
+      method: "POST",
+      body: JSON.stringify({ workflow: createDefaultWorkflow() }),
+    });
+    const { workflow } = (await json(created)) as { workflow: { id: string } };
+
+    const deleteResponse = await app.request(`/api/workflows/${workflow.id}`, { method: "DELETE" });
+    expect(deleteResponse.status).toBe(204);
+
+    const getResponse = await app.request(`/api/workflows/${workflow.id}`);
+    expect(getResponse.status).toBe(404);
+
+    const missingDelete = await app.request("/api/workflows/does-not-exist", { method: "DELETE" });
+    expect(missingDelete.status).toBe(404);
+  });
+
+  it("requires authentication to list workflows", async () => {
+    const app = buildServerApp({
+      resolveUserId: async () => null,
+      workflows: createInMemoryWorkflowRepository(),
+    });
+
+    const response = await app.request("/api/workflows");
+    expect(response.status).toBe(401);
+    expect(await json(response)).toMatchObject({ error: { code: "unauthorized" } });
+  });
+
+  it("runs an anonymous workflow from an inline definition", async () => {
+    const app = buildServerApp({
+      fetch: createModelFetch("Anonymous output."),
+      resolveUserId: async () => null,
+      workflows: createInMemoryWorkflowRepository(),
+    });
+
+    const response = await app.request("/api/workflows/local/runs", {
+      method: "POST",
+      body: JSON.stringify({
+        input: { topic: "anon" },
+        workflow: withSeedMetadata(createDefaultWorkflow()),
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const created = (await json(response)) as { run: { id: string } };
+    const run = (await waitForRun(app, created.run.id)) as {
+      status: string;
+      output: { nodeResults: Array<{ output: string }> };
+    };
+
+    expect(run.status).toBe("succeeded");
+    expect(run.output.nodeResults).toHaveLength(2);
+    expect(run.output.nodeResults[1].output).toBe("Anonymous output.");
+  });
+
+  it("lists run history for a workflow (authed)", async () => {
+    const app = createTestApp({ fetch: createModelFetch("History output.") });
+
+    const created = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "history" } }),
+    });
+    const { run } = (await json(created)) as { run: { id: string } };
+    await waitForRun(app, run.id);
+
+    const historyResponse = await app.request("/api/workflows/workflow-1/runs");
+    expect(historyResponse.status).toBe(200);
+    const { runs } = (await json(historyResponse)) as { runs: Array<{ id: string; status: string }> };
+    expect(runs.some((r) => r.id === run.id && r.status === "succeeded")).toBe(true);
   });
 });
