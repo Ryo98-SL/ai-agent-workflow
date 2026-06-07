@@ -60,11 +60,14 @@ function createWorkflowApiStub(): WorkbenchWorkflowApi {
     getRun: vi.fn(),
     listRunEvents: vi.fn(),
     runStreamUrl: vi.fn(),
+    deleteRun: vi.fn(),
     listProviderKeys: vi.fn(async () => ({ keys: [] })),
-    putProviderKey: vi.fn(),
+    createProviderKey: vi.fn(),
     deleteProviderKey: vi.fn(),
     listCustomModels: vi.fn(async () => ({ models: [] })),
     createCustomModel: vi.fn(),
     deleteCustomModel: vi.fn(),
+    getCredits: vi.fn(async () => ({ status: "none" as const })),
+    applyCredits: vi.fn(),
   } as unknown as WorkbenchWorkflowApi;
 }

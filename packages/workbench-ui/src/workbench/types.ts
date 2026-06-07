@@ -1,6 +1,7 @@
 import type {
   CreateCustomModelRequest,
   CreateRunRequest,
+  CreditStatusResponse,
   CustomModelDto,
   ProviderKeyDto,
   RunEvent,
@@ -62,15 +63,18 @@ export type WorkbenchWorkflowApi = {
   deleteWorkflow: (id: string) => Promise<void>;
   createRun: (workflowId: string, request?: CreateRunRequest) => Promise<{ run: WorkflowRun }>;
   listWorkflowRuns: (workflowId: string) => Promise<{ runs: WorkflowRun[] }>;
+  deleteRun: (runId: string) => Promise<void>;
   getRun: (runId: string) => Promise<{ run: WorkflowRun }>;
   listRunEvents: (runId: string) => Promise<{ events: RunEvent[] }>;
   runStreamUrl: (runId: string) => string;
   listProviderKeys: () => Promise<{ keys: ProviderKeyDto[] }>;
-  putProviderKey: (provider: string, request: { apiKey: string }) => Promise<{ key: ProviderKeyDto }>;
-  deleteProviderKey: (provider: string) => Promise<void>;
+  createProviderKey: (request: { provider: string; label: string; apiKey: string }) => Promise<{ key: ProviderKeyDto }>;
+  deleteProviderKey: (id: string) => Promise<void>;
   listCustomModels: () => Promise<{ models: CustomModelDto[] }>;
   createCustomModel: (request: CreateCustomModelRequest) => Promise<{ model: CustomModelDto }>;
   deleteCustomModel: (id: string) => Promise<void>;
+  getCredits: () => Promise<CreditStatusResponse>;
+  applyCredits: () => Promise<CreditStatusResponse>;
 };
 
 export type AppWorkbenchProps = {

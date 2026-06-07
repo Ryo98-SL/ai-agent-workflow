@@ -14,9 +14,11 @@ export const API_ROUTE_TEMPLATES = {
   runEvents: "/api/runs/:id/events",
   runStream: "/api/runs/:id/stream",
   providerKeys: "/api/provider-keys",
-  providerKey: "/api/provider-keys/:provider",
+  providerKeyById: "/api/provider-keys/:id",
   customModels: "/api/custom-models",
   customModel: "/api/custom-models/:id",
+  credits: "/api/credits",
+  creditsApply: "/api/credits/apply",
 } as const;
 
 const encodePathSegment = (value: string) => encodeURIComponent(value);
@@ -29,9 +31,11 @@ export const apiPaths = {
   runEvents: (id: string) => `/api/runs/${encodePathSegment(id)}/events`,
   runStream: (id: string) => `/api/runs/${encodePathSegment(id)}/stream`,
   providerKeys: () => API_ROUTE_TEMPLATES.providerKeys,
-  providerKey: (provider: string) => `/api/provider-keys/${encodePathSegment(provider)}`,
+  providerKeyById: (id: string) => `/api/provider-keys/${encodePathSegment(id)}`,
   customModels: () => API_ROUTE_TEMPLATES.customModels,
   customModel: (id: string) => `/api/custom-models/${encodePathSegment(id)}`,
+  credits: () => API_ROUTE_TEMPLATES.credits,
+  creditsApply: () => API_ROUTE_TEMPLATES.creditsApply,
 } as const;
 
 export const ApiIssueSchema = z.object({
@@ -46,6 +50,8 @@ export const ApiErrorCodeSchema = z.enum([
   "method_not_allowed",
   "validation_error",
   "conflict",
+  "credits_required",
+  "credits_exhausted",
   "internal_error",
 ]);
 
@@ -74,6 +80,7 @@ export const WorkflowSummarySchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().optional(),
+  icon: z.string().optional(),
   updatedAt: z.string().datetime(),
   nodeCount: z.number().int().nonnegative(),
   edgeCount: z.number().int().nonnegative(),
@@ -111,6 +118,9 @@ export const CreateRunRequestSchema = z.object({
   input: RunInputSchema.default({}),
   modelProvider: OpenAICompatibleSettingsSchema.optional(),
   modelProviderKeys: ModelProviderKeysSchema.optional(),
+  // Active stored-key selection for the run's provider, overriding any saved
+  // providerKeyPrefs (covers unsaved/transient selections). Authed-only.
+  providerKeyId: z.string().optional(),
   // Inline workflow definition for anonymous/unsaved runs. When present the
   // server executes it directly; otherwise it looks the workflow up by id.
   workflow: WorkflowFileSchema.optional(),
@@ -224,7 +234,9 @@ export const RunSseEventSchema = z.discriminatedUnion("type", [
 // ---------------------------------------------------------------------------
 
 export const ProviderKeyDtoSchema = z.object({
+  id: z.string().min(1),
   provider: z.string().min(1),
+  label: z.string().min(1),
   last4: z.string(),
   hasKey: z.literal(true),
 });
@@ -233,11 +245,13 @@ export const ListProviderKeysResponseSchema = z.object({
   keys: z.array(ProviderKeyDtoSchema),
 });
 
-export const PutProviderKeyRequestSchema = z.object({
+export const CreateProviderKeyRequestSchema = z.object({
+  provider: z.string().min(1),
+  label: z.string().min(1),
   apiKey: z.string().min(1),
 });
 
-export const PutProviderKeyResponseSchema = z.object({
+export const CreateProviderKeyResponseSchema = z.object({
   key: ProviderKeyDtoSchema,
 });
 
@@ -269,10 +283,25 @@ export const CreateCustomModelResponseSchema = z.object({
   model: CustomModelDtoSchema,
 });
 
+// ---------------------------------------------------------------------------
+// Credits. A single auto-approved grant per user; token balance metered on runs
+// that use the "credits" usage priority.
+// ---------------------------------------------------------------------------
+
+export const CreditStatusDtoSchema = z.object({
+  status: z.enum(["none", "approved"]),
+  grantedTokens: z.number().int().nonnegative().optional(),
+  balanceTokens: z.number().int().nonnegative().optional(),
+});
+
+export const CreditStatusResponseSchema = CreditStatusDtoSchema;
+
 export type ProviderKeyDto = z.infer<typeof ProviderKeyDtoSchema>;
 export type ListProviderKeysResponse = z.infer<typeof ListProviderKeysResponseSchema>;
-export type PutProviderKeyRequest = z.input<typeof PutProviderKeyRequestSchema>;
-export type PutProviderKeyResponse = z.infer<typeof PutProviderKeyResponseSchema>;
+export type CreateProviderKeyRequest = z.input<typeof CreateProviderKeyRequestSchema>;
+export type CreateProviderKeyResponse = z.infer<typeof CreateProviderKeyResponseSchema>;
+export type CreditStatusDto = z.infer<typeof CreditStatusDtoSchema>;
+export type CreditStatusResponse = z.infer<typeof CreditStatusResponseSchema>;
 export type CustomModelDto = z.infer<typeof CustomModelDtoSchema>;
 export type ListCustomModelsResponse = z.infer<typeof ListCustomModelsResponseSchema>;
 export type CreateCustomModelRequest = z.input<typeof CreateCustomModelRequestSchema>;

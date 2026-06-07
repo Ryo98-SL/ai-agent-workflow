@@ -10,9 +10,10 @@ streaming primitives while preserving the existing synchronous run route.
 - `src/app.ts` creates an isolated Hono app and in-memory store for tests or
   runtime, then persists synchronous run results and events. Run requests may
   carry transient model-provider settings and provider keyring values that are
-  merged into the workflow used for that execution. The app owns a shared
-  `MemorySaver` checkpointer and passes the deterministic run id as the
-  LangGraph `thread_id`.
+  merged into the workflow used for that execution. Run deletion removes the
+  authenticated user's durable run row and clears any matching owner-scoped
+  in-memory snapshot/events. The app owns a shared `MemorySaver` checkpointer
+  and passes the deterministic run id as the LangGraph `thread_id`.
 - `src/logger.ts` provides the shared structured logger used by server routes
   and runtime modules. It writes JSON logs through `console` and keeps callers
   responsible for passing only safe summary metadata.

@@ -34,7 +34,8 @@ import type { z } from "zod";
 import { auth } from "./auth/auth";
 import { resolveUserId } from "./auth/middleware";
 import { logger } from "./logger";
-import { createAccountRoutes, loadDecryptedProviderKey } from "./routes/account";
+import { createAccountRoutes, loadDecryptedProviderKey, loadDecryptedProviderKeyById } from "./routes/account";
+import { consumeCredits, createCreditRoutes, loadCreditBalance } from "./routes/credits";
 import { executeWorkflowRuntime } from "./runtime";
 import { frontendOrigins } from "./config";
 import { createPrismaWorkflowRepository, type WorkflowRepository } from "./workflows/repository";
@@ -59,6 +60,7 @@ type ServerState = {
   streamBuffers: Map<string, RunStreamBuffer>;
   // Effective workflow used for each run, kept for SSE replay; keyed by runId.
   runWorkflows: Map<string, WorkflowFile>;
+  runOwners: Map<string, string | null>;
   checkpointer: BaseCheckpointSaver;
 };
 
@@ -84,6 +86,7 @@ function createState(): ServerState {
     events: new Map(),
     streamBuffers: new Map(),
     runWorkflows: new Map(),
+    runOwners: new Map(),
     checkpointer: new MemorySaver(),
   };
 }
@@ -93,6 +96,7 @@ function workflowSummary(stored: WorkflowDto): WorkflowSummary {
     id: stored.id,
     name: stored.workflow.metadata.name,
     description: stored.workflow.metadata.description,
+    icon: stored.workflow.metadata.icon,
     updatedAt: stored.workflow.metadata.updatedAt,
     nodeCount: stored.workflow.graph.nodes.length,
     edgeCount: stored.workflow.graph.edges.length,
@@ -217,6 +221,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       state.runs.delete(runId);
       state.events.delete(runId);
       state.runWorkflows.delete(runId);
+      state.runOwners.delete(runId);
       state.streamBuffers.delete(runId);
     }, RUN_MEMORY_TTL_MS);
   }
@@ -238,6 +243,8 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
 
   // User-private account resources (provider keys, custom models).
   app.route("/", createAccountRoutes());
+  // AI credits: status + one-time auto-approved application.
+  app.route("/", createCreditRoutes());
 
   app.get(apiPaths.workflows(), async (c) => {
     const userId = await resolveUser(c);
@@ -362,13 +369,55 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     // Inject the authenticated user's stored provider key when the request did
     // not supply a transient one for the run's provider. The plaintext key is
     // decrypted here just-in-time and never leaves the server.
+    //
+    // Usage priority gates this: when the provider is explicitly set to "credits"
+    // we skip key injection (the credits path is owned by a later phase). For
+    // "apiKey" — or legacy runs with no saved preference — we resolve a key by:
+    // the request's providerKeyId override → the saved providerKeyPrefs
+    // selection → the most recent stored key (back-compat).
     let effectiveProviderKeys = parsed.data.modelProviderKeys;
     const runProvider = parsed.data.modelProvider?.provider ?? runWorkflow.settings.modelProvider?.provider;
-    if (runProvider && runProvider !== "ollama" && !effectiveProviderKeys?.[runProvider] && userId) {
-      const storedKey = await loadDecryptedProviderKey(userId, runProvider);
+    const savedPref = runProvider ? runWorkflow.settings.providerKeyPrefs?.[runProvider] : undefined;
+    const usesCredits = savedPref?.usagePriority === "credits" && !parsed.data.providerKeyId;
+    if (runProvider && runProvider !== "ollama" && !effectiveProviderKeys?.[runProvider] && userId && !usesCredits) {
+      const selectedKeyId = parsed.data.providerKeyId ?? savedPref?.providerKeyId;
+      const storedKey = selectedKeyId
+        ? await loadDecryptedProviderKeyById(userId, selectedKeyId)
+        : await loadDecryptedProviderKey(userId, runProvider);
       if (storedKey) {
         effectiveProviderKeys = { ...effectiveProviderKeys, [runProvider]: storedKey };
       }
+    }
+
+    // Credits path: when a paid provider runs on AI credits (no key resolved),
+    // require an approved grant with a positive balance and meter the run.
+    let creditBudget: number | undefined;
+    const needsCredits =
+      Boolean(runProvider) && runProvider !== "ollama" && usesCredits && !effectiveProviderKeys?.[runProvider!];
+    if (needsCredits) {
+      if (!userId) {
+        return c.json(
+          createApiErrorResponse(
+            "credits_required",
+            "Sign in and apply for AI credits, or add an API key for this provider.",
+          ),
+          402,
+        );
+      }
+      const balance = await loadCreditBalance(userId);
+      if (balance == null) {
+        return c.json(
+          createApiErrorResponse("credits_required", "Apply for AI credits or add an API key for this provider."),
+          402,
+        );
+      }
+      if (balance <= 0) {
+        return c.json(
+          createApiErrorResponse("credits_exhausted", "AI credits exhausted. Apply for more or add an API key."),
+          402,
+        );
+      }
+      creditBudget = balance;
     }
 
     const runId = randomUUID();
@@ -388,6 +437,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       completedAt: null,
     };
     state.runs.set(runId, pendingRun);
+    state.runOwners.set(runId, userId);
     state.events.set(runId, [
       createEvent(runId, 0, "run.created", `Run ${runId} created.`, createdAt, { workflowId }),
       createEvent(runId, 1, "run.started", `Run ${runId} started.`, startedAt),
@@ -430,6 +480,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
         checkpointer,
         fetch: options.fetch,
         threadId: runId,
+        creditBudget,
         onStreamEvent: (event) => {
           const buf = state.streamBuffers.get(runId);
           if (!buf) return;
@@ -462,7 +513,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
               runId,
               nodeId: event.nodeId,
               nodeType: event.nodeType as RunSseEvent extends { type: "node.failed"; nodeType: infer T } ? T : never,
-              error: "Node execution failed.",
+              error: event.message ?? "Node execution failed.",
               durationMs: event.durationMs ?? 0,
             });
           } else if (event.type === "node.tokens" && event.nodeId && event.tokenUsage) {
@@ -471,7 +522,19 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
           }
         },
       },
-    ).then((execution) => {
+    ).then(async (execution) => {
+      // Deduct metered tokens from the credit balance (credits runs only).
+      if (creditBudget != null && userId && execution.consumedTokens > 0) {
+        try {
+          await consumeCredits(userId, execution.consumedTokens);
+        } catch (error) {
+          logger.error("credits.consume_failed", {
+            runId,
+            message: error instanceof Error ? error.message : "consume failed",
+          });
+        }
+      }
+
       for (const result of execution.nodeResults) {
         const existing = nodeOutputs.get(result.nodeId) ?? {};
         nodeOutputs.set(result.nodeId, { ...existing, output: result.output, data: result.data });
@@ -585,6 +648,36 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     }
 
     return c.json(responseFromSchema(GetRunResponseSchema, { run }));
+  });
+
+  app.delete(API_ROUTE_TEMPLATES.run, async (c) => {
+    const id = c.req.param("id");
+    const userId = await resolveUser(c);
+    let deleted = false;
+
+    if (userId) {
+      deleted = await runRepo.delete(userId, id);
+    }
+
+    const memoryOwner = state.runOwners.get(id);
+    if (state.runs.has(id) && memoryOwner === userId) {
+      state.runs.delete(id);
+      state.events.delete(id);
+      state.runWorkflows.delete(id);
+      state.runOwners.delete(id);
+      state.streamBuffers.delete(id);
+      deleted = true;
+    }
+
+    if (!deleted) {
+      if (!userId) {
+        return c.json(normalizedUnauthorized(), 401);
+      }
+      return c.json(normalizedNotFound(`Run ${id} was not found.`), 404);
+    }
+
+    logger.info("run.deleted", { runId: id });
+    return c.body(null, 204);
   });
 
   app.get(API_ROUTE_TEMPLATES.runEvents, async (c) => {

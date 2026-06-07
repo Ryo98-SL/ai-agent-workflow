@@ -10,7 +10,8 @@ import {
   ListRunEventsResponseSchema,
   ListWorkflowRunsResponseSchema,
   ListWorkflowsResponseSchema,
-  PutProviderKeyResponseSchema,
+  CreateProviderKeyResponseSchema,
+  CreditStatusResponseSchema,
   UpdateWorkflowResponseSchema,
   apiPaths,
   type ApiErrorResponse,
@@ -27,8 +28,9 @@ import {
   type ListRunEventsResponse,
   type ListWorkflowRunsResponse,
   type ListWorkflowsResponse,
-  type PutProviderKeyRequest,
-  type PutProviderKeyResponse,
+  type CreateProviderKeyRequest,
+  type CreateProviderKeyResponse,
+  type CreditStatusResponse,
   type UpdateWorkflowRequest,
   type UpdateWorkflowResponse,
 } from "@ai-agent-workflow/api-contracts";
@@ -73,15 +75,18 @@ export type WorkflowClient = {
   deleteWorkflow: (id: string) => Promise<void>;
   createRun: (workflowId: string, request?: CreateRunRequest) => Promise<CreateRunResponse>;
   listWorkflowRuns: (workflowId: string) => Promise<ListWorkflowRunsResponse>;
+  deleteRun: (id: string) => Promise<void>;
   getRun: (id: string) => Promise<GetRunResponse>;
   listRunEvents: (id: string) => Promise<ListRunEventsResponse>;
   runStreamUrl: (id: string) => string;
   listProviderKeys: () => Promise<ListProviderKeysResponse>;
-  putProviderKey: (provider: string, request: PutProviderKeyRequest) => Promise<PutProviderKeyResponse>;
-  deleteProviderKey: (provider: string) => Promise<void>;
+  createProviderKey: (request: CreateProviderKeyRequest) => Promise<CreateProviderKeyResponse>;
+  deleteProviderKey: (id: string) => Promise<void>;
   listCustomModels: () => Promise<ListCustomModelsResponse>;
   createCustomModel: (request: CreateCustomModelRequest) => Promise<CreateCustomModelResponse>;
   deleteCustomModel: (id: string) => Promise<void>;
+  getCredits: () => Promise<CreditStatusResponse>;
+  applyCredits: () => Promise<CreditStatusResponse>;
 };
 
 type RequestOptions<TResponse> = {
@@ -226,6 +231,11 @@ export function createWorkflowClient(options: WorkflowClientOptions): WorkflowCl
         path: apiPaths.workflowRuns(workflowId),
         responseSchema: ListWorkflowRunsResponseSchema,
       }),
+    deleteRun: (id) =>
+      request<void>({
+        method: "DELETE",
+        path: apiPaths.run(id),
+      }),
     getRun: (id) =>
       request({
         path: apiPaths.run(id),
@@ -242,17 +252,17 @@ export function createWorkflowClient(options: WorkflowClientOptions): WorkflowCl
         path: apiPaths.providerKeys(),
         responseSchema: ListProviderKeysResponseSchema,
       }),
-    putProviderKey: (provider, body) =>
+    createProviderKey: (body) =>
       request({
-        method: "PUT",
-        path: apiPaths.providerKey(provider),
+        method: "POST",
+        path: apiPaths.providerKeys(),
         body,
-        responseSchema: PutProviderKeyResponseSchema,
+        responseSchema: CreateProviderKeyResponseSchema,
       }),
-    deleteProviderKey: (provider) =>
+    deleteProviderKey: (id) =>
       request<void>({
         method: "DELETE",
-        path: apiPaths.providerKey(provider),
+        path: apiPaths.providerKeyById(id),
       }),
     listCustomModels: () =>
       request({
@@ -270,6 +280,17 @@ export function createWorkflowClient(options: WorkflowClientOptions): WorkflowCl
       request<void>({
         method: "DELETE",
         path: apiPaths.customModel(id),
+      }),
+    getCredits: () =>
+      request({
+        path: apiPaths.credits(),
+        responseSchema: CreditStatusResponseSchema,
+      }),
+    applyCredits: () =>
+      request({
+        method: "POST",
+        path: apiPaths.creditsApply(),
+        responseSchema: CreditStatusResponseSchema,
       }),
   };
 }

@@ -34,7 +34,13 @@ export function getWorkflowNodeSize(node: WorkflowNode) {
   }
 
   if (node.type !== "start") {
-    return defaultWorkflowNodeSize;
+    const descriptionLineCount = node.description ? Math.ceil(node.description.length / 28) : 0;
+    const height = defaultWorkflowNodeSize.height + descriptionLineCount * 18;
+
+    return {
+      width: defaultWorkflowNodeSize.width,
+      height,
+    };
   }
 
   const fieldCount = node.config?.fields.length ?? 0;

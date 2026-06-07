@@ -18,9 +18,9 @@ node executes. The runtime currently executes Start and LLM nodes, while other
 known workflow node types are saved through placeholder builders so their state
 is visible to downstream runtime code until full implementations land. The
 server uses workflow defaults, provider keyring values, and optional node-level
-model settings to choose the provider, model, base URL, API key, temperature,
-and max tokens for each LLM node. Run requests can still provide transient model
-settings/keyring values for execution.
+model settings to choose the provider, model, base URL, resolved API key,
+temperature, and max tokens for each LLM node. Run requests can still provide
+transient model settings/keyring values for execution.
 
 LangGraph execution uses a shared in-memory checkpointer and runs through
 `.stream()` with updates, messages, and values enabled. `executeWorkflowRuntime`

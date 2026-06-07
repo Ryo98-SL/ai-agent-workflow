@@ -2,7 +2,7 @@ import type { WorkflowRun, WorkflowSummary } from "@ai-agent-workflow/api-contra
 import { createDefaultWorkflow, type WorkflowFile } from "@ai-agent-workflow/workflow-domain";
 import { clear, createStore, del, entries, get, set, type UseStore } from "idb-keyval";
 import type { WorkbenchWorkflowApi } from "../workbench/types";
-import { getAnonymousRunIds, recordAnonymousRun } from "./anonymousRunStore";
+import { forgetAnonymousRun, getAnonymousRunIds, recordAnonymousRun } from "./anonymousRunStore";
 
 export type LocalWorkflowRecord = { id: string; workflow: WorkflowFile };
 
@@ -63,6 +63,7 @@ function summarize(record: LocalWorkflowRecord): WorkflowSummary {
     id: record.id,
     name: workflow.metadata.name,
     description: workflow.metadata.description,
+    icon: workflow.metadata.icon,
     updatedAt: workflow.metadata.updatedAt,
     nodeCount: workflow.graph.nodes.length,
     edgeCount: workflow.graph.edges.length,
@@ -157,6 +158,11 @@ export function createLocalWorkflowApi(serverApi: WorkbenchWorkflowApi): Workben
     getRun: (id) => serverApi.getRun(id),
     listRunEvents: (id) => serverApi.listRunEvents(id),
     runStreamUrl: (id) => serverApi.runStreamUrl(id),
+    async deleteRun(runId) {
+      for (const record of await readRecords()) {
+        forgetAnonymousRun(record.id, runId);
+      }
+    },
     // Session-scoped anonymous history: resolve tracked run ids from server
     // memory; ids that were evicted (TTL) are dropped.
     async listWorkflowRuns(workflowId) {
@@ -175,10 +181,12 @@ export function createLocalWorkflowApi(serverApi: WorkbenchWorkflowApi): Workben
 
     // Account endpoints are not used in anonymous mode; delegate for type parity.
     listProviderKeys: () => serverApi.listProviderKeys(),
-    putProviderKey: (provider, request) => serverApi.putProviderKey(provider, request),
-    deleteProviderKey: (provider) => serverApi.deleteProviderKey(provider),
+    createProviderKey: (request) => serverApi.createProviderKey(request),
+    deleteProviderKey: (id) => serverApi.deleteProviderKey(id),
     listCustomModels: () => serverApi.listCustomModels(),
     createCustomModel: (request) => serverApi.createCustomModel(request),
     deleteCustomModel: (id) => serverApi.deleteCustomModel(id),
+    getCredits: () => serverApi.getCredits(),
+    applyCredits: () => serverApi.applyCredits(),
   };
 }

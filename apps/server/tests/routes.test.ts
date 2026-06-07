@@ -663,4 +663,25 @@ describe("workflow API server", () => {
     const { runs } = (await json(historyResponse)) as { runs: Array<{ id: string; status: string }> };
     expect(runs.some((r) => r.id === run.id && r.status === "succeeded")).toBe(true);
   });
+
+  it("deletes an authenticated workflow run and its history row", async () => {
+    const app = createTestApp({ fetch: createModelFetch("Delete history output.") });
+
+    const created = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "delete-history" } }),
+    });
+    const { run } = (await json(created)) as { run: { id: string } };
+    await waitForRun(app, run.id);
+
+    const deleteResponse = await app.request(`/api/runs/${run.id}`, { method: "DELETE" });
+    expect(deleteResponse.status).toBe(204);
+
+    const historyResponse = await app.request("/api/workflows/workflow-1/runs");
+    const { runs } = (await json(historyResponse)) as { runs: Array<{ id: string }> };
+    expect(runs.some((r) => r.id === run.id)).toBe(false);
+
+    const getDeletedResponse = await app.request(`/api/runs/${run.id}`);
+    expect(getDeletedResponse.status).toBe(404);
+  });
 });

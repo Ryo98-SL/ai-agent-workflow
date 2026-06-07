@@ -28,9 +28,9 @@ type RuntimeChatModel = {
   invoke: (messages: Array<SystemMessage | HumanMessage>) => Promise<Record<string, any>>;
 };
 
-function createChatModel(settings: OpenAICompatibleSettings, node: LLMNode, fetchImpl: typeof fetch): RuntimeChatModel {
-  const temperature = node.config.modelSettings?.temperature ?? node.config.temperature;
-  const maxTokens = node.config.modelSettings?.maxTokens ?? node.config.maxTokens;
+function createChatModel(settings: OpenAICompatibleSettings, _node: LLMNode, fetchImpl: typeof fetch): RuntimeChatModel {
+  const temperature = settings.temperature;
+  const maxTokens = settings.maxTokens;
   const providerFactories: Record<ModelProvider, () => RuntimeChatModel> = {
     deepseek: () =>
       new ChatDeepSeek({
@@ -103,6 +103,31 @@ function stringifyMessageContent(content: unknown): string {
     .join("");
 }
 
+/**
+ * Turns a raw provider/LangChain error into a concise, user-facing message.
+ * Strips LangChain's "Troubleshooting URL" footer and, when the body embeds a
+ * provider error JSON (e.g. Anthropic/OpenAI), surfaces its `error.message`
+ * prefixed with the HTTP status so the UI shows "404: Not found" instead of an
+ * opaque "Node execution failed."
+ */
+export function humanizeModelError(raw: string): string {
+  const cleaned = raw.split(/\n\s*Troubleshooting URL:/i)[0].trim();
+  const status = cleaned.match(/^\s*(\d{3})\b/)?.[1];
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]) as { message?: string; error?: { message?: string } };
+      const inner = parsed.error?.message ?? parsed.message;
+      if (typeof inner === "string" && inner.trim()) {
+        return status ? `${status}: ${inner.trim()}` : inner.trim();
+      }
+    } catch {
+      // Not JSON — fall through to the cleaned raw text.
+    }
+  }
+  return cleaned.replace(/\s+/g, " ").trim() || "Model request failed.";
+}
+
 function extractReasoning(response: Record<string, any>): unknown {
   return (
     response.additional_kwargs?.reasoning_content ??
@@ -136,13 +161,16 @@ export async function callChatCompletion(
     });
     response = (await model.invoke(messages)) as Record<string, any>;
   } catch (error) {
+    const rawMessage = error instanceof Error ? error.message : "Model invocation failed.";
     logger.error("runtime.model.invoke_failed", {
       nodeId: node.id,
       provider: settings.provider,
       model: settings.model,
-      message: error instanceof Error ? error.message : "Model invocation failed.",
+      message: rawMessage,
     });
-    throw new RuntimeModelError(error instanceof Error ? error.message : "Model invocation failed.");
+    // Surface a concise, provider-aware message that names the model so the UI
+    // can explain failures like a deprecated/unknown model (404 Not found).
+    throw new RuntimeModelError(`${settings.provider} model "${settings.model}" — ${humanizeModelError(rawMessage)}`);
   }
 
   const text = stringifyMessageContent(response.content);

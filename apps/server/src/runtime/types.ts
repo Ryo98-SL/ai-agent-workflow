@@ -28,12 +28,15 @@ export type RuntimeExecutionResult =
       state: WorkflowRuntimeState;
       nodeResults: RuntimeNodeResult[];
       streamEvents: RuntimeStreamEvent[];
+      /** Summed input + output tokens consumed across LLM calls in this run. */
+      consumedTokens: number;
     }
   | {
       ok: false;
       error: ApiErrorResponse["error"];
       nodeResults: RuntimeNodeResult[];
       streamEvents: RuntimeStreamEvent[];
+      consumedTokens: number;
     };
 
 export type RuntimeExecutorOptions = {
@@ -41,4 +44,10 @@ export type RuntimeExecutorOptions = {
   fetch?: typeof fetch;
   onStreamEvent?: (event: RuntimeStreamEvent) => void | Promise<void>;
   threadId?: string;
+  /**
+   * When set, the run is metered against this many tokens (summed input +
+   * output). Once exceeded, remaining graph execution is aborted and the run
+   * fails with a credits_exhausted error.
+   */
+  creditBudget?: number;
 };

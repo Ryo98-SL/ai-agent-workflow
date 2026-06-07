@@ -8,9 +8,10 @@ its label and type-specific config.
 Model settings are provider-aware. Persisted workflow settings support
 `deepseek`, `openai`, `anthropic`, and `ollama`, defaulting to DeepSeek
 `deepseek-v4-flash` at `https://api.deepseek.com`. Workflow settings also keep
-provider API keys in a `modelProviderKeys` keyring, while LLM nodes can carry
-their own `modelSettings` override for provider, base URL, model, API key,
-temperature, and max tokens.
+provider API keys in a `modelProviderKeys` keyring. Workflow defaults and LLM
+node `modelSettings` overrides both support provider, base URL, model,
+temperature, and max tokens; node overrides no longer need inline API keys for
+new UI flows.
 
 ## Commands
 

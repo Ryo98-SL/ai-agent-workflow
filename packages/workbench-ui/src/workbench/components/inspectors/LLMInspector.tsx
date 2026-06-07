@@ -1,11 +1,17 @@
 import { useState, type ReactNode } from "react";
 import { parsePromptVariableReferences, resolveLLMModelSettings } from "@ai-agent-workflow/workflow-domain";
-import type { LLMModelSettings, LLMNode, WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import type {
+  LLMModelSettings,
+  LLMNode,
+  ModelProvider,
+  ProviderKeyPreference,
+  WorkflowFile,
+  WorkflowNode,
+} from "@ai-agent-workflow/workflow-domain";
 import { Textarea } from "@workbench/components/ui/textarea";
 import { Button } from "../Button";
 import { ModelCapabilityTags } from "../ModelCapabilityTags";
-import { DEFAULT_MODEL_SETTINGS } from "../ModelSettingsPanel";
-import { ModelSettingsEditor } from "../ModelSettingsEditor";
+import { DEFAULT_MODEL_SETTINGS, ModelSettingsPanel } from "../ModelSettingsPanel";
 import { getModelCapabilities } from "../modelCatalog";
 import { ModelProviderLogo } from "../modelProviderVisuals";
 import { Popover } from "../Popover";
@@ -14,10 +20,17 @@ type LLMInspectorProps = {
   workflow: WorkflowFile;
   node: LLMNode;
   showDevModelProviders?: boolean;
+  onProviderKeyPreferenceChange?: (provider: ModelProvider, preference: ProviderKeyPreference) => void;
   updateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
 };
 
-export function LLMInspector({ workflow, node, showDevModelProviders = false, updateNode }: LLMInspectorProps) {
+export function LLMInspector({
+  workflow,
+  node,
+  showDevModelProviders = false,
+  onProviderKeyPreferenceChange,
+  updateNode,
+}: LLMInspectorProps) {
   const prompts = `${node.config.systemPrompt || ""}\n${node.config.userPrompt}`;
   const variables = parsePromptVariableReferences(prompts);
   const modelSettings = modelSettingsForEditor(workflow, node);
@@ -35,7 +48,9 @@ export function LLMInspector({ workflow, node, showDevModelProviders = false, up
         hasModelOverride={hasModelOverride}
         modelSettings={modelSettings}
         nodeId={node.id}
+        workflow={workflow}
         showDevModelProviders={showDevModelProviders}
+        onProviderKeyPreferenceChange={onProviderKeyPreferenceChange}
         onChange={(nextSettings) =>
           updateConfig({
             model: undefined,
@@ -93,14 +108,18 @@ function ModelSettingField({
   hasModelOverride,
   modelSettings,
   nodeId,
+  workflow,
   showDevModelProviders,
+  onProviderKeyPreferenceChange,
   onChange,
   onReset,
 }: {
   hasModelOverride: boolean;
   modelSettings: LLMModelSettings;
   nodeId: string;
+  workflow: WorkflowFile;
   showDevModelProviders: boolean;
+  onProviderKeyPreferenceChange?: (provider: ModelProvider, preference: ProviderKeyPreference) => void;
   onChange: (settings: LLMModelSettings) => void;
   onReset: () => void;
 }) {
@@ -143,13 +162,14 @@ function ModelSettingField({
               Use workflow default
             </Button>
           </div>
-          <div className="p-4">
-            <ModelSettingsEditor
+          <div>
+            <ModelSettingsPanel
               settings={modelSettings}
               selectorId={`llm-model-selector-${nodeId}`}
-              apiKeyPlaceholder="Use provider default key"
-              showAdvanced
+              providerKeyPrefs={workflow.settings.providerKeyPrefs}
               showDevModelProviders={showDevModelProviders}
+              className="p-4"
+              onProviderKeyPreferenceChange={onProviderKeyPreferenceChange}
               onChange={(nextSettings) => onChange(nextSettings as LLMModelSettings)}
             />
           </div>
@@ -167,9 +187,8 @@ function modelSettingsForEditor(workflow: WorkflowFile, node: LLMNode): LLMModel
     provider: node.config.modelSettings?.provider || resolved?.provider || workflowDefault.provider,
     baseURL: node.config.modelSettings?.baseURL || resolved?.baseURL || workflowDefault.baseURL,
     model: node.config.modelSettings?.model || resolved?.model || node.config.model || workflowDefault.model,
-    apiKey: node.config.modelSettings?.apiKey || "",
-    temperature: node.config.modelSettings?.temperature ?? node.config.temperature ?? 0.7,
-    maxTokens: node.config.modelSettings?.maxTokens ?? node.config.maxTokens ?? 800,
+    temperature: node.config.modelSettings?.temperature ?? resolved?.temperature ?? node.config.temperature ?? 0.7,
+    maxTokens: node.config.modelSettings?.maxTokens ?? resolved?.maxTokens ?? node.config.maxTokens ?? 800,
   };
 }
 
@@ -178,7 +197,6 @@ function sanitizeNodeModelSettings(settings: LLMModelSettings): LLMModelSettings
     provider: settings.provider,
     baseURL: settings.baseURL,
     model: settings.model,
-    apiKey: settings.apiKey || undefined,
     temperature: settings.temperature,
     maxTokens: settings.maxTokens,
   };

@@ -1,6 +1,6 @@
 import {
   CreateCustomModelRequestSchema,
-  PutProviderKeyRequestSchema,
+  CreateProviderKeyRequestSchema,
   apiPaths,
   createApiErrorResponse,
   zodIssuesToApiIssues,
@@ -26,8 +26,8 @@ type ProviderKeyRow = {
   authTag: Uint8Array;
 };
 
-function toProviderKeyDto(row: { provider: string; last4: string }): ProviderKeyDto {
-  return { provider: row.provider, last4: row.last4, hasKey: true };
+function toProviderKeyDto(row: { id: string; provider: string; label: string; last4: string }): ProviderKeyDto {
+  return { id: row.id, provider: row.provider, label: row.label, last4: row.last4, hasKey: true };
 }
 
 function toCustomModelDto(row: {
@@ -49,12 +49,29 @@ function toCustomModelDto(row: {
 }
 
 /**
- * Loads and decrypts a single provider key for a user. Used by the run executor
- * to inject stored keys just-in-time. Returns null when no key is stored.
+ * Loads and decrypts a specific stored key by id (scoped to the owner). Used by
+ * the run executor to inject the active key selected in providerKeyPrefs.
+ * Returns null when the id is unknown or not owned by the user.
+ */
+export async function loadDecryptedProviderKeyById(userId: string, id: string): Promise<string | null> {
+  const row = (await prisma.providerKey.findFirst({
+    where: { id, userId },
+  })) as ProviderKeyRow | null;
+  if (!row) {
+    return null;
+  }
+  return decryptSecret({ ciphertext: row.ciphertext, iv: row.iv, authTag: row.authTag });
+}
+
+/**
+ * Loads and decrypts a stored provider key for a user, falling back to the most
+ * recently created one when no specific key is selected. Returns null when none
+ * is stored. Back-compat path for runs without a providerKeyPrefs selection.
  */
 export async function loadDecryptedProviderKey(userId: string, provider: string): Promise<string | null> {
-  const row = (await prisma.providerKey.findUnique({
-    where: { userId_provider: { userId, provider } },
+  const row = (await prisma.providerKey.findFirst({
+    where: { userId, provider },
+    orderBy: { createdAt: "desc" },
   })) as ProviderKeyRow | null;
   if (!row) {
     return null;
@@ -73,17 +90,16 @@ export function createAccountRoutes() {
     const userId = c.get("userId");
     const rows = await prisma.providerKey.findMany({
       where: { userId },
-      select: { provider: true, last4: true },
-      orderBy: { provider: "asc" },
+      select: { id: true, provider: true, label: true, last4: true },
+      orderBy: [{ provider: "asc" }, { createdAt: "asc" }],
     });
     return c.json({ keys: rows.map(toProviderKeyDto) });
   });
 
-  app.put("/api/provider-keys/:provider", requireUser, async (c) => {
+  app.post(apiPaths.providerKeys(), requireUser, async (c) => {
     const userId = c.get("userId");
-    const provider = c.req.param("provider");
 
-    const parsed = PutProviderKeyRequestSchema.safeParse(await readJsonBody(c.req.raw));
+    const parsed = CreateProviderKeyRequestSchema.safeParse(await readJsonBody(c.req.raw));
     if (!parsed.success) {
       return c.json(
         createApiErrorResponse("validation_error", "Invalid provider key.", zodIssuesToApiIssues(parsed.error)),
@@ -91,34 +107,38 @@ export function createAccountRoutes() {
       );
     }
 
+    const { provider, label } = parsed.data;
+    const duplicate = await prisma.providerKey.findUnique({
+      where: { userId_provider_label: { userId, provider, label } },
+    });
+    if (duplicate) {
+      return c.json(createApiErrorResponse("conflict", "A key with that label already exists for this provider."), 409);
+    }
+
     const encrypted = encryptSecret(parsed.data.apiKey);
-    await prisma.providerKey.upsert({
-      where: { userId_provider: { userId, provider } },
-      create: {
+    const row = await prisma.providerKey.create({
+      data: {
         userId,
         provider,
+        label,
         ciphertext: encrypted.ciphertext,
         iv: encrypted.iv,
         authTag: encrypted.authTag,
         last4: encrypted.last4,
       },
-      update: {
-        ciphertext: encrypted.ciphertext,
-        iv: encrypted.iv,
-        authTag: encrypted.authTag,
-        last4: encrypted.last4,
-      },
+      select: { id: true, provider: true, label: true, last4: true },
     });
 
     // Never log the key itself — only that one was stored.
-    logger.info("provider_key.stored", { userId, provider });
-    return c.json({ key: { provider, last4: encrypted.last4, hasKey: true as const } });
+    logger.info("provider_key.stored", { userId, provider, keyId: row.id });
+    return c.json({ key: toProviderKeyDto(row) }, 201);
   });
 
-  app.delete("/api/provider-keys/:provider", requireUser, async (c) => {
+  app.delete("/api/provider-keys/:id", requireUser, async (c) => {
     const userId = c.get("userId");
-    const provider = c.req.param("provider");
-    await prisma.providerKey.deleteMany({ where: { userId, provider } });
+    const id = c.req.param("id");
+    // deleteMany scoped by userId → non-owned id silently affects 0 rows (no enumeration).
+    await prisma.providerKey.deleteMany({ where: { id, userId } });
     return c.body(null, 204);
   });
 

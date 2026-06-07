@@ -1,7 +1,9 @@
 import { Loader2, Play, Plus, Settings } from "lucide-react";
 import type {
+  ModelProvider,
   ModelProviderKeys,
   OpenAICompatibleSettings,
+  ProviderKeyPreference,
   WorkflowFile,
   WorkflowNode,
   WorkflowNodeType,
@@ -19,7 +21,7 @@ import { ThemeMenu } from "../../theme/ThemeMenu";
 import { AuthMenu } from "../../auth/AuthMenu";
 import { RunHistoryMenu } from "./RunHistoryMenu";
 import { WorkflowSwitcher } from "./WorkflowSwitcher";
-import { WorkflowMetaEditor, type WorkflowMetaPatch } from "./WorkflowMetaEditor";
+import type { WorkflowMetaPatch } from "./WorkflowMetaEditor";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import type { WorkflowGraphHistoryEntry } from "../hooks/useWorkflowGraphHistory";
 import type { AddNodeOptions, DebugState, NodeExecutionState } from "../types";
@@ -31,7 +33,6 @@ type WorkbenchLayoutProps = {
   selectedNode?: WorkflowNode;
   selectedNodeId: string;
   debugState: DebugState;
-  viewedDebugState?: DebugState;
   nodeStates: Map<string, NodeExecutionState>;
   paletteOpen: boolean;
   settingsOpen: boolean;
@@ -49,17 +50,17 @@ type WorkbenchLayoutProps = {
   onRedo: () => void;
   onToggleRunPanel: () => void;
   onRunWorkflow: (input: RunInput) => void;
-  onOpenHistoricalRun: (runId: string) => void;
   onSwitchWorkflow: (id: string) => void;
   onCreateWorkflow: () => void;
   onDeleteWorkflow: (id: string) => void;
-  onUpdateWorkflowMeta: (patch: WorkflowMetaPatch) => void;
+  onSaveWorkflowMeta: (id: string, patch: WorkflowMetaPatch) => Promise<boolean>;
   onSaveWorkflow: () => void;
   onSelectNode: (nodeId: string) => void;
   onTogglePalette: () => void;
   onToggleSettings: () => void;
   onUndo: () => void;
   onUpdateModelSettings: (settings: OpenAICompatibleSettings, providerKeys: ModelProviderKeys) => void;
+  onUpdateProviderKeyPreference: (provider: ModelProvider, preference: ProviderKeyPreference) => void;
   onUpdateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
 };
 
@@ -70,7 +71,6 @@ export function WorkbenchLayout({
   selectedNode,
   selectedNodeId,
   debugState,
-  viewedDebugState,
   nodeStates,
   paletteOpen,
   settingsOpen,
@@ -88,23 +88,20 @@ export function WorkbenchLayout({
   onRedo,
   onToggleRunPanel,
   onRunWorkflow,
-  onOpenHistoricalRun,
   onSwitchWorkflow,
   onCreateWorkflow,
   onDeleteWorkflow,
-  onUpdateWorkflowMeta,
+  onSaveWorkflowMeta,
   onSaveWorkflow,
   onSelectNode,
   onTogglePalette,
   onToggleSettings,
   onUndo,
   onUpdateModelSettings,
+  onUpdateProviderKeyPreference,
   onUpdateNode,
 }: WorkbenchLayoutProps) {
   const hasStartNode = workflow.graph.nodes.some((node) => node.type === "start");
-  const debugPanelState = viewedDebugState ?? debugState;
-  const debugPanelNodeStates = viewedDebugState ? new Map<string, NodeExecutionState>() : nodeStates;
-  const debugPanelReadOnly = Boolean(viewedDebugState);
 
   return (
     <main className="relative h-full min-h-0 flex flex-col overflow-hidden bg-background text-foreground">
@@ -116,11 +113,11 @@ export function WorkbenchLayout({
           onSwitch={onSwitchWorkflow}
           onCreate={onCreateWorkflow}
           onDelete={onDeleteWorkflow}
+          onSaveMeta={onSaveWorkflowMeta}
         />
-        <WorkflowMetaEditor workflow={workflow} onUpdateMeta={onUpdateWorkflowMeta} />
         <div className="min-w-0 flex-1" />
         <ProjectFileActions dirty={dirty} filePath={workflowId} onSave={onSaveWorkflow} />
-        <RunHistoryMenu workflowId={workflowId} onOpenRun={onOpenHistoricalRun} />
+        <RunHistoryMenu workflow={workflow} workflowId={workflowId} debugState={debugState} nodeStates={nodeStates} />
         <ThemeMenu />
         <AuthMenu />
         <Popover
@@ -156,8 +153,10 @@ export function WorkbenchLayout({
             <ModelSettingsPanel
                 settings={workflow.settings.modelProvider}
                 providerKeys={workflow.settings.modelProviderKeys}
+                providerKeyPrefs={workflow.settings.providerKeyPrefs}
                 showDevModelProviders={showDevModelProviders}
                 onChange={onUpdateModelSettings}
+                onProviderKeyPreferenceChange={onUpdateProviderKeyPreference}
             />
           </FloatingPanel>
         </Popover>
@@ -255,8 +254,8 @@ export function WorkbenchLayout({
             )}
           >
             <FloatingPanel
-              title={debugPanelReadOnly ? "Run History" : "Run Log"}
-              description={debugPanelReadOnly ? "Historical run" : "Workflow run"}
+              title="Run Log"
+              description="Workflow run"
               closeLabel="Close run log"
               onClose={onCloseDebug}
               className="h-full w-[560px]"
@@ -264,10 +263,9 @@ export function WorkbenchLayout({
               <div className="h-full overflow-hidden">
                 <DebugPanel
                   workflow={workflow}
-                  debugState={debugPanelState}
-                  nodeStates={debugPanelNodeStates}
+                  debugState={debugState}
+                  nodeStates={nodeStates}
                   onRun={onRunWorkflow}
-                  readOnly={debugPanelReadOnly}
                 />
               </div>
             </FloatingPanel>
@@ -291,6 +289,7 @@ export function WorkbenchLayout({
               debugState={debugState}
               nodeStates={nodeStates}
               showDevModelProviders={showDevModelProviders}
+              onProviderKeyPreferenceChange={onUpdateProviderKeyPreference}
               updateNode={onUpdateNode}
             />
           </div>

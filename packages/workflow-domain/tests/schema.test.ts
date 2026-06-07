@@ -4,6 +4,7 @@ import {
   createNode,
   createReadableNodeId,
   parseWorkflowJson,
+  resolveLLMModelSettings,
   serializeWorkflowFile,
   validateWorkflowFile,
 } from "@ai-agent-workflow/workflow-domain";
@@ -110,5 +111,27 @@ describe("workflow schema", () => {
 
     expect(parsed.settings.modelProvider.apiKey).toBeUndefined();
     expect(parsed.settings.modelProviderKeys.deepseek).toBe("secret");
+  });
+
+  it("lets workflow model defaults carry advanced sampling settings", () => {
+    const workflow = createDefaultWorkflow();
+    workflow.settings.modelProvider = {
+      provider: "openai",
+      baseURL: "https://api.openai.com/v1",
+      model: "gpt-5.2",
+      temperature: 0.2,
+      maxTokens: 1600,
+    };
+    const llm = workflow.graph.nodes.find((node) => node.type === "llm");
+
+    expect(llm?.type).toBe("llm");
+    if (llm?.type === "llm") {
+      expect(resolveLLMModelSettings(workflow, llm)).toMatchObject({
+        provider: "openai",
+        model: "gpt-5.2",
+        temperature: 0.2,
+        maxTokens: 1600,
+      });
+    }
   });
 });

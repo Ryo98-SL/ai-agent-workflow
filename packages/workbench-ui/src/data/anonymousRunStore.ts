@@ -39,3 +39,14 @@ export function recordAnonymousRun(workflowId: string, runId: string): void {
 export function getAnonymousRunIds(workflowId: string): string[] {
   return read()[workflowId] ?? [];
 }
+
+export function forgetAnonymousRun(workflowId: string, runId: string): void {
+  const store = read();
+  const next = (store[workflowId] ?? []).filter((id) => id !== runId);
+  if (next.length > 0) {
+    store[workflowId] = next;
+  } else {
+    delete store[workflowId];
+  }
+  write(store);
+}

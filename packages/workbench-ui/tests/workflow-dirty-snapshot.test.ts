@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import { workflowDirtySnapshot } from "../src/workbench/workflowDirtySnapshot";
 
 describe("workflow dirty snapshot", () => {
-  it("ignores metadata timestamps and transient workflow-level API keys", () => {
+  it("ignores workflow metadata and transient workflow-level API keys", () => {
     const workflow = createDefaultWorkflow();
     const changedTransientFields = {
       ...workflow,
       metadata: {
         ...workflow.metadata,
+        name: "Renamed Workflow",
+        description: "Saved by the workflow metadata editor.",
+        icon: "sparkles",
         updatedAt: "2030-01-01T00:00:00.000Z",
       },
       settings: {

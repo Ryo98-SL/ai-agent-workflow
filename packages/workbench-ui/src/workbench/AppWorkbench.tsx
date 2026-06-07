@@ -5,8 +5,10 @@ import { Loader2 } from "lucide-react";
 import {
   createDefaultWorkflow,
   createNode,
+  type ModelProvider,
   type ModelProviderKeys,
   type OpenAICompatibleSettings,
+  type ProviderKeyPreference,
   parseWorkflowJson,
   serializeWorkflowFile,
   type WorkflowFile,
@@ -20,10 +22,11 @@ import { ThemeProvider } from "../theme/ThemeProvider";
 import { WorkbenchDataProvider, useWorkbenchData } from "../data/WorkbenchDataProvider";
 import { useActiveWorkflowApi } from "../data/useActiveWorkflowApi";
 import { useSession } from "../data/useAccount";
+import { useProviderKeyStore } from "../data/useProviderKeyStore";
 import { useQueryClient } from "@tanstack/react-query";
 import type { WorkflowMetaPatch } from "./components/WorkflowMetaEditor";
 import { ImportLocalDataPrompt } from "../auth/ImportLocalDataPrompt";
-import type { AddNodeOptions, AppWorkbenchProps, DebugState } from "./types";
+import type { AddNodeOptions, AppWorkbenchProps } from "./types";
 import { workflowDirtySnapshot } from "./workflowDirtySnapshot";
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8788";
@@ -43,6 +46,7 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
   // Server-backed when signed in, localStorage-backed when anonymous.
   const workflowApi = useActiveWorkflowApi();
   const { isPending: sessionPending } = useSession();
+  const providerKeyStore = useProviderKeyStore();
   const { workflowRefreshNonce } = useWorkbenchData();
   const queryClient = useQueryClient();
   const [workflow, setWorkflow] = useState<WorkflowFile>(() => createDefaultWorkflow());
@@ -55,7 +59,6 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
-  const [viewedDebugState, setViewedDebugState] = useState<DebugState | undefined>();
   const { canRedo, canUndo, commitGraphHistoryEntry, redo, resetHistory, undo } = useWorkflowGraphHistory({
     setWorkflow,
   });
@@ -71,7 +74,6 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     setSelectedNodeId("");
     setInspectorOpen(false);
     setDebugOpen(false);
-    setViewedDebugState(undefined);
   }, []);
 
   const applyWorkflowDto = useCallback(
@@ -102,14 +104,14 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
   }, []);
 
   const persistWorkflow = useCallback(
-    async (mode: "save" | "saveAs"): Promise<WorkflowDto> => {
-      const payload = workflowForServer(workflow);
+    async (mode: "save" | "saveAs", workflowToPersist: WorkflowFile = workflow): Promise<WorkflowDto> => {
+      const payload = workflowForServer(workflowToPersist);
       const response =
         mode === "save" && workflowId
           ? await workflowApi.updateWorkflow(workflowId, { workflow: payload })
           : await workflowApi.createWorkflow({ workflow: payload });
 
-      applySavedWorkflowDto(response.workflow, workflow);
+      applySavedWorkflowDto(response.workflow, workflowToPersist);
       return response.workflow;
     },
     [applySavedWorkflowDto, workflow, workflowApi, workflowForServer, workflowId],
@@ -197,6 +199,22 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     [markWorkflow],
   );
 
+  const updateProviderKeyPreference = useCallback(
+    (provider: ModelProvider, preference: ProviderKeyPreference) => {
+      markWorkflow((current) => ({
+        ...current,
+        settings: {
+          ...current.settings,
+          providerKeyPrefs: {
+            ...current.settings.providerKeyPrefs,
+            [provider]: preference,
+          },
+        },
+      }));
+    },
+    [markWorkflow],
+  );
+
   const addNode = useCallback(
     (type: WorkflowNodeType, options?: AddNodeOptions) => {
       if (type === "start" && workflow.graph.nodes.some((node) => node.type === "start")) {
@@ -240,7 +258,6 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     setWorkflow(next);
     resetSelectionPanels();
     setDebugState({ status: "idle" });
-    setViewedDebugState(undefined);
     setWorkflowId(undefined);
     setSavedWorkflowSnapshot(workflowDirtySnapshot(next));
     resetHistory();
@@ -254,7 +271,6 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     async (id: string) => {
       if (id === workflowId) return;
       setDebugState({ status: "loading" });
-      setViewedDebugState(undefined);
       try {
         const response = await workflowApi.getWorkflow(id);
         applyWorkflowDto(response.workflow);
@@ -289,14 +305,49 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     [applyWorkflowDto, errorMessage, handleNewWorkflow, invalidateWorkflowList, workflowApi, workflowId],
   );
 
-  const updateWorkflowMeta = useCallback(
-    (patch: WorkflowMetaPatch) => {
-      markWorkflow((current) => ({
-        ...current,
-        metadata: { ...current.metadata, ...patch },
-      }));
+  const saveWorkflow = useCallback(
+    async (mode: "save" | "saveAs", workflowToPersist: WorkflowFile = workflow) => {
+      setDebugState({ status: "loading" });
+      try {
+        await persistWorkflow(mode, workflowToPersist);
+        invalidateWorkflowList();
+        setDebugState({ status: "idle" });
+        return true;
+      } catch (error) {
+        setDebugState({ status: "error", error: errorMessage(error) });
+        return false;
+      }
     },
-    [markWorkflow],
+    [errorMessage, invalidateWorkflowList, persistWorkflow, workflow],
+  );
+
+  const saveWorkflowMeta = useCallback(
+    async (id: string, patch: WorkflowMetaPatch) => {
+      if (id === workflowId) {
+        const nextWorkflow = {
+          ...workflow,
+          metadata: { ...workflow.metadata, ...patch },
+        };
+        return saveWorkflow("save", nextWorkflow);
+      }
+
+      setDebugState({ status: "loading" });
+      try {
+        const response = await workflowApi.getWorkflow(id);
+        const nextWorkflow = {
+          ...response.workflow.workflow,
+          metadata: { ...response.workflow.workflow.metadata, ...patch },
+        };
+        await workflowApi.updateWorkflow(id, { workflow: workflowForServer(nextWorkflow) });
+        invalidateWorkflowList();
+        setDebugState({ status: "idle" });
+        return true;
+      } catch (error) {
+        setDebugState({ status: "error", error: errorMessage(error) });
+        return false;
+      }
+    },
+    [errorMessage, invalidateWorkflowList, saveWorkflow, setDebugState, workflow, workflowApi, workflowForServer, workflowId],
   );
 
   useEffect(() => {
@@ -328,73 +379,63 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [redo, undo]);
 
-
-  const saveWorkflow = useCallback(
-    async (mode: "save" | "saveAs") => {
-      setDebugState({ status: "loading" });
-      try {
-        await persistWorkflow(mode);
-        invalidateWorkflowList();
-        setDebugState({ status: "idle" });
-      } catch (error) {
-        setDebugState({ status: "error", error: errorMessage(error) });
-      }
-    },
-    [errorMessage, invalidateWorkflowList, persistWorkflow],
-  );
-
   const runWorkflow = useCallback(
     async (input: RunInput) => {
       if (debugState.status === "running") {
         return;
       }
 
-      setViewedDebugState(undefined);
       setDebugOpen(true);
 
       try {
         const persisted = !workflowId || dirty ? await persistWorkflow("save") : { id: workflowId, workflow };
+
+        // Resolve the active stored key for the run's provider. Authed users
+        // send only the key id (the server decrypts it); anonymous users inject
+        // the in-memory plaintext via the transient key map.
+        const provider = workflow.settings.modelProvider?.provider;
+        const preference = provider ? workflow.settings.providerKeyPrefs?.[provider] : undefined;
+        let modelProviderKeys = workflow.settings.modelProviderKeys;
+        let providerKeyId: string | undefined;
+        if (preference?.usagePriority === "apiKey" && preference.providerKeyId && provider) {
+          if (providerKeyStore.isAnon) {
+            const apiKey = providerKeyStore.getApiKey(preference.providerKeyId);
+            if (apiKey) {
+              modelProviderKeys = { ...modelProviderKeys, [provider]: apiKey };
+            }
+          } else {
+            providerKeyId = preference.providerKeyId;
+          }
+        }
+
         execRunWorkflow(persisted.id, {
           input,
           modelProvider: workflow.settings.modelProvider,
-          modelProviderKeys: workflow.settings.modelProviderKeys,
+          modelProviderKeys,
+          providerKeyId,
         });
       } catch (error) {
         setDebugState({ status: "error", error: errorMessage(error) });
       }
     },
-    [debugState.status, dirty, errorMessage, execRunWorkflow, persistWorkflow, setDebugState, workflow, workflowId],
-  );
-
-  const openHistoricalRun = useCallback(
-    async (runId: string) => {
-      setInspectorOpen(false);
-      setSelectedNodeId("");
-      setDebugOpen(true);
-      setViewedDebugState({ status: "loading" });
-      try {
-        const [runResponse, eventsResponse] = await Promise.all([
-          workflowApi.getRun(runId),
-          workflowApi.listRunEvents(runId),
-        ]);
-        setViewedDebugState({
-          status: runResponse.run.status === "failed" ? "error" : "success",
-          result: { run: runResponse.run, events: eventsResponse.events },
-        });
-      } catch (error) {
-        setViewedDebugState({ status: "error", error: errorMessage(error) });
-      }
-    },
-    [errorMessage, workflowApi],
+    [
+      debugState.status,
+      dirty,
+      errorMessage,
+      execRunWorkflow,
+      persistWorkflow,
+      providerKeyStore,
+      setDebugState,
+      workflow,
+      workflowId,
+    ],
   );
 
   const closeDebug = useCallback(() => {
     setDebugOpen(false);
-    setViewedDebugState(undefined);
   }, []);
 
   const toggleRunPanel = useCallback(() => {
-    setViewedDebugState(undefined);
     setDebugOpen((state) => !state);
   }, []);
 
@@ -410,7 +451,6 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
       selectedNode={selectedNode}
       selectedNodeId={selectedNodeId}
       debugState={debugState}
-      viewedDebugState={viewedDebugState}
       nodeStates={nodeStates}
       paletteOpen={paletteOpen}
       settingsOpen={settingsOpen}
@@ -428,17 +468,17 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
       onRedo={redo}
       onToggleRunPanel={toggleRunPanel}
       onRunWorkflow={runWorkflow}
-      onOpenHistoricalRun={openHistoricalRun}
       onSwitchWorkflow={switchWorkflow}
       onCreateWorkflow={handleNewWorkflow}
       onDeleteWorkflow={deleteWorkflowById}
-      onUpdateWorkflowMeta={updateWorkflowMeta}
+      onSaveWorkflowMeta={saveWorkflowMeta}
       onSaveWorkflow={() => saveWorkflow("save")}
       onSelectNode={handleSelectNode}
       onTogglePalette={() => setPaletteOpen((current) => !current)}
       onToggleSettings={() => setSettingsOpen((current) => !current)}
       onUndo={undo}
       onUpdateModelSettings={updateModelSettings}
+      onUpdateProviderKeyPreference={updateProviderKeyPreference}
       onUpdateNode={updateNode}
     />
   );

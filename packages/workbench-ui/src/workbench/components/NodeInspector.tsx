@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import type { ModelProvider, ProviderKeyPreference, WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 import type { DebugState, NodeExecutionState } from "../types";
 import { LLMInspector } from "./inspectors/LLMInspector";
 import { StartInspector } from "./inspectors/StartInspector";
@@ -15,6 +15,7 @@ type NodeInspectorProps = {
   debugState: DebugState;
   nodeStates: Map<string, NodeExecutionState>;
   showDevModelProviders?: boolean;
+  onProviderKeyPreferenceChange?: (provider: ModelProvider, preference: ProviderKeyPreference) => void;
   updateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
 };
 
@@ -47,6 +48,7 @@ export function NodeInspector({
   debugState,
   nodeStates,
   showDevModelProviders = false,
+  onProviderKeyPreferenceChange,
   updateNode,
 }: NodeInspectorProps) {
   const [activeTab, setActiveTab] = useState<InspectorTab>("settings");
@@ -107,6 +109,7 @@ export function NodeInspector({
               workflow={workflow}
               node={selectedNode}
               showDevModelProviders={showDevModelProviders}
+              onProviderKeyPreferenceChange={onProviderKeyPreferenceChange}
               updateNode={updateNode}
             />
           ) : selectedNode.type === "tool" ? (

@@ -123,7 +123,7 @@ function RunStatusHeader({ debugState }: { debugState: DebugState }) {
           <CheckCircle2 size={16} className="shrink-0 text-brand" aria-hidden />
         )}
         <span className={["text-sm font-semibold", failed ? "text-destructive" : "text-brand"].join(" ")}>
-          {failed ? "Run failed" : "Run succeeded"}: {run.id}
+          {failed ? "Run failed" : "Run succeeded"}
         </span>
       </div>
     );

@@ -6,6 +6,7 @@ export const accountQueryKeys = {
   session: ["session"] as const,
   providerKeys: ["provider-keys"] as const,
   customModels: ["custom-models"] as const,
+  credits: ["credits"] as const,
   workflowRuns: (workflowId: string) => ["workflow-runs", workflowId] as const,
 };
 
@@ -32,12 +33,12 @@ export function useProviderKeys() {
   });
 }
 
-export function usePutProviderKey() {
+export function useCreateProviderKey() {
   const { workflowApi } = useWorkbenchData();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ provider, apiKey }: { provider: string; apiKey: string }) =>
-      workflowApi.putProviderKey(provider, { apiKey }),
+    mutationFn: ({ provider, label, apiKey }: { provider: string; label: string; apiKey: string }) =>
+      workflowApi.createProviderKey({ provider, label, apiKey }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: accountQueryKeys.providerKeys }),
   });
 }
@@ -46,7 +47,7 @@ export function useDeleteProviderKey() {
   const { workflowApi } = useWorkbenchData();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (provider: string) => workflowApi.deleteProviderKey(provider),
+    mutationFn: (id: string) => workflowApi.deleteProviderKey(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: accountQueryKeys.providerKeys }),
   });
 }
@@ -78,5 +79,26 @@ export function useDeleteCustomModel() {
   return useMutation({
     mutationFn: (id: string) => workflowApi.deleteCustomModel(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: accountQueryKeys.customModels }),
+  });
+}
+
+// --- Credits ---------------------------------------------------------------
+
+export function useCredits() {
+  const { workflowApi } = useWorkbenchData();
+  const enabled = useIsAuthed();
+  return useQuery({
+    queryKey: accountQueryKeys.credits,
+    queryFn: () => workflowApi.getCredits(),
+    enabled,
+  });
+}
+
+export function useApplyCredits() {
+  const { workflowApi } = useWorkbenchData();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => workflowApi.applyCredits(),
+    onSuccess: (status) => queryClient.setQueryData(accountQueryKeys.credits, status),
   });
 }

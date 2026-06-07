@@ -39,6 +39,7 @@ describe("workflow client", () => {
     });
     expect(fetchMock).toHaveBeenCalledWith("http://api.test/api/workflows", {
       method: "GET",
+      credentials: "include",
       headers: undefined,
       body: undefined,
     });
@@ -62,10 +63,24 @@ describe("workflow client", () => {
       "http://api.test/api/workflows/workflow-1",
       expect.objectContaining({
         method: "PUT",
+        credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ workflow }),
       }),
     );
+  });
+
+  it("deletes a run by id", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
+    const client = createWorkflowClient({ baseUrl: "http://api.test", fetch: fetchMock });
+
+    await expect(client.deleteRun("run 1")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith("http://api.test/api/runs/run%201", {
+      method: "DELETE",
+      credentials: "include",
+      headers: undefined,
+      body: undefined,
+    });
   });
 
   it("normalizes HTTP errors with API error bodies", async () => {
@@ -132,8 +147,10 @@ describe("workflow client", () => {
     };
     const client = createWorkflowClient({ baseUrl: "http://server.test", fetch: fetchFromApp });
 
-    const workflows = await client.listWorkflows();
-    const created = await client.createRun(workflows.workflows[0].id, { input: { topic: "client integration" } });
+    const created = await client.createRun("client-inline-workflow", {
+      input: { topic: "client integration" },
+      workflow: createDefaultWorkflow(),
+    });
     expect(created.run.status).toBe("running");
 
     // Poll until the run completes

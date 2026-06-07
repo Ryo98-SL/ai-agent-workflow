@@ -82,6 +82,8 @@ export const OpenAICompatibleSettingsSchema = z.object({
   baseURL: z.string().url().default("https://api.deepseek.com"),
   apiKey: z.string().optional(),
   model: z.string().min(1).default("deepseek-v4-flash"),
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().int().positive().max(32000).optional(),
 });
 
 export const ModelProviderKeysSchema = z
@@ -93,10 +95,22 @@ export const ModelProviderKeysSchema = z
   })
   .default({});
 
-export const LLMModelSettingsSchema = OpenAICompatibleSettingsSchema.extend({
-  temperature: z.number().min(0).max(2).optional(),
-  maxTokens: z.number().int().positive().max(32000).optional(),
+/** Where a provider's runs draw their model access from. */
+export const UsagePrioritySchema = z.enum(["credits", "apiKey"]);
+
+/**
+ * Per-provider selection persisted in workflow settings: which stored key is
+ * active and whether the provider runs on shared AI credits or the user's key.
+ */
+export const ProviderKeyPreferenceSchema = z.object({
+  providerKeyId: z.string().optional(),
+  usagePriority: UsagePrioritySchema.default("credits"),
 });
+
+/** Keyed by provider name (e.g. "openai", "deepseek"). */
+export const ProviderKeyPrefsSchema = z.record(z.string(), ProviderKeyPreferenceSchema).default({});
+
+export const LLMModelSettingsSchema = OpenAICompatibleSettingsSchema;
 
 const LLMNodeSchema = BaseNodeSchema.extend({
   type: z.literal("llm"),
@@ -147,6 +161,7 @@ export const WorkflowFileSchema = z.object({
   settings: z.object({
     modelProvider: OpenAICompatibleSettingsSchema.optional(),
     modelProviderKeys: ModelProviderKeysSchema,
+    providerKeyPrefs: ProviderKeyPrefsSchema,
   }),
 });
 
@@ -159,6 +174,9 @@ export type WorkflowEdge = z.infer<typeof WorkflowEdgeSchema>;
 export type ModelProvider = z.infer<typeof ModelProviderSchema>;
 export type OpenAICompatibleSettings = z.infer<typeof OpenAICompatibleSettingsSchema>;
 export type ModelProviderKeys = z.infer<typeof ModelProviderKeysSchema>;
+export type UsagePriority = z.infer<typeof UsagePrioritySchema>;
+export type ProviderKeyPreference = z.infer<typeof ProviderKeyPreferenceSchema>;
+export type ProviderKeyPrefs = z.infer<typeof ProviderKeyPrefsSchema>;
 export type LLMModelSettings = z.infer<typeof LLMModelSettingsSchema>;
 export type WorkflowFile = z.infer<typeof WorkflowFileSchema>;
 
@@ -241,8 +259,8 @@ export function resolveLLMModelSettings(workflow: WorkflowFile, node: LLMNode): 
     baseURL,
     model,
     apiKey: nodeSettings?.apiKey || getProviderApiKey(workflow, provider),
-    temperature: nodeSettings?.temperature ?? node.config.temperature,
-    maxTokens: nodeSettings?.maxTokens ?? node.config.maxTokens,
+    temperature: nodeSettings?.temperature ?? workflowSettings?.temperature ?? node.config.temperature,
+    maxTokens: nodeSettings?.maxTokens ?? workflowSettings?.maxTokens ?? node.config.maxTokens,
   };
 }
 
@@ -304,6 +322,7 @@ export function createDefaultWorkflow(): WorkflowFile {
         model: "qwen3.5:0.8b",
       },
       modelProviderKeys: {},
+      providerKeyPrefs: {},
     },
   };
 }

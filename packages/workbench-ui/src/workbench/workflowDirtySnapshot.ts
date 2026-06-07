@@ -1,17 +1,14 @@
 import type { WorkflowFile } from "@ai-agent-workflow/workflow-domain";
 
 export function workflowDirtySnapshot(workflow: WorkflowFile): string {
-  const metadata: Record<string, unknown> = { ...workflow.metadata };
-  delete metadata.updatedAt;
-
   const modelProvider = workflow.settings.modelProvider ? { ...workflow.settings.modelProvider } : undefined;
   if (modelProvider) {
     delete modelProvider.apiKey;
   }
 
   return stableStringify({
-    ...workflow,
-    metadata,
+    version: workflow.version,
+    graph: workflow.graph,
     settings: {
       ...workflow.settings,
       modelProvider,

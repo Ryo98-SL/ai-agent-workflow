@@ -1,9 +1,12 @@
 import { createDefaultWorkflow } from "@ai-agent-workflow/workflow-domain";
 import { describe, expect, it } from "vitest";
 import {
+  CreateProviderKeyRequestSchema,
   CreateRunRequestSchema,
   CreateRunResponseSchema,
   CreateWorkflowRequestSchema,
+  CreditStatusDtoSchema,
+  ListProviderKeysResponseSchema,
   ListWorkflowsResponseSchema,
   apiPaths,
   createApiErrorResponse,
@@ -16,6 +19,37 @@ describe("api contracts", () => {
     expect(apiPaths.workflowRuns("workflow/1")).toBe("/api/workflows/workflow%2F1/runs");
     expect(apiPaths.run("run 1")).toBe("/api/runs/run%201");
     expect(apiPaths.runEvents("run/1")).toBe("/api/runs/run%2F1/events");
+    expect(apiPaths.providerKeys()).toBe("/api/provider-keys");
+    expect(apiPaths.providerKeyById("key/1")).toBe("/api/provider-keys/key%2F1");
+    expect(apiPaths.credits()).toBe("/api/credits");
+    expect(apiPaths.creditsApply()).toBe("/api/credits/apply");
+  });
+
+  it("validates credit status payloads and the credits error codes", () => {
+    expect(CreditStatusDtoSchema.safeParse({ status: "none" }).success).toBe(true);
+    expect(
+      CreditStatusDtoSchema.safeParse({ status: "approved", grantedTokens: 100_000, balanceTokens: 42 }).success,
+    ).toBe(true);
+    expect(createApiErrorResponse("credits_required", "x").error.code).toBe("credits_required");
+    expect(createApiErrorResponse("credits_exhausted", "x").error.code).toBe("credits_exhausted");
+  });
+
+  it("requires provider, label, and apiKey to create a provider key", () => {
+    expect(
+      CreateProviderKeyRequestSchema.safeParse({ provider: "openai", label: "Work", apiKey: "sk-123" }).success,
+    ).toBe(true);
+    // Missing label or empty fields are rejected.
+    expect(CreateProviderKeyRequestSchema.safeParse({ provider: "openai", apiKey: "sk-123" }).success).toBe(false);
+    expect(
+      CreateProviderKeyRequestSchema.safeParse({ provider: "openai", label: "", apiKey: "sk-123" }).success,
+    ).toBe(false);
+  });
+
+  it("parses a provider key list carrying ids and labels", () => {
+    const parsed = ListProviderKeysResponseSchema.parse({
+      keys: [{ id: "k1", provider: "openai", label: "Work", last4: "1234", hasKey: true }],
+    });
+    expect(parsed.keys[0]).toMatchObject({ id: "k1", label: "Work", provider: "openai" });
   });
 
   it("accepts a workflow create payload using the domain schema", () => {
@@ -30,6 +64,7 @@ describe("api contracts", () => {
         {
           id: "workflow-1",
           name: "Demo",
+          icon: "sparkles",
           updatedAt: "2026-06-01T00:00:00.000Z",
           nodeCount: 2,
           edgeCount: 1,

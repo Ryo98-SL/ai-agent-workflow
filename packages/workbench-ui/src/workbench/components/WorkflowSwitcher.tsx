@@ -5,6 +5,7 @@ import { useWorkflows } from "../../data/useWorkflows";
 import { FIELD_SHELL_CLASS, FIELD_SHELL_INPUT_CLASS } from "./fieldStyles";
 import { Button } from "./Button";
 import { Popover } from "./Popover";
+import { WorkflowMetaEditor, type WorkflowMetaPatch } from "./WorkflowMetaEditor";
 import { WorkflowIconGlyph } from "./workflowIcons";
 
 type WorkflowSwitcherProps = {
@@ -14,16 +15,32 @@ type WorkflowSwitcherProps = {
   onSwitch: (id: string) => void;
   onCreate: () => void;
   onDelete: (id: string) => void;
+  onSaveMeta: (id: string, patch: WorkflowMetaPatch) => Promise<boolean>;
 };
 
-export function WorkflowSwitcher({ workflow, workflowId, dirty, onSwitch, onCreate, onDelete }: WorkflowSwitcherProps) {
+export function WorkflowSwitcher({
+  workflow,
+  workflowId,
+  dirty,
+  onSwitch,
+  onCreate,
+  onDelete,
+  onSaveMeta,
+}: WorkflowSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const { data, isLoading } = useWorkflows();
 
+  const allWorkflows = data?.workflows ?? [];
+  const activeWorkflowSummary = workflowId ? allWorkflows.find((item) => item.id === workflowId) : undefined;
+  const activeWorkflowMetadata = {
+    name: workflow.metadata.name,
+    description: workflow.metadata.description,
+    icon: workflow.metadata.icon ?? activeWorkflowSummary?.icon,
+  };
   const normalized = query.trim().toLowerCase();
-  const workflows = (data?.workflows ?? []).filter(
+  const workflows = allWorkflows.filter(
     (item) => normalized === "" || item.name.toLowerCase().includes(normalized),
   );
 
@@ -49,7 +66,7 @@ export function WorkflowSwitcher({ workflow, workflowId, dirty, onSwitch, onCrea
           aria-label="Switch workflow"
         >
           <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-brand text-brand-foreground">
-            <WorkflowIconGlyph icon={workflow.metadata.icon} size={15} />
+            <WorkflowIconGlyph icon={activeWorkflowMetadata.icon} size={15} />
           </span>
           <span className="min-w-0 flex-1 text-left">
             <span className="flex items-center gap-1">
@@ -84,6 +101,9 @@ export function WorkflowSwitcher({ workflow, workflowId, dirty, onSwitch, onCrea
           ) : (
             workflows.map((item) => {
               const active = item.id === workflowId;
+              const itemMetadata = active
+                ? activeWorkflowMetadata
+                : { name: item.name, description: item.description, icon: item.icon };
 
               if (confirmingId === item.id) {
                 return (
@@ -120,16 +140,25 @@ export function WorkflowSwitcher({ workflow, workflowId, dirty, onSwitch, onCrea
                       setOpen(false);
                     }}
                   >
-                    <WorkflowIconGlyph size={15} />
-                    <span className="min-w-0 flex-1 truncate text-left">{item.name}</span>
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-brand text-brand-foreground">
+                      <WorkflowIconGlyph icon={itemMetadata.icon} size={14} />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-left">{itemMetadata.name}</span>
                     {active && <Check size={15} className="shrink-0 text-brand" aria-hidden />}
                   </Button>
+                  <WorkflowMetaEditor
+                    metadata={itemMetadata}
+                    onSaveMeta={(patch) => onSaveMeta(item.id, patch)}
+                  />
                   <Button
                     variant="ghost"
                     size="iconMd"
                     aria-label={`Delete ${item.name}`}
                     className="opacity-0 group-hover/wf:opacity-100"
-                    onClick={() => setConfirmingId(item.id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setConfirmingId(item.id);
+                    }}
                   >
                     <Trash2 size={14} aria-hidden />
                   </Button>

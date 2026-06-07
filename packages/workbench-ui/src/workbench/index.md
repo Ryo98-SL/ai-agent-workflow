@@ -9,11 +9,14 @@ Reusable workbench state, layout, and canvas runtime.
 - `AppWorkbench.tsx` owns workflow state, API calls, initial load gating,
   content-snapshot dirty state, and floating panel visibility.
 - `types.ts` defines workbench UI state and the injected workflow API contract.
+- `dateFormat.ts` owns shared English date formatting for user-visible
+  workbench timestamps.
 - `components/` contains the layout shell, ReactFlow canvas, popovers, palette,
   inspectors, model settings, project actions, and run panel.
 - `hooks/` contains execution streaming and graph history hooks.
-- `workflowDirtySnapshot.ts` creates stable workflow content snapshots for Save
-  button state, ignoring timestamp churn and transient workflow-level API keys.
+- `workflowDirtySnapshot.ts` creates stable workflow content snapshots for the
+  header Save button state, ignoring workflow metadata and transient
+  workflow-level API keys.
 - `assets/` contains bundled DeepSeek, OpenAI, Anthropic, and Ollama provider
   logos used by model UI.
 
@@ -29,7 +32,12 @@ temperature, and max tokens while the canvas displays the resolved effective
 model. Canvas undo/redo covers structural graph edits only: adding/removing
 nodes, adding/removing edges, and moving nodes. Inspector edits, node model
 overrides, global model settings, selection, panels, and run state are not part
-of graph history. Save activation is derived by comparing the current stable
-workflow content snapshot with the last opened/saved baseline, so undo/redo can
-return the button to the correct enabled state without coupling dirty state to
-history stack length. Non-MVP node types remain visible schema placeholders.
+of graph history. Header Save activation is derived by comparing the current
+stable workflow content snapshot with the last opened/saved baseline, so
+undo/redo can return the button to the correct enabled state without coupling
+dirty state to history stack length. Workflow title, description, and icon edits
+stay local to the metadata editor until its own Save button persists them.
+Header run history opens a portal-mounted right drawer
+with read-only debug output beside a date-first run list; run deletion uses an
+inline confirmation step with the same row height and refreshes the workflow run
+query. Non-MVP node types remain visible schema placeholders.

@@ -21,6 +21,11 @@ Components are themed entirely through the CSS-variable tokens declared in
 - `label.tsx` — `Label` built on `@radix-ui/react-label`.
 - `separator.tsx` — `Separator` built on `@radix-ui/react-separator`.
 - `badge.tsx` — `Badge` + `badgeVariants` status indicator.
+- `dialog.tsx` — `Dialog` modal built on `@radix-ui/react-dialog` (`DialogContent`/
+  `DialogHeader`/`DialogTitle`/`DialogDescription`/`DialogFooter`/`DialogClose`).
+  Used for focused flows like adding a labeled API key. The shared dialog keeps
+  product-token styling, opens without transition animation, and renders its
+  close affordance through the workbench `Button`.
 
 ## Conventions
 

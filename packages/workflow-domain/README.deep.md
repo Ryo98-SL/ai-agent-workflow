@@ -11,7 +11,8 @@ Electron, server, or runtime execution dependencies.
   provider-aware model settings for DeepSeek, OpenAI, Anthropic, and Ollama.
   Workflow-level API keys live in `settings.modelProviderKeys`; LLM nodes can
   define `config.modelSettings` overrides and use `resolveLLMModelSettings` to
-  merge node settings, workflow defaults, and provider keyring values.
+  merge node settings, workflow defaults, advanced sampling values, and provider
+  keyring values.
 - `src/promptVariables.ts` defines namespaced prompt placeholder parsing,
   runtime-state resolution, and legacy variable value merging.
 - `src/index.ts` exports the stable public API used by app, runtime, and tests.

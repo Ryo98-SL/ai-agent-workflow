@@ -13,6 +13,7 @@ export type RunRepository = {
   get(userId: string, runId: string): Promise<WorkflowRun | null>;
   listEvents(userId: string, runId: string): Promise<RunEvent[] | null>;
   listRuns(userId: string, workflowId: string): Promise<WorkflowRun[]>;
+  delete(userId: string, runId: string): Promise<boolean>;
 };
 
 type RunRow = {
@@ -115,6 +116,11 @@ export function createPrismaRunRepository(): RunRepository {
       });
       return rows.map(toRunDto);
     },
+
+    async delete(userId, runId) {
+      const result = await prisma.run.deleteMany({ where: { id: runId, userId } });
+      return result.count > 0;
+    },
   };
 }
 
@@ -141,6 +147,14 @@ export function createInMemoryRunRepository(): RunRepository {
         .filter((e) => e.userId === userId && e.run.workflowId === workflowId)
         .map((e) => e.run)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+    async delete(userId, runId) {
+      const entry = runs.get(runId);
+      if (!entry || entry.userId !== userId) {
+        return false;
+      }
+      runs.delete(runId);
+      return true;
     },
   };
 }

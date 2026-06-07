@@ -170,8 +170,8 @@ function resolveContextModelSettings(
     baseURL,
     model,
     apiKey: nodeSettings?.apiKey || context.modelProviderKeys?.[provider] || workflowSettings?.apiKey,
-    temperature: nodeSettings?.temperature ?? node.config.temperature,
-    maxTokens: nodeSettings?.maxTokens ?? node.config.maxTokens,
+    temperature: nodeSettings?.temperature ?? workflowSettings?.temperature ?? node.config.temperature,
+    maxTokens: nodeSettings?.maxTokens ?? workflowSettings?.maxTokens ?? node.config.maxTokens,
   };
 }
 

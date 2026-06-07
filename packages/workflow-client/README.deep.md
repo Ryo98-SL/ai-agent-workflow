@@ -7,7 +7,8 @@ fetch calls to the workflow REST API.
 
 - `src/index.ts` exports `createWorkflowClient`, `WorkflowClientError`, client
   option types, and the typed client interface. Run creation forwards the shared
-  request body, including transient model-provider settings.
+  request body, including transient model-provider settings. Run deletion maps
+  to `DELETE /api/runs/:id` and returns void on `204`.
 - `tests/client.test.ts` covers mocked fetch success/failure behavior and a
   lightweight integration pass against the Hono server app.
 

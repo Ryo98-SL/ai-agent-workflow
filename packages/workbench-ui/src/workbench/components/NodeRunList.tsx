@@ -3,6 +3,7 @@ import { AlertCircle, CheckCircle2, ChevronRight, Loader2 } from "lucide-react";
 import type { RunInput, WorkflowRun } from "@ai-agent-workflow/api-contracts";
 import type { WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 import type { DebugState, NodeExecutionState } from "../types";
+import { formatWorkbenchDate } from "../dateFormat";
 import { useWorkflowRuns } from "../../data/useWorkflows";
 import {
   buildInspectorSections,
@@ -145,7 +146,9 @@ function NodeRunListRow({ item, workflow, node }: { item: NodeRunListItem; workf
         onClick={() => setOpen((current) => !current)}
       >
         <ChevronRight size={14} className={["shrink-0 transition-transform", open ? "rotate-90" : ""].join(" ")} aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{formatRunDate(item.startedAt)}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+          {formatWorkbenchDate(item.startedAt, { includeSeconds: true })}
+        </span>
         {duration && <span className="shrink-0 text-xs text-muted-foreground">{duration}</span>}
         <NodeRunStatusIcon state={item.state} />
       </button>
@@ -168,14 +171,4 @@ function NodeRunStatusIcon({ state }: { state: NodeExecutionState }) {
   }
 
   return <CheckCircle2 size={14} className="shrink-0 text-brand" aria-hidden />;
-}
-
-function formatRunDate(ms: number) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(new Date(ms));
 }

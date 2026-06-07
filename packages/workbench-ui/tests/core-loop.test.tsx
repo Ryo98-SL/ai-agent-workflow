@@ -34,9 +34,19 @@ describe("MVP smoke loop", () => {
     await user.click(screen.getByRole("button", { name: "Add custom model" }));
     await user.type(screen.getByLabelText("Model name"), "deepseek-v4-flash-smoke");
     await user.click(screen.getByRole("button", { name: "Add & use" }));
+    // API keys are managed per provider: open the deepseek group's key control,
+    // add a labeled key through the modal, and confirm it persists via the API.
+    await user.click(screen.getByRole("button", { name: "Choose model provider and model" }));
+    await user.click(screen.getByRole("button", { name: "Manage deepseek API keys" }));
+    await user.click(screen.getByRole("button", { name: "Add API Key" }));
+    await user.type(screen.getByLabelText("Label"), "Primary");
     await user.type(screen.getByLabelText("API Key"), "deepseek-test-key");
-    await user.click(screen.getAllByRole("button", { name: "Save" }).at(-1)!);
-    expect(api.putProviderKey).toHaveBeenCalledWith("deepseek", { apiKey: "deepseek-test-key" });
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(api.createProviderKey).toHaveBeenCalledWith({
+      provider: "deepseek",
+      label: "Primary",
+      apiKey: "deepseek-test-key",
+    });
     fireEvent.click(screen.getByText("LLM"));
     expect(screen.getByLabelText("Node label")).toHaveValue("LLM");
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
@@ -64,6 +74,8 @@ describe("MVP smoke loop", () => {
         provider: "deepseek",
       }),
       modelProviderKeys: {},
+      // The deepseek key added above is selected; authed runs send only its id.
+      providerKeyId: "key-Primary",
     });
     expect(calls.updateWorkflow).toHaveBeenCalled();
 
@@ -105,6 +117,35 @@ describe("MVP smoke loop", () => {
     expect(within(palette!).getByRole("button", { name: /Start/ })).toBeDisabled();
   });
 
+  it("saves workflow metadata inside the metadata editor without activating header Save", async () => {
+    const user = userEvent.setup();
+    const { api, workflows, calls } = createMemoryWorkflowApi();
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    const headerSave = screen.getByRole("button", { name: "Save" });
+    expect(headerSave).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Switch workflow" }));
+    await user.click(screen.getByRole("button", { name: "Edit Seed Workflow workflow details" }));
+    await user.click(screen.getByRole("button", { name: "Use bot workflow icon" }));
+    await user.clear(screen.getByLabelText("Name"));
+    await user.type(screen.getByLabelText("Name"), "Renamed Workflow");
+    expect(headerSave).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save workflow details" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Save workflow details" }));
+    await waitFor(() => {
+      expect(workflows.get("workflow-1")?.workflow.metadata.name).toBe("Renamed Workflow");
+    });
+    expect(calls.updateWorkflow).toHaveBeenCalled();
+    expect(screen.getAllByText("Renamed Workflow").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Switch workflow" }).querySelector(".lucide-bot")).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Edit Renamed Workflow workflow details" }));
+    expect(screen.getByRole("button", { name: "Use bot workflow icon" })).toHaveClass("border-brand");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
   it("opens a source-handle palette and connects the source node to the created node", async () => {
     const user = userEvent.setup();
     const { api, workflows, calls } = createMemoryWorkflowApi();
@@ -144,16 +185,20 @@ describe("MVP smoke loop", () => {
     await api.createRun("workflow-1", { input: { topic: "older header history" } });
 
     await user.click(screen.getByRole("button", { name: "Run history" }));
-    await user.click((await screen.findAllByRole("button", { name: /succeeded/i }))[0]);
+    const historyDrawer = await screen.findByRole("complementary", { name: "Run history drawer" });
+    await user.click((await within(historyDrawer).findAllByRole("button", { name: /Open run from/i }))[0]);
 
-    const historyPanel = await findFloatingPanel("Run History");
-    expect(within(historyPanel).getByText("Historical run")).toBeInTheDocument();
-    await user.click(within(historyPanel).getByRole("button", { name: /LLM/ }));
-    expect(within(historyPanel).getByText("Live output for older header history.")).toBeInTheDocument();
-    expect(within(historyPanel).queryByText("Start Inputs")).not.toBeInTheDocument();
-    expect(within(historyPanel).queryByRole("button", { name: "Run workflow" })).not.toBeInTheDocument();
+    expect(within(historyDrawer).getByText(/Historical run from/)).toBeInTheDocument();
+    await user.click(await within(historyDrawer).findByRole("button", { name: /LLM/ }));
+    expect(within(historyDrawer).getByText("Live output for older header history.")).toBeInTheDocument();
+    expect(within(historyDrawer).queryByText("Start Inputs")).not.toBeInTheDocument();
+    expect(within(historyDrawer).queryByRole("button", { name: "Run workflow" })).not.toBeInTheDocument();
+    await user.click(within(historyDrawer).getAllByRole("button", { name: /Delete run from/i })[0]);
+    expect(within(historyDrawer).getByText("Delete this run?")).toBeInTheDocument();
+    await user.click(within(historyDrawer).getByRole("button", { name: "Cancel" }));
+    expect(within(historyDrawer).queryByText("Delete this run?")).not.toBeInTheDocument();
 
-    await user.click(within(historyPanel).getByRole("button", { name: "Close run log" }));
+    await user.click(within(historyDrawer).getByRole("button", { name: "Close run history" }));
     await user.click(screen.getByRole("button", { name: "Run workflow" }));
     const livePanel = await findFloatingPanel("Run Log");
     expect(within(livePanel).getByText("Workflow run")).toBeInTheDocument();
@@ -294,7 +339,7 @@ describe("MVP smoke loop", () => {
 
   it("selects OpenAI multimodal models and shows icon capability tags", async () => {
     const user = userEvent.setup();
-    const { api } = createMemoryWorkflowApi();
+    const { api, workflows } = createMemoryWorkflowApi();
 
     render(<AppWorkbench workflowApi={api} />);
     expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
@@ -307,6 +352,46 @@ describe("MVP smoke loop", () => {
     expect(screen.getAllByAltText("OpenAI").length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText("Chat model").length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText("Image input").length).toBeGreaterThan(0);
+    await user.click(screen.getByText("Advanced"));
+    await user.clear(screen.getByLabelText("Max tokens"));
+    await user.type(screen.getByLabelText("Max tokens"), "1600");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(workflows.get("workflow-1")?.workflow.settings.modelProvider).toMatchObject({
+      provider: "openai",
+      model: "gpt-5.2",
+      maxTokens: 1600,
+    });
+  });
+
+  it("expands matching model groups while searching", async () => {
+    const user = userEvent.setup();
+    const { api } = createMemoryWorkflowApi();
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open model settings" }));
+    await user.click(screen.getByRole("button", { name: "Choose model provider and model" }));
+    await user.click(screen.getByRole("button", { name: "OpenAI" }));
+    expect(screen.queryByText("gpt-5.2")).not.toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Search model"), "gpt-5.2");
+    expect(screen.getByText("gpt-5.2")).toBeInTheDocument();
+  });
+
+  it("dismisses provider API key popovers when clicking elsewhere in the model selector", async () => {
+    const user = userEvent.setup();
+    const { api } = createMemoryWorkflowApi();
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open model settings" }));
+    await user.click(screen.getByRole("button", { name: "Choose model provider and model" }));
+    await user.click(screen.getByRole("button", { name: "Manage deepseek API keys" }));
+    expect(screen.getByText("Usage Priority")).toBeInTheDocument();
+
+    await user.click(screen.getByPlaceholderText("Search model"));
+    expect(screen.queryByText("Usage Priority")).not.toBeInTheDocument();
   });
 
   it("shows the LLM node model override on the canvas", async () => {
@@ -319,6 +404,7 @@ describe("MVP smoke loop", () => {
           model: "deepseek-v4-flash",
         },
         modelProviderKeys: {},
+        providerKeyPrefs: {},
       },
       graph: {
         ...workflow.graph,
@@ -344,7 +430,7 @@ describe("MVP smoke loop", () => {
     await user.click(screen.getByRole("button", { name: "Open model setting" }));
     await user.click(screen.getByRole("button", { name: "Choose model provider and model" }));
     await user.click(screen.getByText("gpt-5.2"));
-    await user.type(screen.getByLabelText("API Key"), "node-openai-key");
+    expect(screen.queryByLabelText("API Key")).not.toBeInTheDocument();
     await user.click(screen.getByText("Advanced"));
     await user.clear(screen.getByLabelText("Max tokens"));
     await user.type(screen.getByLabelText("Max tokens"), "1200");
@@ -357,9 +443,9 @@ describe("MVP smoke loop", () => {
         provider: "openai",
         baseURL: "https://api.openai.com/v1",
         model: "gpt-5.2",
-        apiKey: "node-openai-key",
         maxTokens: 1200,
       });
+      expect(savedNode.config.modelSettings?.apiKey).toBeUndefined();
     }
   });
 });
@@ -394,6 +480,7 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
       id,
       name: workflow.metadata.name,
       description: workflow.metadata.description,
+      icon: workflow.metadata.icon,
       updatedAt: workflow.metadata.updatedAt,
       nodeCount: workflow.graph.nodes.length,
       edgeCount: workflow.graph.edges.length,
@@ -482,11 +569,21 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
         .filter((run) => run.workflowId === workflowId)
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
     })),
+    deleteRun: vi.fn(async (runId) => {
+      runs.delete(runId);
+      events.delete(runId);
+    }),
     deleteWorkflow: vi.fn(async () => undefined),
     runStreamUrl: vi.fn((runId) => `http://test/api/runs/${runId}/stream`),
     listProviderKeys: vi.fn(async () => ({ keys: [] })),
-    putProviderKey: vi.fn(async (provider, request) => ({
-      key: { provider, last4: request.apiKey.slice(-4), hasKey: true as const },
+    createProviderKey: vi.fn(async (request) => ({
+      key: {
+        id: `key-${request.label}`,
+        provider: request.provider,
+        label: request.label,
+        last4: request.apiKey.slice(-4),
+        hasKey: true as const,
+      },
     })),
     deleteProviderKey: vi.fn(async () => undefined),
     listCustomModels: vi.fn(async () => ({ models: [] })),
@@ -494,6 +591,8 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
       model: { id: "model-test", createdAt: new Date().toISOString(), ...request },
     })),
     deleteCustomModel: vi.fn(async () => undefined),
+    getCredits: vi.fn(async () => ({ status: "none" as const })),
+    applyCredits: vi.fn(async () => ({ status: "approved" as const, grantedTokens: 100_000, balanceTokens: 100_000 })),
   };
 
   return { api, workflows, calls };

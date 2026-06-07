@@ -10,9 +10,13 @@ export {
   accountQueryKeys,
   useSession,
   useProviderKeys,
-  usePutProviderKey,
+  useCreateProviderKey,
   useDeleteProviderKey,
   useCustomModels,
   useCreateCustomModel,
   useDeleteCustomModel,
+  useCredits,
+  useApplyCredits,
 } from "./data/useAccount";
+export { useProviderKeyStore } from "./data/useProviderKeyStore";
+export type { ProviderKeyEntry, ProviderKeyStore } from "./data/useProviderKeyStore";

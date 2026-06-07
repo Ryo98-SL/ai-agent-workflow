@@ -24,7 +24,8 @@ canvas. It saves workflows and creates workflow runs through the injected API.
 Node creation, model settings, and run output use body-level popovers; node
 inspection follows selection. DeepSeek is the default provider, OpenAI and
 Anthropic are available in the selector, Ollama is development-only, and API
-keys are saved in the workflow provider keyring unless an LLM node carries its
-own Model Setting API key override. Canvas structure edits have local undo/redo
-for node/edge creation, deletion, and movement; form-based inspector changes and
-model settings stay outside that history.
+keys are selected from the workflow provider keyring. Workflow defaults and LLM
+node overrides share the same model settings panel for provider, endpoint,
+model, temperature, and max-token edits. Canvas structure edits have local
+undo/redo for node/edge creation, deletion, and movement; form-based inspector
+changes and model settings stay outside that history.

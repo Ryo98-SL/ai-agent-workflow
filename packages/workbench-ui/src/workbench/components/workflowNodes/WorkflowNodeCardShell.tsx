@@ -74,7 +74,9 @@ export function WorkflowNodeCardShell({ children, noSourceHandle, noTargetHandle
         <p className="ml-2 truncate text-sm font-semibold">{node.label}</p>
       </div>
 
-      {children ?? <p className="mt-1 text-xs uppercase text-muted-foreground">{node.type}</p>}
+      {children ?? (
+        node.description && <p className="mt-1 text-xs leading-4 text-muted-foreground">{node.description}</p>
+      )}
       {!noSourceHandle && (
         <Handle type="source" position={Position.Right} className={handleClassName}>
           <PlusNode label={`Add connected node from ${node.label}`} onClick={(anchor) => openNodePalette("source", anchor)} />

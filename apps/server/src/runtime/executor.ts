@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Annotation, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
-import type { RunInput } from "@ai-agent-workflow/api-contracts";
+import { createApiErrorResponse, type RunInput } from "@ai-agent-workflow/api-contracts";
 import type { WorkflowFile, WorkflowNode, WorkflowNodeType, WorkflowRuntimeState } from "@ai-agent-workflow/workflow-domain";
 import { RuntimeValidationError, normalizeRuntimeError } from "./errors";
 import { logger } from "../logger";
@@ -65,6 +65,11 @@ export async function executeWorkflowRuntime(
   const nodeById = new Map(workflow.graph.nodes.map((node) => [node.id, node]));
   const nodeStartTimes = new Map<string, number>();
   let runningNodeId: string | undefined;
+
+  // Credit metering: accumulate token usage and abort once the budget is spent.
+  let consumedTokens = 0;
+  let creditsExhausted = false;
+  const creditAbort = options.creditBudget != null ? new AbortController() : undefined;
 
   try {
     logger.info("runtime.execution.started", {
@@ -151,6 +156,7 @@ export async function executeWorkflowRuntime(
       {
         version: "v2",
         configurable: { thread_id: threadId },
+        signal: creditAbort?.signal,
       },
     );
 
@@ -199,7 +205,15 @@ export async function executeWorkflowRuntime(
         const startTime = nodeStartTimes.get(nodeId) ?? Date.now();
         const durationMs = Date.now() - startTime;
         const node = nodeById.get(nodeId)!;
-        const event: RuntimeStreamEvent = { type: "node.failed", payload: langEvent, nodeId, nodeType: node.type, durationMs };
+        const message = nodeResults.find((entry) => entry.nodeId === nodeId && entry.status === "failed")?.output;
+        const event: RuntimeStreamEvent = {
+          type: "node.failed",
+          payload: langEvent,
+          nodeId,
+          nodeType: node.type,
+          durationMs,
+          message,
+        };
         streamEvents.push(event);
         await options.onStreamEvent?.(event);
       } else if (langEvent.event === "on_chat_model_end" && nodeId) {
@@ -208,12 +222,26 @@ export async function executeWorkflowRuntime(
           const event: RuntimeStreamEvent = { type: "node.tokens", payload: langEvent, nodeId, tokenUsage };
           streamEvents.push(event);
           await options.onStreamEvent?.(event);
+
+          // Meter against the credit budget; stop before any further node runs
+          // once the balance is spent.
+          consumedTokens += (tokenUsage.inputTokens ?? 0) + (tokenUsage.outputTokens ?? 0);
+          if (options.creditBudget != null && consumedTokens >= options.creditBudget && !creditsExhausted) {
+            creditsExhausted = true;
+            creditAbort?.abort();
+          }
         }
       } else if (langEvent.event === "on_chain_end" && !nodeId) {
         if (isRuntimeGraphState(langEvent.data?.output)) {
           finalGraphState = langEvent.data.output as RuntimeGraphState;
         }
       }
+    }
+
+    // If the abort stopped iteration without throwing, force the failure path so
+    // the run is reported as credits_exhausted rather than a partial success.
+    if (creditsExhausted) {
+      throw new Error("AI credits exhausted.");
     }
 
     logger.info("runtime.execution.completed", {
@@ -224,9 +252,16 @@ export async function executeWorkflowRuntime(
       threadId,
     });
 
-    return { ok: true, state: finalGraphState.values, nodeResults, streamEvents };
+    return { ok: true, state: finalGraphState.values, nodeResults, streamEvents, consumedTokens };
   } catch (error) {
-    const normalizedError = normalizeRuntimeError(error);
+    // A credit-budget abort surfaces as a generic abort error; report it as a
+    // first-class credits_exhausted failure instead.
+    const normalizedError = creditsExhausted
+      ? createApiErrorResponse(
+          "credits_exhausted",
+          "AI credits exhausted — the run was stopped. Apply for more credits or switch to an API key.",
+        ).error
+      : normalizeRuntimeError(error);
 
     // The streaming iterator aborts on a node error without emitting
     // on_chain_error, so the node that was running never got a node.failed
@@ -241,6 +276,7 @@ export async function executeWorkflowRuntime(
         nodeId: runningNodeId,
         nodeType: node.type,
         durationMs,
+        message: normalizedError.message,
       };
       streamEvents.push(failedEvent);
       try {
@@ -258,7 +294,7 @@ export async function executeWorkflowRuntime(
       message: normalizedError.message,
       threadId,
     });
-    return { ok: false, error: normalizedError, nodeResults, streamEvents };
+    return { ok: false, error: normalizedError, nodeResults, streamEvents, consumedTokens };
   }
 }
 

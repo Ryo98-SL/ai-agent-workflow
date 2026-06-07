@@ -7,11 +7,11 @@ ReactFlow node components for persisted workflow node types.
 ## Key Files
 
 - `WorkflowNodeCardShell.tsx` provides the shared card, icon slot, title,
-  handles, and handle-anchored Plus buttons.
+  default type/description body, handles, and handle-anchored Plus buttons.
 - `StartWorkflowNode.tsx` previews declared inputs and description.
 - `LlmWorkflowNode.tsx` shows the effective model, provider logo, and model
   capability icons supplied by the canvas after resolving node overrides over
-  workflow defaults.
+  workflow defaults, then renders the node description when present.
 - Other node files bind schema node types to icons and shared shell behavior.
 - `workflowNodeLayout.ts` centralizes ReactFlow node dimensions and handle
   bounds, including dynamic Start/LLM sizing and Start/End handle availability.

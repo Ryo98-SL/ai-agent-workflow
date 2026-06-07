@@ -1,6 +1,11 @@
-import { ArrowLeft, Check, ChevronDown, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Plus, Search, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import type { ModelProvider, OpenAICompatibleSettings } from "@ai-agent-workflow/workflow-domain";
+import type {
+  ModelProvider,
+  OpenAICompatibleSettings,
+  ProviderKeyPreference,
+  ProviderKeyPrefs,
+} from "@ai-agent-workflow/workflow-domain";
 import { Badge } from "@workbench/components/ui/badge";
 import { Input } from "@workbench/components/ui/input";
 import { Button } from "./Button";
@@ -9,6 +14,7 @@ import { ModelCapabilityTags } from "./ModelCapabilityTags";
 import { getModelCapabilities, getProviderOption, isCustomModel, type ProviderOption } from "./modelCatalog";
 import { ModelProviderLogo } from "./modelProviderVisuals";
 import { Popover } from "./Popover";
+import { ProviderApiKeyControl } from "./ProviderApiKeyControl";
 import { ProviderPicker } from "./ProviderPicker";
 
 type SelectorCustomModel = {
@@ -28,6 +34,9 @@ type ModelSelectorFieldProps = {
   /** When provided, adding a custom model persists it (authenticated users). */
   onAddCustomModel?: (provider: ModelProvider, model: string, baseURL?: string) => void;
   onRemoveCustomModel?: (id: string) => void;
+  /** Per-provider API key selection persisted in workflow settings. */
+  providerKeyPrefs?: ProviderKeyPrefs;
+  onProviderKeyPreferenceChange?: (provider: ModelProvider, preference: ProviderKeyPreference) => void;
 };
 
 export function ModelSelectorField({
@@ -39,10 +48,25 @@ export function ModelSelectorField({
   customModels = [],
   onAddCustomModel,
   onRemoveCustomModel,
+  providerKeyPrefs,
+  onProviderKeyPreferenceChange,
 }: ModelSelectorFieldProps) {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [mode, setMode] = useState<"list" | "add">("list");
+  const [collapsedProviders, setCollapsedProviders] = useState<ReadonlySet<string>>(new Set());
   const [query, setQuery] = useState("");
+
+  const toggleCollapsed = (provider: string) => {
+    setCollapsedProviders((current) => {
+      const next = new Set(current);
+      if (next.has(provider)) {
+        next.delete(provider);
+      } else {
+        next.add(provider);
+      }
+      return next;
+    });
+  };
   const [customProvider, setCustomProvider] = useState<ProviderOption>(selectedProvider);
   const [customModel, setCustomModel] = useState("");
 
@@ -154,7 +178,20 @@ export function ModelSelectorField({
                   />
                 )}
                 {filteredProviders.map((provider) => (
-                  <ModelGroup key={provider.provider} provider={provider} value={value} onSelect={selectPreset} />
+                  <ModelGroup
+                    key={provider.provider}
+                    provider={provider}
+                    value={value}
+                    onSelect={selectPreset}
+                    collapsed={normalizedQuery === "" && collapsedProviders.has(provider.provider)}
+                    onToggleCollapse={() => toggleCollapsed(provider.provider)}
+                    preference={providerKeyPrefs?.[provider.provider]}
+                    onPreferenceChange={
+                      onProviderKeyPreferenceChange
+                        ? (preference) => onProviderKeyPreferenceChange(provider.provider, preference)
+                        : undefined
+                    }
+                  />
                 ))}
                 {filteredProviders.length === 0 && filteredSavedModels.length === 0 && (
                   <p className="px-4 py-6 text-sm text-muted-foreground">No models found.</p>
@@ -223,17 +260,41 @@ function ModelGroup({
   provider,
   value,
   onSelect,
+  collapsed,
+  onToggleCollapse,
+  preference,
+  onPreferenceChange,
 }: {
   provider: ProviderOption;
   value: OpenAICompatibleSettings;
   onSelect: (provider: ProviderOption, model: string) => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  preference?: ProviderKeyPreference;
+  onPreferenceChange?: (preference: ProviderKeyPreference) => void;
 }) {
   return (
     <div className="pb-2">
-      <div className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-muted-foreground">
-        <span>{provider.label}</span>
-        <ChevronDown size={13} aria-hidden />
+      <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+        <Button
+          variant="ghost"
+          size="unstyled"
+          className="h-6 min-w-0 flex-1 !justify-start gap-1.5 px-2 text-xs font-semibold text-muted-foreground"
+          onClick={onToggleCollapse}
+          aria-expanded={!collapsed}
+        >
+          {collapsed ? <ChevronRight size={13} aria-hidden /> : <ChevronDown size={13} aria-hidden />}
+          <span className="truncate">{provider.label}</span>
+        </Button>
+        {onPreferenceChange && provider.provider !== "ollama" && (
+          <ProviderApiKeyControl
+            provider={provider.provider}
+            preference={preference}
+            onPreferenceChange={onPreferenceChange}
+          />
+        )}
       </div>
+      {collapsed ? null : (
       <div className="space-y-1 px-2">
         {provider.models.map((model) => {
           const selected = provider.provider === value.provider && model.id === value.model;
@@ -255,6 +316,7 @@ function ModelGroup({
           );
         })}
       </div>
+      )}
     </div>
   );
 }

@@ -1,13 +1,18 @@
-import { ChevronDown, KeyRound } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
-import type { LLMModelSettings, ModelProvider, OpenAICompatibleSettings } from "@ai-agent-workflow/workflow-domain";
+import type {
+  ModelProvider,
+  OpenAICompatibleSettings,
+  ProviderKeyPreference,
+  ProviderKeyPrefs,
+} from "@ai-agent-workflow/workflow-domain";
 import { Input } from "@workbench/components/ui/input";
 import { Button } from "./Button";
-import { FIELD_INPUT_CLASS, FIELD_SHELL_CLASS, FIELD_SHELL_INPUT_CLASS } from "./fieldStyles";
+import { FIELD_INPUT_CLASS } from "./fieldStyles";
 import { ModelSelectorField } from "./ModelSelectorField";
 import { getProviderOption, PROVIDER_OPTIONS, type ProviderOption } from "./modelCatalog";
 
-export type EditableModelSettings = OpenAICompatibleSettings | LLMModelSettings;
+export type EditableModelSettings = OpenAICompatibleSettings;
 
 /** A user-saved custom model surfaced in the selector (authenticated users). */
 export type SelectorCustomModel = {
@@ -21,33 +26,29 @@ type ModelSettingsEditorProps = {
   settings: EditableModelSettings;
   showDevModelProviders?: boolean;
   selectorId: string;
-  apiKey?: string;
-  apiKeyPlaceholder?: string;
   showAdvanced?: boolean;
-  onApiKeyChange?: (apiKey: string) => void;
   onChange: (settings: EditableModelSettings) => void;
-  /** Overrides the default API key input (e.g. a server-managed key field). */
-  renderApiKeyField?: () => ReactNode;
   /** User-saved custom models to show in the selector. */
   customModels?: SelectorCustomModel[];
   /** When provided, "Add custom model" persists via this instead of just selecting. */
   onAddCustomModel?: (provider: ModelProvider, model: string, baseURL?: string) => void;
   onRemoveCustomModel?: (id: string) => void;
+  /** Per-provider API key selection persisted in workflow settings. */
+  providerKeyPrefs?: ProviderKeyPrefs;
+  onProviderKeyPreferenceChange?: (provider: ModelProvider, preference: ProviderKeyPreference) => void;
 };
 
 export function ModelSettingsEditor({
   settings,
   showDevModelProviders = false,
   selectorId,
-  apiKey,
-  apiKeyPlaceholder = "Stored with this workflow",
   showAdvanced = false,
-  onApiKeyChange,
   onChange,
-  renderApiKeyField,
   customModels,
   onAddCustomModel,
   onRemoveCustomModel,
+  providerKeyPrefs,
+  onProviderKeyPreferenceChange,
 }: ModelSettingsEditorProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const availableProviders = useMemo(
@@ -58,8 +59,6 @@ export function ModelSettingsEditor({
     availableProviders.find((option) => option.provider === settings.provider) ||
     getProviderOption(settings.provider) ||
     PROVIDER_OPTIONS[0];
-  const selectedApiKey = apiKey ?? settings.apiKey ?? "";
-
   const update = (patch: Partial<EditableModelSettings>) => {
     onChange({ ...settings, ...patch });
   };
@@ -73,17 +72,8 @@ export function ModelSettingsEditor({
     });
   };
 
-  const changeApiKey = (nextApiKey: string) => {
-    if (onApiKeyChange) {
-      onApiKeyChange(nextApiKey);
-      return;
-    }
-
-    update({ apiKey: nextApiKey || undefined });
-  };
-
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       <ModelSelectorField
         providers={availableProviders}
         selectedProvider={selectedProvider}
@@ -93,6 +83,8 @@ export function ModelSettingsEditor({
         customModels={customModels}
         onAddCustomModel={onAddCustomModel}
         onRemoveCustomModel={onRemoveCustomModel}
+        providerKeyPrefs={providerKeyPrefs}
+        onProviderKeyPreferenceChange={onProviderKeyPreferenceChange}
       />
 
       <Field label="Custom API endpoint URL (optional)">
@@ -103,29 +95,6 @@ export function ModelSettingsEditor({
           placeholder={selectedProvider.defaultBaseURL}
         />
       </Field>
-
-      {settings.provider === "ollama" ? (
-        <Field label="API Key">
-          <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-            Ollama runs locally — no API key needed.
-          </p>
-        </Field>
-      ) : renderApiKeyField ? (
-        <Field label="API Key">{renderApiKeyField()}</Field>
-      ) : (
-        <Field label="API Key">
-          <div className={FIELD_SHELL_CLASS}>
-            <KeyRound size={14} className="text-muted-foreground" aria-hidden />
-            <input
-              value={selectedApiKey}
-              onChange={(event) => changeApiKey(event.target.value)}
-              className={FIELD_SHELL_INPUT_CLASS}
-              placeholder={apiKeyPlaceholder}
-              type="password"
-            />
-          </div>
-        </Field>
-      )}
 
       {showAdvanced && (
         <section className="rounded-md border border-border bg-muted/50">
@@ -147,7 +116,7 @@ export function ModelSettingsEditor({
             <div className="grid grid-cols-2 gap-3 border-t border-border p-3">
               <Field label="Temperature">
                 <Input
-                  value={(settings as LLMModelSettings).temperature ?? 0.7}
+                  value={settings.temperature ?? 0.7}
                   onChange={(event) => update({ temperature: Number(event.target.value) })}
                   className={FIELD_INPUT_CLASS}
                   min={0}
@@ -158,7 +127,7 @@ export function ModelSettingsEditor({
               </Field>
               <Field label="Max tokens">
                 <Input
-                  value={(settings as LLMModelSettings).maxTokens ?? 800}
+                  value={settings.maxTokens ?? 800}
                   onChange={(event) => update({ maxTokens: Number(event.target.value) })}
                   className={FIELD_INPUT_CLASS}
                   min={1}
@@ -175,8 +144,8 @@ export function ModelSettingsEditor({
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
       {children}
     </label>
   );

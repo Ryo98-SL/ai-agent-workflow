@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveWorkflowApi } from "./useActiveWorkflowApi";
 import { useSession } from "./useAccount";
 
@@ -31,5 +31,18 @@ export function useWorkflowRuns(workflowId: string | undefined) {
     queryFn: () => workflowApi.listWorkflowRuns(workflowId as string),
     enabled: Boolean(workflowId),
     staleTime: 0,
+  });
+}
+
+export function useDeleteWorkflowRun(workflowId: string | undefined) {
+  const workflowApi = useActiveWorkflowApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) => workflowApi.deleteRun(runId),
+    onSuccess: () => {
+      if (workflowId) {
+        void queryClient.invalidateQueries({ queryKey: ["workflow-runs", workflowId] });
+      }
+    },
   });
 }
