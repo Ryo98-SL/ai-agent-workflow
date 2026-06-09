@@ -7,6 +7,7 @@ export const NODE_TYPES = [
   "tool",
   "code",
   "ifElse",
+  "humanInput",
   "template",
   "end",
 ] as const;
@@ -54,15 +55,51 @@ const StartNodeSchema = BaseNodeSchema.extend({
     }),
 });
 
+const CurrentTimeToolConfigSchema = z.object({
+  adapter: z.literal("currentTime"),
+  timezone: z.string().default("UTC"),
+});
+
+const EmailSendToolConfigSchema = z.object({
+  adapter: z.literal("emailSend"),
+  /** Recipient(s); supports `{{nodeId.path}}` variables. */
+  to: z.string().default(""),
+  subject: z.string().default(""),
+  /** Body template; supports `{{nodeId.path}}` variables. */
+  body: z.string().default(""),
+  /**
+   * When false (default) the node only composes the email and outputs it
+   * (dry-run) — nothing is sent, so the demo incurs no cost. Real sending
+   * (true) requires a server-side provider and is authed-only.
+   */
+  send: z.boolean().default(false),
+});
+
 const ToolNodeSchema = BaseNodeSchema.extend({
   type: z.literal("tool"),
+  config: z
+    .discriminatedUnion("adapter", [CurrentTimeToolConfigSchema, EmailSendToolConfigSchema])
+    .default({ adapter: "currentTime", timezone: "UTC" }),
+});
+
+const KnowledgeRetrievalConfigSchema = z
+  .object({
+    mode: z.enum(["semantic", "keyword", "hybrid"]).default("semantic"),
+    topK: z.number().int().min(1).max(20).default(5),
+    scoreThreshold: z.number().min(0).max(1).optional(),
+  })
+  .default({ mode: "semantic", topK: 5 });
+
+const KnowledgeNodeSchema = BaseNodeSchema.extend({
+  type: z.literal("knowledge"),
   config: z.object({
-    adapter: z.literal("currentTime").default("currentTime"),
-    timezone: z.string().default("UTC"),
+    knowledgeBaseIds: z.array(z.string().min(1)).default([]),
+    queryTemplate: z.string().min(1).default("{{start1.topic}}"),
+    retrieval: KnowledgeRetrievalConfigSchema,
   }),
 });
 
-const BasicConfigNodeSchema = <Type extends Exclude<WorkflowNodeType, "start" | "llm" | "tool">>(
+const BasicConfigNodeSchema = <Type extends Exclude<WorkflowNodeType, "start" | "llm" | "knowledge" | "tool">>(
   type: Type,
 ) =>
   BaseNodeSchema.extend({
@@ -122,16 +159,157 @@ const LLMNodeSchema = BaseNodeSchema.extend({
     modelSettings: LLMModelSettingsSchema.optional(),
     temperature: z.number().min(0).max(2).default(0.7),
     maxTokens: z.number().int().positive().max(32000).default(800),
+    /**
+     * When true, the node reads prior conversation turns from the run's memory
+     * channel and appends this turn (user + assistant) — enabling multi-turn
+     * chat when runs share a conversation thread.
+     */
+    memory: z.boolean().default(false),
   }),
+});
+
+/** Operators with no right-hand `value` (they test the left operand alone). */
+export const VALUELESS_CONDITION_OPERATORS = ["isEmpty", "isNotEmpty"] as const;
+export const CONDITION_OPERATORS = [
+  "equals",
+  "notEquals",
+  "contains",
+  "notContains",
+  "isEmpty",
+  "isNotEmpty",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+] as const;
+export const ConditionOperatorSchema = z.enum(CONDITION_OPERATORS);
+
+/** Reserved source-handle id for the implicit `else` (fallthrough) branch. */
+export const IFELSE_ELSE_HANDLE_ID = "else";
+
+const ConditionRowSchema = z.object({
+  /** Left operand — a `{{nodeId.path}}` template resolved against runtime state. */
+  variable: z.string().default(""),
+  operator: ConditionOperatorSchema.default("equals"),
+  /** Right operand — a literal (ignored for valueless operators). */
+  value: z.string().default(""),
+});
+
+const IfElseCaseSchema = z.object({
+  /** Stable id; doubles as the case's source-handle id. */
+  id: z.string().min(1),
+  /** How the rows combine. */
+  combinator: z.enum(["and", "or"]).default("and"),
+  conditions: z.array(ConditionRowSchema).default([]),
+});
+
+const IfElseNodeSchema = BaseNodeSchema.extend({
+  type: z.literal("ifElse"),
+  config: z
+    .object({
+      cases: z.array(IfElseCaseSchema).min(1).default([{ id: "case-1", combinator: "and", conditions: [] }]),
+    })
+    .default({ cases: [{ id: "case-1", combinator: "and", conditions: [] }] })
+    .superRefine((config, context) => {
+      const ids = new Set<string>();
+      for (const [index, branch] of config.cases.entries()) {
+        if (branch.id === IFELSE_ELSE_HANDLE_ID) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Case id "${IFELSE_ELSE_HANDLE_ID}" is reserved for the else branch.`,
+            path: ["cases", index, "id"],
+          });
+        }
+        if (ids.has(branch.id)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Duplicate case id "${branch.id}".`,
+            path: ["cases", index, "id"],
+          });
+        }
+        ids.add(branch.id);
+      }
+    }),
+});
+
+/**
+ * Reserved action id emitted when the reviewer submits free-form text rather
+ * than clicking a preset action. The node always outputs exactly
+ * `{ action_id, action_value }`; for text submissions `action_value` is the text.
+ */
+export const HUMAN_INPUT_TEXT_ACTION_ID = "__input__";
+
+const HumanInputActionSchema = z.object({
+  /** Stable id surfaced as `action_id` when this button is chosen. */
+  id: z.string().min(1),
+  label: z.string().min(1),
+  /** Surfaced as `action_value` when this button is chosen. */
+  value: z.string().default(""),
+});
+
+const HumanInputNodeSchema = BaseNodeSchema.extend({
+  type: z.literal("humanInput"),
+  config: z
+    .object({
+      /** Shown to the reviewer; supports `{{nodeId.path}}` variables. */
+      prompt: z.string().default("请审核以下内容并选择操作。"),
+      actions: z
+        .array(HumanInputActionSchema)
+        .default([
+          { id: "approve", label: "通过", value: "approved" },
+          { id: "reject", label: "驳回", value: "rejected" },
+        ]),
+      /** When enabled, the reviewer can submit free text (emits `__input__`). */
+      allowTextInput: z.boolean().default(false),
+      inputLabel: z.string().optional(),
+      /** Optional default text for the editable field; supports variables. */
+      defaultText: z.string().optional(),
+    })
+    .default({
+      prompt: "请审核以下内容并选择操作。",
+      actions: [
+        { id: "approve", label: "通过", value: "approved" },
+        { id: "reject", label: "驳回", value: "rejected" },
+      ],
+      allowTextInput: false,
+    })
+    .superRefine((config, context) => {
+      const ids = new Set<string>();
+      for (const [index, action] of config.actions.entries()) {
+        if (action.id === HUMAN_INPUT_TEXT_ACTION_ID) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Action id "${HUMAN_INPUT_TEXT_ACTION_ID}" is reserved for text submissions.`,
+            path: ["actions", index, "id"],
+          });
+        }
+        if (ids.has(action.id)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Duplicate action id "${action.id}".`,
+            path: ["actions", index, "id"],
+          });
+        }
+        ids.add(action.id);
+      }
+      if (config.actions.length === 0 && !config.allowTextInput) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Human Input needs at least one action button or text input enabled.",
+          path: ["actions"],
+        });
+      }
+    }),
 });
 
 export const WorkflowNodeSchema = z.discriminatedUnion("type", [
   StartNodeSchema,
   LLMNodeSchema,
+  KnowledgeNodeSchema,
   ToolNodeSchema,
-  BasicConfigNodeSchema("knowledge"),
   BasicConfigNodeSchema("code"),
-  BasicConfigNodeSchema("ifElse"),
+  IfElseNodeSchema,
+  HumanInputNodeSchema,
   BasicConfigNodeSchema("template"),
   BasicConfigNodeSchema("end"),
 ]);
@@ -140,6 +318,12 @@ export const WorkflowEdgeSchema = z.object({
   id: z.string().min(1),
   source: z.string().min(1),
   target: z.string().min(1),
+  /**
+   * Which source handle the edge leaves from. Required for multi-output nodes
+   * (e.g. If/Else, where each case + the implicit `else` is its own handle).
+   * Absent for single-output nodes.
+   */
+  sourceHandle: z.string().optional(),
   label: z.string().optional(),
 });
 
@@ -169,8 +353,27 @@ export type StartField = z.infer<typeof StartFieldSchema>;
 export type WorkflowNode = z.infer<typeof WorkflowNodeSchema>;
 export type StartNode = Extract<WorkflowNode, { type: "start" }>;
 export type LLMNode = Extract<WorkflowNode, { type: "llm" }>;
+export type KnowledgeNode = Extract<WorkflowNode, { type: "knowledge" }>;
 export type ToolNode = Extract<WorkflowNode, { type: "tool" }>;
+export type ToolNodeConfig = ToolNode["config"];
+export type ToolAdapter = ToolNodeConfig["adapter"];
+export type EmailSendToolConfig = Extract<ToolNodeConfig, { adapter: "emailSend" }>;
+export type IfElseNode = Extract<WorkflowNode, { type: "ifElse" }>;
+export type IfElseCase = IfElseNode["config"]["cases"][number];
+export type ConditionRow = IfElseCase["conditions"][number];
+export type ConditionOperator = z.infer<typeof ConditionOperatorSchema>;
+export type HumanInputNode = Extract<WorkflowNode, { type: "humanInput" }>;
+export type HumanInputAction = HumanInputNode["config"]["actions"][number];
 export type WorkflowEdge = z.infer<typeof WorkflowEdgeSchema>;
+
+/**
+ * Ordered source-handle ids an If/Else node exposes: one per case, then the
+ * implicit `else`. Shared by the canvas (handle rendering) and the runtime
+ * (conditional edge routing) so they never drift.
+ */
+export function ifElseHandleIds(node: IfElseNode): string[] {
+  return [...node.config.cases.map((branch) => branch.id), IFELSE_ELSE_HANDLE_ID];
+}
 export type ModelProvider = z.infer<typeof ModelProviderSchema>;
 export type OpenAICompatibleSettings = z.infer<typeof OpenAICompatibleSettingsSchema>;
 export type ModelProviderKeys = z.infer<typeof ModelProviderKeysSchema>;
@@ -179,6 +382,59 @@ export type ProviderKeyPreference = z.infer<typeof ProviderKeyPreferenceSchema>;
 export type ProviderKeyPrefs = z.infer<typeof ProviderKeyPrefsSchema>;
 export type LLMModelSettings = z.infer<typeof LLMModelSettingsSchema>;
 export type WorkflowFile = z.infer<typeof WorkflowFileSchema>;
+
+export type WorkflowNodeOutputField = {
+  name: string;
+  type: string;
+  description: string;
+  children?: WorkflowNodeOutputField[];
+};
+
+export function workflowNodeOutputFields(type: WorkflowNodeType): WorkflowNodeOutputField[] {
+  const fields: Partial<Record<WorkflowNodeType, WorkflowNodeOutputField[]>> = {
+    start: [],
+    llm: [
+      { name: "text", type: "string", description: "Generated text" },
+      { name: "usage", type: "object", description: "Provider token usage" },
+      { name: "reasoning", type: "object", description: "Provider reasoning metadata" },
+    ],
+    knowledge: [
+      {
+        name: "result",
+        type: "Array[Object]",
+        description: "Retrieval segmented data",
+        children: [
+          { name: "content", type: "string", description: "Segmented content" },
+          { name: "title", type: "string", description: "Segmented title" },
+          { name: "url", type: "string", description: "Segmented URL" },
+          { name: "icon", type: "string", description: "Segmented icon" },
+          { name: "metadata", type: "object", description: "Other metadata" },
+          { name: "files", type: "Array[File]", description: "Retrieved files" },
+        ],
+      },
+      { name: "context", type: "string", description: "Retrieved context text" },
+      { name: "query", type: "string", description: "Resolved retrieval query" },
+    ],
+    tool: [
+      { name: "text", type: "string", description: "Tool output text" },
+      { name: "data", type: "object", description: "Tool output data" },
+    ],
+    ifElse: [{ name: "matched", type: "string", description: "Id of the matched branch (case id or \"else\")" }],
+    humanInput: [
+      { name: "action_id", type: "string", description: "Chosen action id (or \"__input__\" for free text)" },
+      { name: "action_value", type: "string", description: "Chosen action value (or the submitted text)" },
+    ],
+  };
+  return fields[type] ?? [];
+}
+
+export function isWorkflowNodeOutputPath(type: WorkflowNodeType, path: string[]): boolean {
+  const [first] = path;
+  if (!first) {
+    return false;
+  }
+  return workflowNodeOutputFields(type).some((field) => field.name === first);
+}
 
 export type ValidationResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -269,6 +525,14 @@ function legacyModelProviderApiKey(workflow: WorkflowFile, provider: ModelProvid
   return settings?.provider === provider ? settings.apiKey : undefined;
 }
 
+/**
+ * Well-known id of the seeded read-only Chinese customer-support example KB.
+ * Anonymous users can read it; the demo workflow below queries it. The server
+ * seed (`apps/server/src/knowledge/constants.ts`) re-exports this constant so
+ * the workflow fixture and storage layer never drift.
+ */
+export const EXAMPLE_KNOWLEDGE_BASE_ID = "kb_customer_support_example";
+
 export function createDefaultWorkflow(): WorkflowFile {
   const now = new Date().toISOString();
   return {
@@ -310,6 +574,7 @@ export function createDefaultWorkflow(): WorkflowFile {
             variables: {},
             temperature: 0.7,
             maxTokens: 800,
+            memory: false,
           },
         }
       ],
@@ -326,6 +591,92 @@ export function createDefaultWorkflow(): WorkflowFile {
     },
   };
 }
+/**
+ * Chinese customer-support RAG demo for anonymous users. It chains
+ * Start → Knowledge → LLM so a question flows into a retrieval query against the
+ * seeded example KB and the retrieved `context` feeds the answer prompt:
+ *
+ * - Start collects `customerQuestion`.
+ * - Knowledge queries the example KB with `{{start1.customerQuestion}}`.
+ * - LLM grounds its reply on `{{knowledge1.context}}`.
+ */
+export function createKnowledgeDemoWorkflow(): WorkflowFile {
+  const now = new Date().toISOString();
+  return {
+    version: "1",
+    metadata: {
+      name: "云舵客服 RAG 演示",
+      description: "基于示例知识库的中文客服问答演示：问题经知识检索后再生成回答。",
+      icon: "bot",
+      createdAt: now,
+      updatedAt: now,
+    },
+    graph: {
+      nodes: [
+        {
+          id: "start1",
+          type: "start",
+          label: "Start",
+          description: "收集客户问题，作为本次问答的输入。",
+          position: { x: 80, y: 160 },
+          config: {
+            fields: [
+              {
+                name: "customerQuestion",
+                label: "客户问题",
+                required: true,
+                defaultValue: "我想申请退款，请问退款政策是怎样的？",
+              },
+            ],
+          },
+        },
+        {
+          id: "knowledge1",
+          type: "knowledge",
+          label: "Knowledge",
+          description: "在「云舵客服知识库」中检索与客户问题最相关的资料。",
+          position: { x: 360, y: 150 },
+          config: {
+            knowledgeBaseIds: [EXAMPLE_KNOWLEDGE_BASE_ID],
+            queryTemplate: "{{start1.customerQuestion}}",
+            retrieval: { mode: "semantic", topK: 5 },
+          },
+        },
+        {
+          id: "llm1",
+          type: "llm",
+          label: "LLM",
+          description: "依据检索到的资料回答客户问题。",
+          position: { x: 640, y: 140 },
+          config: {
+            systemPrompt:
+              "你是云舵的智能客服助手。只能依据提供的知识库资料回答用户问题；如果资料中没有相关信息，请明确告知无法确认，并建议用户联系人工客服。回答要简洁、准确、有礼貌。",
+            userPrompt:
+              "知识库资料：\n{{knowledge1.context}}\n\n用户问题：{{start1.customerQuestion}}\n\n请基于以上资料用中文回答用户问题。",
+            variables: {},
+            temperature: 0.3,
+            maxTokens: 800,
+            memory: false,
+          },
+        },
+      ],
+      edges: [
+        { id: "edge-start-knowledge", source: "start1", target: "knowledge1" },
+        { id: "edge-knowledge-llm", source: "knowledge1", target: "llm1" },
+      ],
+    },
+    settings: {
+      modelProvider: {
+        provider: "deepseek",
+        baseURL: "https://api.deepseek.com",
+        model: "deepseek-v4-flash",
+      },
+      modelProviderKeys: {},
+      providerKeyPrefs: {},
+    },
+  };
+}
+
 export function createReadableNodeId(type: WorkflowNodeType, existingNodes: Pick<WorkflowNode, "id">[] = []): string {
   const base = type;
   const existingIds = new Set(existingNodes.map((node) => node.id));
@@ -356,6 +707,7 @@ export function createNode(
         variables: {},
         temperature: 0.7,
         maxTokens: 800,
+        memory: false,
       },
     };
   }
@@ -369,11 +721,49 @@ export function createNode(
     };
   }
 
+  if (type === "knowledge") {
+    return {
+      ...base,
+      type,
+      config: {
+        knowledgeBaseIds: [],
+        queryTemplate: "{{start1.topic}}",
+        retrieval: { mode: "semantic", topK: 5 },
+      },
+    };
+  }
+
   if (type === "start") {
     return {
       ...base,
       type,
       config: { fields: [] },
+    };
+  }
+
+  if (type === "ifElse") {
+    return {
+      ...base,
+      type,
+      config: {
+        cases: [{ id: "case-1", combinator: "and", conditions: [{ variable: "", operator: "equals", value: "" }] }],
+      },
+    };
+  }
+
+  if (type === "humanInput") {
+    return {
+      ...base,
+      label: "Human Input",
+      type,
+      config: {
+        prompt: "请审核以下内容并选择操作：\n{{llm1.text}}",
+        actions: [
+          { id: "approve", label: "通过", value: "approved" },
+          { id: "reject", label: "驳回", value: "rejected" },
+        ],
+        allowTextInput: false,
+      },
     };
   }
 
@@ -392,10 +782,31 @@ export function nodeTypeLabel(type: WorkflowNodeType): string {
     tool: "Tool",
     code: "Code",
     ifElse: "If/Else",
+    humanInput: "Human Input",
     template: "Template",
     end: "End",
   };
   return labels[type];
+}
+
+export function conditionOperatorLabel(operator: ConditionOperator): string {
+  const labels: Record<ConditionOperator, string> = {
+    equals: "equals",
+    notEquals: "not equals",
+    contains: "contains",
+    notContains: "not contains",
+    isEmpty: "is empty",
+    isNotEmpty: "is not empty",
+    gt: "greater than",
+    gte: "greater or equal",
+    lt: "less than",
+    lte: "less or equal",
+  };
+  return labels[operator];
+}
+
+export function isValuelessOperator(operator: ConditionOperator): boolean {
+  return (VALUELESS_CONDITION_OPERATORS as readonly string[]).includes(operator);
 }
 
 export function nodeTypeDescription(type: WorkflowNodeType): string {
@@ -406,6 +817,7 @@ export function nodeTypeDescription(type: WorkflowNodeType): string {
     tool: "Call a configured tool through the runtime boundary.",
     code: "Run custom transformation logic.",
     ifElse: "Branch the workflow based on a condition.",
+    humanInput: "Pause for a human to review and choose an action.",
     template: "Shape variables into reusable text.",
     end: "Mark the workflow output boundary.",
   };

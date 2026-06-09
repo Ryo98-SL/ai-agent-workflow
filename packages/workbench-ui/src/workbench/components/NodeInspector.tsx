@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import type { ModelProvider, ProviderKeyPreference, WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 import type { DebugState, NodeExecutionState } from "../types";
+import { KnowledgeInspector } from "./knowledge/KnowledgeInspector";
+import { HumanInputInspector } from "./inspectors/HumanInputInspector";
+import { IfElseInspector } from "./inspectors/IfElseInspector";
 import { LLMInspector } from "./inspectors/LLMInspector";
 import { StartInspector } from "./inspectors/StartInspector";
 import { ToolInspector } from "./inspectors/ToolInspector";
@@ -15,6 +18,7 @@ type NodeInspectorProps = {
   debugState: DebugState;
   nodeStates: Map<string, NodeExecutionState>;
   showDevModelProviders?: boolean;
+  onOpenKnowledgeBases?: () => void;
   onProviderKeyPreferenceChange?: (provider: ModelProvider, preference: ProviderKeyPreference) => void;
   updateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
 };
@@ -48,6 +52,7 @@ export function NodeInspector({
   debugState,
   nodeStates,
   showDevModelProviders = false,
+  onOpenKnowledgeBases,
   onProviderKeyPreferenceChange,
   updateNode,
 }: NodeInspectorProps) {
@@ -112,8 +117,19 @@ export function NodeInspector({
               onProviderKeyPreferenceChange={onProviderKeyPreferenceChange}
               updateNode={updateNode}
             />
+          ) : selectedNode.type === "knowledge" ? (
+            <KnowledgeInspector
+              workflow={workflow}
+              node={selectedNode}
+              onOpenKnowledgeBases={onOpenKnowledgeBases}
+              updateNode={updateNode}
+            />
           ) : selectedNode.type === "tool" ? (
             <ToolInspector node={selectedNode} updateNode={updateNode} />
+          ) : selectedNode.type === "ifElse" ? (
+            <IfElseInspector node={selectedNode} updateNode={updateNode} />
+          ) : selectedNode.type === "humanInput" ? (
+            <HumanInputInspector node={selectedNode} updateNode={updateNode} />
           ) : (
             <UnsupportedInspector node={selectedNode} updateNode={updateNode} />
           )

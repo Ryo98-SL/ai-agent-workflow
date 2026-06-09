@@ -1,10 +1,15 @@
 import {
   ApiErrorResponseSchema,
+  CreateKnowledgeBaseResponseSchema,
+  CreateKnowledgeDocumentResponseSchema,
   CreateCustomModelResponseSchema,
   CreateRunResponseSchema,
   CreateWorkflowResponseSchema,
   GetRunResponseSchema,
   GetWorkflowResponseSchema,
+  GetKnowledgeBaseResponseSchema,
+  ListKnowledgeDocumentsResponseSchema,
+  ListKnowledgeBasesResponseSchema,
   ListCustomModelsResponseSchema,
   ListProviderKeysResponseSchema,
   ListRunEventsResponseSchema,
@@ -12,17 +17,30 @@ import {
   ListWorkflowsResponseSchema,
   CreateProviderKeyResponseSchema,
   CreditStatusResponseSchema,
+  ReindexKnowledgeDocumentResponseSchema,
+  ResumeRunResponseSchema,
+  UpdateKnowledgeBaseResponseSchema,
   UpdateWorkflowResponseSchema,
   apiPaths,
   type ApiErrorResponse,
+  type CreateKnowledgeBaseRequest,
+  type CreateKnowledgeBaseResponse,
   type CreateCustomModelRequest,
   type CreateCustomModelResponse,
+  type CreateFileKnowledgeDocumentRequest,
+  type CreateKnowledgeDocumentResponse,
+  type CreateTextKnowledgeDocumentRequest,
   type CreateRunRequest,
   type CreateRunResponse,
+  type ResumeRunRequest,
+  type ResumeRunResponse,
   type CreateWorkflowRequest,
   type CreateWorkflowResponse,
   type GetRunResponse,
   type GetWorkflowResponse,
+  type GetKnowledgeBaseResponse,
+  type ListKnowledgeDocumentsResponse,
+  type ListKnowledgeBasesResponse,
   type ListCustomModelsResponse,
   type ListProviderKeysResponse,
   type ListRunEventsResponse,
@@ -31,6 +49,9 @@ import {
   type CreateProviderKeyRequest,
   type CreateProviderKeyResponse,
   type CreditStatusResponse,
+  type ReindexKnowledgeDocumentResponse,
+  type UpdateKnowledgeBaseRequest,
+  type UpdateKnowledgeBaseResponse,
   type UpdateWorkflowRequest,
   type UpdateWorkflowResponse,
 } from "@ai-agent-workflow/api-contracts";
@@ -76,9 +97,26 @@ export type WorkflowClient = {
   createRun: (workflowId: string, request?: CreateRunRequest) => Promise<CreateRunResponse>;
   listWorkflowRuns: (workflowId: string) => Promise<ListWorkflowRunsResponse>;
   deleteRun: (id: string) => Promise<void>;
+  resumeRun: (id: string, request: ResumeRunRequest) => Promise<ResumeRunResponse>;
   getRun: (id: string) => Promise<GetRunResponse>;
   listRunEvents: (id: string) => Promise<ListRunEventsResponse>;
   runStreamUrl: (id: string) => string;
+  listKnowledgeBases: () => Promise<ListKnowledgeBasesResponse>;
+  createKnowledgeBase: (request: CreateKnowledgeBaseRequest) => Promise<CreateKnowledgeBaseResponse>;
+  getKnowledgeBase: (id: string) => Promise<GetKnowledgeBaseResponse>;
+  updateKnowledgeBase: (id: string, request: UpdateKnowledgeBaseRequest) => Promise<UpdateKnowledgeBaseResponse>;
+  deleteKnowledgeBase: (id: string) => Promise<void>;
+  listKnowledgeBaseDocuments: (knowledgeBaseId: string) => Promise<ListKnowledgeDocumentsResponse>;
+  createTextKnowledgeDocument: (
+    knowledgeBaseId: string,
+    request: CreateTextKnowledgeDocumentRequest,
+  ) => Promise<CreateKnowledgeDocumentResponse>;
+  createFileKnowledgeDocument: (
+    knowledgeBaseId: string,
+    request: CreateFileKnowledgeDocumentRequest,
+  ) => Promise<CreateKnowledgeDocumentResponse>;
+  deleteKnowledgeDocument: (id: string) => Promise<void>;
+  reindexKnowledgeDocument: (id: string) => Promise<ReindexKnowledgeDocumentResponse>;
   listProviderKeys: () => Promise<ListProviderKeysResponse>;
   createProviderKey: (request: CreateProviderKeyRequest) => Promise<CreateProviderKeyResponse>;
   deleteProviderKey: (id: string) => Promise<void>;
@@ -90,7 +128,7 @@ export type WorkflowClient = {
 };
 
 type RequestOptions<TResponse> = {
-  method?: "GET" | "POST" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   body?: unknown;
   responseSchema?: z.ZodType<TResponse, z.ZodTypeDef, unknown>;
@@ -236,6 +274,13 @@ export function createWorkflowClient(options: WorkflowClientOptions): WorkflowCl
         method: "DELETE",
         path: apiPaths.run(id),
       }),
+    resumeRun: (id, body) =>
+      request({
+        method: "POST",
+        path: apiPaths.runResume(id),
+        body,
+        responseSchema: ResumeRunResponseSchema,
+      }),
     getRun: (id) =>
       request({
         path: apiPaths.run(id),
@@ -247,6 +292,65 @@ export function createWorkflowClient(options: WorkflowClientOptions): WorkflowCl
         responseSchema: ListRunEventsResponseSchema,
       }),
     runStreamUrl: (id) => joinUrl(options.baseUrl, apiPaths.runStream(id)),
+    listKnowledgeBases: () =>
+      request({
+        path: apiPaths.knowledgeBases(),
+        responseSchema: ListKnowledgeBasesResponseSchema,
+      }),
+    createKnowledgeBase: (body) =>
+      request({
+        method: "POST",
+        path: apiPaths.knowledgeBases(),
+        body,
+        responseSchema: CreateKnowledgeBaseResponseSchema,
+      }),
+    getKnowledgeBase: (id) =>
+      request({
+        path: apiPaths.knowledgeBase(id),
+        responseSchema: GetKnowledgeBaseResponseSchema,
+      }),
+    updateKnowledgeBase: (id, body) =>
+      request({
+        method: "PATCH",
+        path: apiPaths.knowledgeBase(id),
+        body,
+        responseSchema: UpdateKnowledgeBaseResponseSchema,
+      }),
+    deleteKnowledgeBase: (id) =>
+      request<void>({
+        method: "DELETE",
+        path: apiPaths.knowledgeBase(id),
+      }),
+    listKnowledgeBaseDocuments: (knowledgeBaseId) =>
+      request({
+        path: apiPaths.knowledgeBaseDocuments(knowledgeBaseId),
+        responseSchema: ListKnowledgeDocumentsResponseSchema,
+      }),
+    createTextKnowledgeDocument: (knowledgeBaseId, body) =>
+      request({
+        method: "POST",
+        path: apiPaths.knowledgeBaseTextDocuments(knowledgeBaseId),
+        body,
+        responseSchema: CreateKnowledgeDocumentResponseSchema,
+      }),
+    createFileKnowledgeDocument: (knowledgeBaseId, body) =>
+      request({
+        method: "POST",
+        path: apiPaths.knowledgeBaseFileDocuments(knowledgeBaseId),
+        body,
+        responseSchema: CreateKnowledgeDocumentResponseSchema,
+      }),
+    deleteKnowledgeDocument: (id) =>
+      request<void>({
+        method: "DELETE",
+        path: apiPaths.knowledgeDocument(id),
+      }),
+    reindexKnowledgeDocument: (id) =>
+      request({
+        method: "POST",
+        path: apiPaths.knowledgeDocumentReindex(id),
+        responseSchema: ReindexKnowledgeDocumentResponseSchema,
+      }),
     listProviderKeys: () =>
       request({
         path: apiPaths.providerKeys(),

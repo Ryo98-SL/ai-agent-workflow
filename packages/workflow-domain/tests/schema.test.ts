@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   createDefaultWorkflow,
+  createKnowledgeDemoWorkflow,
   createNode,
   createReadableNodeId,
+  EXAMPLE_KNOWLEDGE_BASE_ID,
+  isWorkflowNodeOutputPath,
   parseWorkflowJson,
   resolveLLMModelSettings,
   serializeWorkflowFile,
@@ -65,6 +68,55 @@ describe("workflow schema", () => {
       id: "llm2",
       description: "Generate a response from the configured model.",
     });
+    expect(createNode("knowledge", { x: 0, y: 0 }, workflow.graph.nodes)).toMatchObject({
+      id: "knowledge1",
+      config: {
+        knowledgeBaseIds: [],
+        queryTemplate: "{{start1.topic}}",
+        retrieval: { mode: "semantic", topK: 5 },
+      },
+    });
+  });
+
+  it("accepts strong Knowledge node config and exposes output fields", () => {
+    const workflow = createDefaultWorkflow();
+    const knowledge = createNode("knowledge", { x: 10, y: 20 }, workflow.graph.nodes);
+    workflow.graph.nodes.push(knowledge);
+
+    const result = validateWorkflowFile(workflow);
+
+    expect(result.ok).toBe(true);
+    if (knowledge.type === "knowledge") {
+      expect(knowledge.config.retrieval.mode).toBe("semantic");
+      expect(isWorkflowNodeOutputPath("knowledge", ["context"])).toBe(true);
+      expect(isWorkflowNodeOutputPath("knowledge", ["result"])).toBe(true);
+      expect(isWorkflowNodeOutputPath("knowledge", ["missing"])).toBe(false);
+    }
+  });
+
+  it("builds a runnable Start → Knowledge → LLM customer-support demo", () => {
+    const workflow = createKnowledgeDemoWorkflow();
+    const result = validateWorkflowFile(workflow);
+
+    expect(result.ok).toBe(true);
+    expect(workflow.graph.nodes.map((node) => node.type)).toEqual(["start", "knowledge", "llm"]);
+    expect(workflow.graph.edges).toEqual([
+      { id: "edge-start-knowledge", source: "start1", target: "knowledge1" },
+      { id: "edge-knowledge-llm", source: "knowledge1", target: "llm1" },
+    ]);
+
+    const start = workflow.graph.nodes.find((node) => node.type === "start");
+    expect(start?.type === "start" && start.config.fields.map((field) => field.name)).toEqual(["customerQuestion"]);
+
+    const knowledge = workflow.graph.nodes.find((node) => node.type === "knowledge");
+    if (knowledge?.type === "knowledge") {
+      expect(knowledge.config.knowledgeBaseIds).toEqual([EXAMPLE_KNOWLEDGE_BASE_ID]);
+      expect(knowledge.config.queryTemplate).toBe("{{start1.customerQuestion}}");
+    }
+
+    const llm = workflow.graph.nodes.find((node) => node.type === "llm");
+    expect(llm?.type === "llm" && llm.config.userPrompt).toContain("{{knowledge1.context}}");
+    expect(llm?.type === "llm" && llm.config.userPrompt).toContain("{{start1.customerQuestion}}");
   });
 
   it("rejects unsupported workflow versions", () => {

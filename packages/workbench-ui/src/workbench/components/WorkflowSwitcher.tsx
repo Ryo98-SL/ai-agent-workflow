@@ -12,7 +12,7 @@ type WorkflowSwitcherProps = {
   workflow: WorkflowFile;
   workflowId?: string;
   dirty: boolean;
-  onSwitch: (id: string) => void;
+  onSwitch: (id: string, name: string) => void;
   onCreate: () => void;
   onDelete: (id: string) => void;
   onSaveMeta: (id: string, patch: WorkflowMetaPatch) => Promise<boolean>;
@@ -31,6 +31,13 @@ export function WorkflowSwitcher({
   const [query, setQuery] = useState("");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const { data, isLoading } = useWorkflows();
+
+  // Always close the popover; the parent decides whether to switch immediately or
+  // (when there are unsaved changes) show the top "Save & switch" bar.
+  const requestSwitch = (id: string, name: string) => {
+    setOpen(false);
+    if (id !== workflowId) onSwitch(id, name);
+  };
 
   const allWorkflows = data?.workflows ?? [];
   const activeWorkflowSummary = workflowId ? allWorkflows.find((item) => item.id === workflowId) : undefined;
@@ -135,10 +142,7 @@ export function WorkflowSwitcher({
                     variant="ghost"
                     size="unstyled"
                     className="h-full min-w-0 flex-1 justify-start gap-2 rounded-md px-2 text-sm hover:bg-accent"
-                    onClick={() => {
-                      onSwitch(item.id);
-                      setOpen(false);
-                    }}
+                    onClick={() => requestSwitch(item.id, itemMetadata.name)}
                   >
                     <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-brand text-brand-foreground">
                       <WorkflowIconGlyph icon={itemMetadata.icon} size={14} />

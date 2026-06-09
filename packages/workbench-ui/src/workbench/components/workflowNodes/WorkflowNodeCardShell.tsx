@@ -6,12 +6,14 @@ import type { WorkflowNodePaletteHandleType } from "../../types";
 import { getWorkflowNodeCardClassName } from "./workflowNodeLayout";
 import { workflowNodeIconBackgroundClassNames, workflowNodeIconClassName } from "./workflowNodeVisuals";
 
-const handleClassName = "!size-4 !top-5 group !bg-transparent !border-none";
+export const workflowHandleClassName = "!size-4 !top-5 group !bg-transparent !border-none";
+const handleClassName = workflowHandleClassName;
 
 export type OpenWorkflowNodePalette = (
   sourceNode: WorkflowNode,
   handleType: WorkflowNodePaletteHandleType,
   anchorElement: HTMLElement,
+  sourceHandleId?: string,
 ) => void;
 export type WorkflowReactNode = Node<
   {
@@ -86,10 +88,10 @@ export function WorkflowNodeCardShell({ children, noSourceHandle, noTargetHandle
     </div>
   );
 }
-function InnerHandle() {
+export function InnerHandle() {
   return <span className="absolute left-1/2 top-1/2 h-2 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-green-500" />;
 }
-function PlusNode({ label, onClick }: { label: string; onClick: (anchorElement: HTMLElement) => void }) {
+export function PlusNode({ label, onClick }: { label: string; onClick: (anchorElement: HTMLElement) => void }) {
   // We intentionally do NOT stop pointer/mouse down here: letting those events
   // bubble to the underlying ReactFlow Handle is what lets the user start an
   // edge-drag connection from this spot. A plain click (no drag) still fires

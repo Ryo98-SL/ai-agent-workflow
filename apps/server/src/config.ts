@@ -28,3 +28,59 @@ export const frontendOrigins: string[] = (process.env.FRONTEND_ORIGIN ?? "http:/
   .map((value) => value.trim())
   .filter(Boolean)
   .flatMap(expandHostAliases);
+
+// ---------------------------------------------------------------------------
+// Platform-funded provider credentials backing "AI credits" runs.
+//
+// These are deployment secrets (one key per provider for the whole instance),
+// not user data, so they live in env alongside DATABASE_URL / auth secrets and
+// are read through `getCreditsProvider`. The base URL is forced to the official
+// provider endpoint so a user-supplied baseURL can never exfiltrate the key.
+// ---------------------------------------------------------------------------
+
+type CreditsProvider = { apiKey: string; baseURL: string };
+export type PlatformEmbeddingConfig = {
+  provider: string;
+  model: string;
+  baseURL: string;
+  apiKey: string;
+};
+
+const CREDITS_DEFAULT_BASE_URLS: Record<string, string> = {
+  deepseek: "https://api.deepseek.com",
+  openai: "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com/v1",
+};
+
+/**
+ * The platform credit credential for a provider, or null when AI credits are
+ * not configured for it. `CREDITS_<PROVIDER>_API_KEY` is required; the base URL
+ * defaults to the official endpoint but may be overridden with
+ * `CREDITS_<PROVIDER>_BASE_URL`.
+ */
+export function getCreditsProvider(provider: string): CreditsProvider | null {
+  const key = provider.toUpperCase();
+  const apiKey = process.env[`CREDITS_${key}_API_KEY`]?.trim();
+  if (!apiKey) {
+    return null;
+  }
+  const baseURL = process.env[`CREDITS_${key}_BASE_URL`]?.trim() || CREDITS_DEFAULT_BASE_URLS[provider];
+  if (!baseURL) {
+    return null;
+  }
+  return { apiKey, baseURL };
+}
+
+export function getPlatformEmbeddingConfig(): PlatformEmbeddingConfig | null {
+  const apiKey = process.env.EMBEDDING_API_KEY?.trim() || process.env.CREDITS_OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    return null;
+  }
+
+  return {
+    provider: process.env.EMBEDDING_PROVIDER?.trim() || "openai",
+    model: process.env.EMBEDDING_MODEL?.trim() || "text-embedding-3-small",
+    baseURL: process.env.EMBEDDING_BASE_URL?.trim() || "https://api.openai.com/v1",
+    apiKey,
+  };
+}

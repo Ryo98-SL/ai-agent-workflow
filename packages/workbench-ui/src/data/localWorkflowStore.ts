@@ -158,6 +158,7 @@ export function createLocalWorkflowApi(serverApi: WorkbenchWorkflowApi): Workben
     getRun: (id) => serverApi.getRun(id),
     listRunEvents: (id) => serverApi.listRunEvents(id),
     runStreamUrl: (id) => serverApi.runStreamUrl(id),
+    resumeRun: (id, request) => serverApi.resumeRun(id, request),
     async deleteRun(runId) {
       for (const record of await readRecords()) {
         forgetAnonymousRun(record.id, runId);
@@ -178,6 +179,22 @@ export function createLocalWorkflowApi(serverApi: WorkbenchWorkflowApi): Workben
       }
       return { runs };
     },
+
+    // Knowledge Bases are server-owned even for anonymous users. Anonymous users
+    // can read the seeded example KB; mutations delegate and receive the
+    // server's normalized unauthorized response.
+    listKnowledgeBases: () => serverApi.listKnowledgeBases(),
+    createKnowledgeBase: (request) => serverApi.createKnowledgeBase(request),
+    getKnowledgeBase: (id) => serverApi.getKnowledgeBase(id),
+    updateKnowledgeBase: (id, request) => serverApi.updateKnowledgeBase(id, request),
+    deleteKnowledgeBase: (id) => serverApi.deleteKnowledgeBase(id),
+    listKnowledgeBaseDocuments: (knowledgeBaseId) => serverApi.listKnowledgeBaseDocuments(knowledgeBaseId),
+    createTextKnowledgeDocument: (knowledgeBaseId, request) =>
+      serverApi.createTextKnowledgeDocument(knowledgeBaseId, request),
+    createFileKnowledgeDocument: (knowledgeBaseId, request) =>
+      serverApi.createFileKnowledgeDocument(knowledgeBaseId, request),
+    deleteKnowledgeDocument: (id) => serverApi.deleteKnowledgeDocument(id),
+    reindexKnowledgeDocument: (id) => serverApi.reindexKnowledgeDocument(id),
 
     // Account endpoints are not used in anonymous mode; delegate for type parity.
     listProviderKeys: () => serverApi.listProviderKeys(),

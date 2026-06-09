@@ -38,6 +38,10 @@ Principles:
   share the same provider/model/endpoint/Advanced panel. Provider API keys are
   selected from model groups instead of inline model-setting fields. API-key add
   flows use the shared product-themed dialog without modal entrance animation.
+- Keep Knowledge Base management in the global settings surface: the dialog
+  lists the anonymous Chinese example KB, manages authenticated private KBs and
+  text documents, and the Knowledge node inspector selects one reusable KB for
+  semantic retrieval.
 
 ```tsx
 import { AppWorkbench } from "@ai-agent-workflow/workbench-ui";
@@ -54,4 +58,6 @@ expose development providers such as Ollama. Provider API keys are edited per
 provider, and LLM nodes can override provider, model, base URL, temperature,
 and max tokens. The node inspector and read-only run history reuse the run
 output renderer from the debug panel so selected nodes and historical runs show
-the same card details as the workflow run log.
+the same card details as the workflow run log. LLM and Knowledge inspectors show
+their output variable shapes so downstream prompt references can be authored
+from the same panel.

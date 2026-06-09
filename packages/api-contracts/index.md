@@ -9,11 +9,11 @@ and workflow run endpoints.
 
 - `src/index.ts` contains route templates, path builders, Zod schemas, nullable
   run input, transient run model-provider/keyring settings, structured node
-  result contracts, inferred DTO/request/response types, and normalized API
-  error helpers.
+  result contracts, Knowledge Base contracts, inferred DTO/request/response
+  types, and normalized API error helpers.
 - `tests/contracts.test.ts` covers path generation, nullable run input,
-  transient model-provider/keyring settings, structured node result metadata,
-  and representative schema parsing.
+transient model-provider/keyring settings, structured node result metadata,
+Knowledge Base payloads, and representative schema parsing.
 
 ## Behavior
 

@@ -14,8 +14,19 @@ function loadEnv() {
 loadEnv();
 
 export default defineConfig({
+  experimental: {
+    externalTables: true,
+  },
   schema: "prisma/schema.prisma",
   datasource: {
     url: process.env.DIRECT_URL ?? process.env.DATABASE_URL!,
+  },
+  tables: {
+    external: [
+      "public.checkpoint_blobs",
+      "public.checkpoint_migrations",
+      "public.checkpoint_writes",
+      "public.checkpoints",
+    ],
   },
 });

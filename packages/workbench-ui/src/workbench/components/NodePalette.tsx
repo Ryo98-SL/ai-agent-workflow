@@ -1,4 +1,4 @@
-import { Brain, Braces, Clock, Database, Flag, GitBranch, Play, TextCursorInput, type LucideIcon } from "lucide-react";
+import { Brain, Braces, Database, Flag, GitBranch, Play, TextCursorInput, UserCheck, Wrench, type LucideIcon } from "lucide-react";
 import type { WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
 import { Button } from "./Button";
 import { workflowNodeIconBackgroundClassNames, workflowNodeIconClassName } from "./workflowNodes/workflowNodeVisuals";
@@ -16,9 +16,10 @@ const items: PaletteItem[] = [
   { type: "end", label: "End", description: "Graph exit marker", group: "Basic", icon: Flag },
   { type: "llm", label: "LLM", description: "Executable chat debug node", group: "AI", icon: Brain },
   { type: "knowledge", label: "Knowledge", description: "Schema placeholder", group: "AI", icon: Database },
-  { type: "tool", label: "Current Time", description: "Executable built-in tool", group: "Tools", icon: Clock },
+  { type: "tool", label: "Tool", description: "Current time · Send email", group: "Tools", icon: Wrench },
   { type: "code", label: "Code", description: "Future runtime", group: "Tools", icon: Braces },
-  { type: "ifElse", label: "If/Else", description: "Future branching", group: "Logic", icon: GitBranch },
+  { type: "ifElse", label: "If/Else", description: "Branch on conditions", group: "Logic", icon: GitBranch },
+  { type: "humanInput", label: "Human Input", description: "Pause for human review", group: "Logic", icon: UserCheck },
   { type: "template", label: "Template", description: "Future text transform", group: "Logic", icon: TextCursorInput },
 ];
 

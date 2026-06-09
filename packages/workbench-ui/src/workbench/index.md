@@ -12,7 +12,8 @@ Reusable workbench state, layout, and canvas runtime.
 - `dateFormat.ts` owns shared English date formatting for user-visible
   workbench timestamps.
 - `components/` contains the layout shell, ReactFlow canvas, popovers, palette,
-  inspectors, model settings, project actions, and run panel.
+  inspectors, Knowledge Base management, model settings, project actions, and
+  run panel.
 - `hooks/` contains execution streaming and graph history hooks.
 - `workflowDirtySnapshot.ts` creates stable workflow content snapshots for the
   header Save button state, ignoring workflow metadata and transient
@@ -22,20 +23,27 @@ Reusable workbench state, layout, and canvas runtime.
 
 ## Behavior
 
-The module waits for a server workflow before mounting the canvas. Selection
-opens inspection; explicit run requests open run output. Handle palettes wire
+The module waits for a server workflow before mounting the canvas. When a
+visitor has no saved workflows, anonymous sessions open the seeded Chinese
+customer-support RAG demo (`createKnowledgeDemoWorkflow`) so the example-KB flow
+is runnable out of the box, while signed-in users start from the neutral
+default. Selection opens inspection; explicit run requests open run output. Handle palettes wire
 new nodes by handle direction, and target-handle palettes disable End. Model
 settings expose DeepSeek, OpenAI, and Anthropic by default, with Ollama behind
 the development-provider flag. Provider API keys live in the workflow keyring,
 and LLM node Model Setting popovers can override provider, model, API key,
 temperature, and max tokens while the canvas displays the resolved effective
-model. Canvas undo/redo covers structural graph edits only: adding/removing
+model. Knowledge Base management opens from the Settings popover, and Knowledge
+nodes select reusable KBs from the inspector while showing retriever output
+variables. Canvas undo/redo covers structural graph edits only: adding/removing
 nodes, adding/removing edges, and moving nodes. Inspector edits, node model
 overrides, global model settings, selection, panels, and run state are not part
 of graph history. Header Save activation is derived by comparing the current
 stable workflow content snapshot with the last opened/saved baseline, so
 undo/redo can return the button to the correct enabled state without coupling
-dirty state to history stack length. Workflow title, description, and icon edits
+dirty state to history stack length. While that dirty state holds, a
+`beforeunload` guard warns before the tab closes or navigates away so unsaved
+work is not lost. Workflow title, description, and icon edits
 stay local to the metadata editor until its own Save button persists them.
 Header run history opens a portal-mounted right drawer
 with read-only debug output beside a date-first run list; run deletion uses an

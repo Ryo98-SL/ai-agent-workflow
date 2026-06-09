@@ -14,7 +14,11 @@ workflow IO stays behind the injected API.
   `index.md`. `components.json` configures the shadcn CLI for this package.
 - `src/lib/utils.ts` exposes the `cn` class-merge helper. The `@workbench/*`
   alias maps to `src/*` (wired in tsconfig, vitest, and the consuming Vite apps).
-- `src/workbench/` contains state, layout, canvas, panels, and UI primitives.
+- `src/data/` contains the workbench data provider, auth/session hooks,
+  anonymous local workflow storage, and React Query hooks for account/workflow/
+  Knowledge Base resources.
+- `src/workbench/` contains state, layout, canvas, panels, Knowledge Base UI,
+  and UI primitives.
 - `tests/` contains component smoke coverage against a mocked workflow API.
 
 ## Behavior
@@ -26,6 +30,8 @@ inspection follows selection. DeepSeek is the default provider, OpenAI and
 Anthropic are available in the selector, Ollama is development-only, and API
 keys are selected from the workflow provider keyring. Workflow defaults and LLM
 node overrides share the same model settings panel for provider, endpoint,
-model, temperature, and max-token edits. Canvas structure edits have local
-undo/redo for node/edge creation, deletion, and movement; form-based inspector
-changes and model settings stay outside that history.
+model, temperature, and max-token edits. Knowledge Base management lives in the
+settings popover and Knowledge nodes select reusable KBs from the node
+inspector. Canvas structure edits have local undo/redo for node/edge creation,
+deletion, and movement; form-based inspector changes and model settings stay
+outside that history.

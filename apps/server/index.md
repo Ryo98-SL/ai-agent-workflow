@@ -9,9 +9,13 @@ synchronous supported workflow execution.
 
 - `src/app.ts` builds the Hono app, validates requests, stores workflows/runs in
   memory, applies transient run model-provider/keyring settings for execution,
-  and returns normalized contract responses.
+  wires reusable Knowledge Base routes, and returns normalized contract
+  responses.
 - `src/logger.ts` exposes the shared structured logger used by route and
   runtime modules.
+- `src/knowledge/` stores KB fixtures, quota constants, chunking, embedding, the
+  repository boundary, and the in-process indexing runner.
+- `src/routes/` contains account, credits, and Knowledge Base route modules.
 - `src/runtime/` compiles the supported Start/LLM subset into LangGraph,
   materializes Start input values, resolves prompt variables, resolves
   workflow/node model settings, calls provider-aware chat adapters, and returns
@@ -34,3 +38,8 @@ outputs, and events.
 Route and runtime modules emit structured JSON logs through `src/logger.ts`.
 Log metadata includes safe execution identifiers and summaries, but avoids API
 keys, full prompts, and full run inputs.
+
+Knowledge Base routes expose the read-only Chinese example KB to anonymous
+users and require authenticated ownership for create/update/delete/document
+ingestion. The MVP stores platform-managed semantic embeddings in Postgres
+pgvector and does not support PDF/DOCX parsing or hybrid retrieval.

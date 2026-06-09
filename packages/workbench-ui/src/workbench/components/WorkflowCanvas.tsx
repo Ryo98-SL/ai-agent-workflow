@@ -22,6 +22,7 @@ import { InlineNodePalettePopover, type InlineNodePaletteState } from "./InlineN
 import {
   CodeWorkflowNode,
   EndWorkflowNode,
+  HumanInputWorkflowNode,
   IfElseWorkflowNode,
   KnowledgeWorkflowNode,
   LlmWorkflowNode,
@@ -56,6 +57,7 @@ const nodeTypes = {
   tool: ToolWorkflowNode,
   code: CodeWorkflowNode,
   ifElse: IfElseWorkflowNode,
+  humanInput: HumanInputWorkflowNode,
   template: TemplateWorkflowNode,
   end: EndWorkflowNode,
 };
@@ -114,6 +116,7 @@ function toFlowEdges(edges: WorkflowEdge[], selectedEdgeIds: Set<string>, hovere
       id: edge.id,
       source: edge.source,
       target: edge.target,
+      sourceHandle: edge.sourceHandle,
       label: edge.label,
       markerEnd: { type: MarkerType.ArrowClosed, color: isConnectedToHoveredNode(edge, hoveredNodeId) ? "#10b981" : undefined },
       selected,
@@ -124,7 +127,12 @@ function toFlowEdges(edges: WorkflowEdge[], selectedEdgeIds: Set<string>, hovere
 }
 
 function toWorkflowEdge(edge: Edge): WorkflowEdge {
-  return { id: edge.id, source: edge.source, target: edge.target };
+  return {
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    ...(edge.sourceHandle ? { sourceHandle: edge.sourceHandle } : {}),
+  };
 }
 
 function isConnectedToHoveredNode(edge: WorkflowEdge, hoveredNodeId?: string) {
@@ -150,11 +158,12 @@ export function WorkflowCanvas({
   const [hoveredNodeId, setHoveredNodeId] = useState<string>();
   const [inlinePalette, setInlinePalette] = useState<InlineNodePaletteState | null>(null);
   const [isInteractive, setIsInteractive] = useState(true);
-  const openInlinePalette = useCallback<OpenWorkflowNodePalette>((sourceNode, handleType, anchorElement) => {
+  const openInlinePalette = useCallback<OpenWorkflowNodePalette>((sourceNode, handleType, anchorElement, sourceHandleId) => {
     setInlinePalette({
       sourceNodeId: sourceNode.id,
       sourceNodeLabel: sourceNode.label,
       handleType,
+      sourceHandleId,
       anchorElement,
     });
   }, []);

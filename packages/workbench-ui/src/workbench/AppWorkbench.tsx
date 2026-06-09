@@ -4,7 +4,9 @@ import { useWorkflowGraphHistory } from "./hooks/useWorkflowGraphHistory";
 import { Loader2 } from "lucide-react";
 import {
   createDefaultWorkflow,
+  createKnowledgeDemoWorkflow,
   createNode,
+  ifElseHandleIds,
   type ModelProvider,
   type ModelProviderKeys,
   type OpenAICompatibleSettings,
@@ -18,6 +20,7 @@ import {
 import type { WorkflowDto } from "@ai-agent-workflow/api-contracts";
 import type { RunInput } from "@ai-agent-workflow/api-contracts";
 import { WorkbenchLayout } from "./components/WorkbenchLayout";
+import { Toaster } from "../components/ui/sonner";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { WorkbenchDataProvider, useWorkbenchData } from "../data/WorkbenchDataProvider";
 import { useActiveWorkflowApi } from "../data/useActiveWorkflowApi";
@@ -38,6 +41,7 @@ export function AppWorkbench({ apiBaseUrl, ...props }: AppWorkbenchProps) {
         <ImportLocalDataPrompt />
         <WorkbenchApp {...props} />
       </WorkbenchDataProvider>
+      <Toaster richColors closeButton position="bottom-right" />
     </ThemeProvider>
   );
 }
@@ -45,14 +49,18 @@ export function AppWorkbench({ apiBaseUrl, ...props }: AppWorkbenchProps) {
 function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
   // Server-backed when signed in, localStorage-backed when anonymous.
   const workflowApi = useActiveWorkflowApi();
-  const { isPending: sessionPending } = useSession();
+  const { data: sessionData, isPending: sessionPending } = useSession();
+  // Anonymous visitors land on the runnable RAG demo (seeded example KB) instead
+  // of a blank default, so the customer-support flow is discoverable out of box.
+  const isAnonymous = !sessionData?.user;
   const providerKeyStore = useProviderKeyStore();
   const { workflowRefreshNonce } = useWorkbenchData();
   const queryClient = useQueryClient();
   const [workflow, setWorkflow] = useState<WorkflowFile>(() => createDefaultWorkflow());
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
-  const { nodeStates, debugState, setDebugState, runWorkflow: execRunWorkflow } = useWorkflowExecution(workflowApi);
+  const { nodeStates, debugState, setDebugState, runWorkflow: execRunWorkflow, resumeRun, newConversation, conversationTurns } =
+    useWorkflowExecution(workflowApi);
   const [workflowId, setWorkflowId] = useState<string | undefined>();
   const [savedWorkflowSnapshot, setSavedWorkflowSnapshot] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -141,8 +149,9 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
         } else if (!cancelled) {
           // No workflows yet: show an unsaved draft (workflowId undefined). It is
           // only persisted on the first save/run, so an untouched session leaves
-          // nothing behind.
-          const nextWorkflow = createDefaultWorkflow();
+          // nothing behind. Anonymous visitors get the customer-support RAG demo;
+          // signed-in users start from the neutral default.
+          const nextWorkflow = isAnonymous ? createKnowledgeDemoWorkflow() : createDefaultWorkflow();
           setWorkflow(nextWorkflow);
           setWorkflowId(undefined);
           setSavedWorkflowSnapshot(workflowDirtySnapshot(nextWorkflow));
@@ -166,7 +175,7 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     return () => {
       cancelled = true;
     };
-  }, [applyWorkflowDto, errorMessage, resetHistory, workflowApi, resetSelectionPanels, sessionPending, workflowRefreshNonce]);
+  }, [applyWorkflowDto, errorMessage, isAnonymous, resetHistory, workflowApi, resetSelectionPanels, sessionPending, workflowRefreshNonce]);
 
   const markWorkflow = useCallback((updater: SetStateAction<WorkflowFile>) => {
     setWorkflow(updater);
@@ -174,13 +183,19 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
 
   const updateNode = useCallback(
     (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => {
-      markWorkflow((current) => ({
-        ...current,
-        graph: {
-          ...current.graph,
-          nodes: current.graph.nodes.map((node) => (node.id === nodeId ? updater(node) : node)),
-        },
-      }));
+      markWorkflow((current) => {
+        const nodes = current.graph.nodes.map((node) => (node.id === nodeId ? updater(node) : node));
+        return {
+          ...current,
+          graph: {
+            ...current.graph,
+            nodes,
+            // Drop edges whose source handle no longer exists (e.g. an If/Else
+            // case was removed), so the graph never carries dangling branches.
+            edges: pruneDanglingSourceHandleEdges(nodes, current.graph.edges),
+          },
+        };
+      });
     },
     [markWorkflow],
   );
@@ -232,7 +247,9 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
           }
         : { x: 180 + workflow.graph.nodes.length * 32, y: 120 + workflow.graph.nodes.length * 24 };
       const node = createNode(type, position, workflow.graph.nodes);
-      const edge = anchorNode ? createConnectedNodeEdge(anchorNode.id, node.id, options?.handleType) : undefined;
+      const edge = anchorNode
+        ? createConnectedNodeEdge(anchorNode.id, node.id, options?.handleType, options?.sourceHandleId)
+        : undefined;
       commitGraphHistoryEntry({ type: "addNode", node, edges: edge ? [edge] : [] });
       setSelectedNodeId(node.id);
       setInspectorOpen(true);
@@ -267,6 +284,9 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     void queryClient.invalidateQueries({ queryKey: ["workflows"] });
   }, [queryClient]);
 
+  const [pendingSwitch, setPendingSwitch] = useState<{ id: string; name: string } | null>(null);
+  const [switching, setSwitching] = useState(false);
+
   const switchWorkflow = useCallback(
     async (id: string) => {
       if (id === workflowId) return;
@@ -281,6 +301,22 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     },
     [applyWorkflowDto, errorMessage, workflowApi, workflowId],
   );
+
+  // Guard switching when there are unsaved changes: surface the top "Save & switch"
+  // bar instead of switching (and discarding) immediately.
+  const requestSwitchWorkflow = useCallback(
+    (id: string, name: string) => {
+      if (id === workflowId) return;
+      if (!dirty) {
+        void switchWorkflow(id);
+        return;
+      }
+      setPendingSwitch({ id, name });
+    },
+    [dirty, switchWorkflow, workflowId],
+  );
+
+  const cancelPendingSwitch = useCallback(() => setPendingSwitch(null), []);
 
   const deleteWorkflowById = useCallback(
     async (id: string) => {
@@ -320,6 +356,19 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     },
     [errorMessage, invalidateWorkflowList, persistWorkflow, workflow],
   );
+
+  const confirmPendingSwitch = useCallback(async () => {
+    if (!pendingSwitch) return;
+    setSwitching(true);
+    try {
+      const saved = await saveWorkflow("save");
+      if (!saved) return;
+      await switchWorkflow(pendingSwitch.id);
+      setPendingSwitch(null);
+    } finally {
+      setSwitching(false);
+    }
+  }, [pendingSwitch, saveWorkflow, switchWorkflow]);
 
   const saveWorkflowMeta = useCallback(
     async (id: string, patch: WorkflowMetaPatch) => {
@@ -378,6 +427,24 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [redo, undo]);
+
+  // While the Save button is active (unsaved changes exist), warn before the tab
+  // closes or navigates away so users don't forget to save. Browsers ignore any
+  // custom text and show their own generic confirmation prompt.
+  useEffect(() => {
+    if (!dirty) {
+      return;
+    }
+
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Legacy browsers require a truthy returnValue to trigger the prompt.
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
 
   const runWorkflow = useCallback(
     async (input: RunInput) => {
@@ -468,7 +535,14 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
       onRedo={redo}
       onToggleRunPanel={toggleRunPanel}
       onRunWorkflow={runWorkflow}
-      onSwitchWorkflow={switchWorkflow}
+      onResumeRun={resumeRun}
+      onNewConversation={newConversation}
+      conversationTurns={conversationTurns}
+      onSwitchWorkflow={requestSwitchWorkflow}
+      pendingSwitchName={pendingSwitch?.name ?? null}
+      switching={switching}
+      onConfirmSwitch={confirmPendingSwitch}
+      onCancelSwitch={cancelPendingSwitch}
       onCreateWorkflow={handleNewWorkflow}
       onDeleteWorkflow={deleteWorkflowById}
       onSaveWorkflowMeta={saveWorkflowMeta}
@@ -502,10 +576,36 @@ function isWorkflowShortcutEditableTarget(target: EventTarget | null) {
   return role === "textbox" || role === "combobox" || role === "searchbox";
 }
 
+/**
+ * Removes edges that leave a multi-output node through a source handle that no
+ * longer exists (currently only If/Else cases). Edges without a `sourceHandle`,
+ * or from single-output nodes, are always kept.
+ */
+function pruneDanglingSourceHandleEdges(
+  nodes: WorkflowNode[],
+  edges: WorkflowFile["graph"]["edges"],
+): WorkflowFile["graph"]["edges"] {
+  const validHandlesByNode = new Map<string, Set<string>>();
+  for (const node of nodes) {
+    if (node.type === "ifElse") {
+      validHandlesByNode.set(node.id, new Set(ifElseHandleIds(node)));
+    }
+  }
+
+  return edges.filter((edge) => {
+    if (!edge.sourceHandle) {
+      return true;
+    }
+    const validHandles = validHandlesByNode.get(edge.source);
+    return !validHandles || validHandles.has(edge.sourceHandle);
+  });
+}
+
 function createConnectedNodeEdge(
   anchorNodeId: string,
   createdNodeId: string,
   handleType: AddNodeOptions["handleType"] = "source",
+  sourceHandleId?: string,
 ) {
   const source = handleType === "target" ? createdNodeId : anchorNodeId;
   const target = handleType === "target" ? anchorNodeId : createdNodeId;
@@ -514,6 +614,9 @@ function createConnectedNodeEdge(
     id: `edge-${source}-${target}-${Date.now()}`,
     source,
     target,
+    // Preserve which branch handle the edge leaves from (e.g. If/Else cases).
+    // Only meaningful when connecting *from* the anchor's source handle.
+    ...(handleType !== "target" && sourceHandleId ? { sourceHandle: sourceHandleId } : {}),
   };
 }
 

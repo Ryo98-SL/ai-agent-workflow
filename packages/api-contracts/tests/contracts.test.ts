@@ -6,6 +6,11 @@ import {
   CreateRunResponseSchema,
   CreateWorkflowRequestSchema,
   CreditStatusDtoSchema,
+  CreateTextKnowledgeDocumentRequestSchema,
+  KnowledgeBaseSettingsSchema,
+  KnowledgeNodeOutputDataSchema,
+  ListKnowledgeBasesResponseSchema,
+  ListKnowledgeDocumentsResponseSchema,
   ListProviderKeysResponseSchema,
   ListWorkflowsResponseSchema,
   apiPaths,
@@ -21,8 +26,82 @@ describe("api contracts", () => {
     expect(apiPaths.runEvents("run/1")).toBe("/api/runs/run%2F1/events");
     expect(apiPaths.providerKeys()).toBe("/api/provider-keys");
     expect(apiPaths.providerKeyById("key/1")).toBe("/api/provider-keys/key%2F1");
+    expect(apiPaths.knowledgeBases()).toBe("/api/knowledge-bases");
+    expect(apiPaths.knowledgeBase("kb/1")).toBe("/api/knowledge-bases/kb%2F1");
+    expect(apiPaths.knowledgeBaseDocuments("kb/1")).toBe("/api/knowledge-bases/kb%2F1/documents");
+    expect(apiPaths.knowledgeBaseTextDocuments("kb/1")).toBe("/api/knowledge-bases/kb%2F1/documents/text");
+    expect(apiPaths.knowledgeDocumentReindex("doc/1")).toBe("/api/knowledge-documents/doc%2F1/reindex");
     expect(apiPaths.credits()).toBe("/api/credits");
     expect(apiPaths.creditsApply()).toBe("/api/credits/apply");
+  });
+
+  it("validates knowledge base settings and list payloads", () => {
+    const settings = KnowledgeBaseSettingsSchema.parse({});
+    expect(settings).toMatchObject({
+      embedding: { mode: "platform", provider: "openai", model: "text-embedding-3-small" },
+      chunking: { strategy: "recursive", chunkSize: 800, chunkOverlap: 120 },
+      retrieval: { mode: "semantic", topK: 5 },
+    });
+
+    const parsed = ListKnowledgeBasesResponseSchema.parse({
+      knowledgeBases: [
+        {
+          id: "kb_customer_support_example",
+          name: "云舵客服知识库",
+          description: "中文客服演示知识库",
+          visibility: "example",
+          readOnly: true,
+          settings,
+          documentCount: 8,
+          characterCount: 12000,
+          createdAt: "2026-06-07T00:00:00.000Z",
+          updatedAt: "2026-06-07T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(parsed.knowledgeBases[0].readOnly).toBe(true);
+  });
+
+  it("validates knowledge documents and retrieval output data", () => {
+    expect(CreateTextKnowledgeDocumentRequestSchema.safeParse({ title: "FAQ", content: "如何退款？" }).success).toBe(true);
+    expect(CreateTextKnowledgeDocumentRequestSchema.safeParse({ title: "Huge", content: "x".repeat(100_001) }).success).toBe(false);
+
+    expect(
+      ListKnowledgeDocumentsResponseSchema.parse({
+        documents: [
+          {
+            id: "doc1",
+            knowledgeBaseId: "kb1",
+            title: "退款规则",
+            sourceType: "text",
+            mimeType: "text/plain",
+            parser: { type: "plainText", version: "1" },
+            characterCount: 120,
+            status: "queued",
+            createdAt: "2026-06-07T00:00:00.000Z",
+            updatedAt: "2026-06-07T00:00:00.000Z",
+          },
+        ],
+      }).documents[0].status,
+    ).toBe("queued");
+
+    const output = KnowledgeNodeOutputDataSchema.parse({
+      result: [
+        {
+          content: "退款需要在购买后 7 天内申请。",
+          title: "退款规则",
+          url: null,
+          icon: null,
+          metadata: { knowledgeBaseId: "kb1", documentId: "doc1", chunkId: "chunk1", score: 0.91 },
+          files: [],
+        },
+      ],
+      context: "退款需要在购买后 7 天内申请。",
+      query: "如何退款？",
+    });
+
+    expect(output.result[0].metadata.score).toBe(0.91);
   });
 
   it("validates credit status payloads and the credits error codes", () => {

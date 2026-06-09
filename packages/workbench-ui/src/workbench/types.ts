@@ -1,10 +1,18 @@
 import type {
   CreateCustomModelRequest,
+  CreateFileKnowledgeDocumentRequest,
+  CreateKnowledgeBaseRequest,
+  CreateTextKnowledgeDocumentRequest,
   CreateRunRequest,
+  ResumeRunRequest,
   CreditStatusResponse,
   CustomModelDto,
+  KnowledgeBaseDto,
+  KnowledgeDocumentDto,
   ProviderKeyDto,
   RunEvent,
+  RunInterrupt,
+  UpdateKnowledgeBaseRequest,
   WorkflowDto,
   WorkflowRun,
   WorkflowSummary,
@@ -44,7 +52,7 @@ export type GenericNodeExecutionState = NodeExecutionStateBase & {
 
 export type NodeExecutionState = LlmNodeExecutionState | GenericNodeExecutionState;
 
-export type WorkbenchStatus = "idle" | "loading" | "running" | "success" | "error";
+export type WorkbenchStatus = "idle" | "loading" | "running" | "waiting" | "success" | "error";
 
 export type DebugState = {
   status: WorkbenchStatus;
@@ -53,6 +61,11 @@ export type DebugState = {
     events: RunEvent[];
   };
   error?: string;
+  /** Set when `status === "waiting"`: the paused run + its reviewer form. */
+  waiting?: {
+    runId: string;
+    interrupt: RunInterrupt;
+  };
 };
 
 export type WorkbenchWorkflowApi = {
@@ -64,9 +77,29 @@ export type WorkbenchWorkflowApi = {
   createRun: (workflowId: string, request?: CreateRunRequest) => Promise<{ run: WorkflowRun }>;
   listWorkflowRuns: (workflowId: string) => Promise<{ runs: WorkflowRun[] }>;
   deleteRun: (runId: string) => Promise<void>;
+  resumeRun: (runId: string, request: ResumeRunRequest) => Promise<{ run: WorkflowRun }>;
   getRun: (runId: string) => Promise<{ run: WorkflowRun }>;
   listRunEvents: (runId: string) => Promise<{ events: RunEvent[] }>;
   runStreamUrl: (runId: string) => string;
+  listKnowledgeBases: () => Promise<{ knowledgeBases: KnowledgeBaseDto[] }>;
+  createKnowledgeBase: (request: CreateKnowledgeBaseRequest) => Promise<{ knowledgeBase: KnowledgeBaseDto }>;
+  getKnowledgeBase: (id: string) => Promise<{ knowledgeBase: KnowledgeBaseDto }>;
+  updateKnowledgeBase: (
+    id: string,
+    request: UpdateKnowledgeBaseRequest,
+  ) => Promise<{ knowledgeBase: KnowledgeBaseDto }>;
+  deleteKnowledgeBase: (id: string) => Promise<void>;
+  listKnowledgeBaseDocuments: (knowledgeBaseId: string) => Promise<{ documents: KnowledgeDocumentDto[] }>;
+  createTextKnowledgeDocument: (
+    knowledgeBaseId: string,
+    request: CreateTextKnowledgeDocumentRequest,
+  ) => Promise<{ document: KnowledgeDocumentDto }>;
+  createFileKnowledgeDocument: (
+    knowledgeBaseId: string,
+    request: CreateFileKnowledgeDocumentRequest,
+  ) => Promise<{ document: KnowledgeDocumentDto }>;
+  deleteKnowledgeDocument: (id: string) => Promise<void>;
+  reindexKnowledgeDocument: (id: string) => Promise<{ document: KnowledgeDocumentDto }>;
   listProviderKeys: () => Promise<{ keys: ProviderKeyDto[] }>;
   createProviderKey: (request: { provider: string; label: string; apiKey: string }) => Promise<{ key: ProviderKeyDto }>;
   deleteProviderKey: (id: string) => Promise<void>;
@@ -92,6 +125,8 @@ export type WorkflowNodePaletteHandleType = "target" | "source";
 export type AddNodeOptions = {
   sourceNodeId?: string;
   handleType?: WorkflowNodePaletteHandleType;
+  /** Which source handle the connecting edge leaves from (multi-output nodes). */
+  sourceHandleId?: string;
 };
 
 export type WorkflowMutators = {

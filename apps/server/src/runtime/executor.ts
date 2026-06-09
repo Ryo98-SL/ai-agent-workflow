@@ -1,16 +1,32 @@
 import { randomUUID } from "node:crypto";
-import { Annotation, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
-import { createApiErrorResponse, type RunInput } from "@ai-agent-workflow/api-contracts";
-import type { WorkflowFile, WorkflowNode, WorkflowNodeType, WorkflowRuntimeState } from "@ai-agent-workflow/workflow-domain";
+import { Annotation, Command, END, MemorySaver, START, StateGraph, interrupt, isGraphInterrupt } from "@langchain/langgraph";
+import {
+  KnowledgeNodeOutputDataSchema,
+  createApiErrorResponse,
+  type KnowledgeNodeOutputData,
+  type RunInput,
+} from "@ai-agent-workflow/api-contracts";
+import {
+  IFELSE_ELSE_HANDLE_ID,
+  evaluateIfElseNode,
+  type WorkflowFile,
+  type WorkflowNode,
+  type WorkflowNodeType,
+  type WorkflowRuntimeState,
+} from "@ai-agent-workflow/workflow-domain";
 import { RuntimeValidationError, normalizeRuntimeError } from "./errors";
 import { logger } from "../logger";
+import type { EmbeddingAdapter } from "../knowledge/embeddings";
+import type { KnowledgeRepository } from "../knowledge/repository";
 import { callChatCompletion } from "./models";
 import { materializeStartValues } from "./startValues";
-import type { RuntimeExecutionResult, RuntimeExecutorOptions, RuntimeNodeResult, RuntimeStreamEvent } from "./types";
+import { resolvePrompt } from "./prompts";
+import type { ChatMessage, EmailSender, RuntimeExecutionResult, RuntimeExecutorOptions, RuntimeInterrupt, RuntimeNodeResult, RuntimeStreamEvent } from "./types";
 import { validateWorkflow } from "./validation";
 
 type RuntimeGraphState = {
   values: WorkflowRuntimeState;
+  messages: ChatMessage[];
 };
 
 const RuntimeStateAnnotation = Annotation.Root({
@@ -18,12 +34,22 @@ const RuntimeStateAnnotation = Annotation.Root({
     reducer: (left, right) => ({ ...left, ...right }),
     default: () => ({}),
   }),
+  // Conversation memory. Appended to across turns; persisted by the checkpointer
+  // when a run reuses a stable conversation thread id.
+  messages: Annotation<ChatMessage[]>({
+    reducer: (left, right) => [...left, ...right],
+    default: () => [],
+  }),
 });
 
 type RuntimeNodeBuildContext = {
+  embeddings?: EmbeddingAdapter;
   fetchImpl: typeof fetch;
   input: RunInput;
+  knowledge?: KnowledgeRepository;
+  userId: string | null;
   workflow: WorkflowFile;
+  emailSender?: EmailSender;
 };
 
 type RuntimeNodeOutput = {
@@ -31,6 +57,8 @@ type RuntimeNodeOutput = {
   data: Record<string, unknown>;
   stateValue: Record<string, unknown>;
   logMetadata?: Record<string, unknown>;
+  /** Conversation turns to append to the shared memory channel. */
+  appendMessages?: ChatMessage[];
 };
 
 type RuntimeNodeBuilder = (
@@ -42,10 +70,11 @@ type RuntimeNodeBuilder = (
 const runtimeNodeBuilders = {
   start: buildStartNode,
   llm: buildLlmNode,
-  knowledge: buildPlaceholderNode,
-  tool: buildPlaceholderNode,
+  knowledge: buildKnowledgeNode,
+  tool: buildToolNode,
   code: buildPlaceholderNode,
-  ifElse: buildPlaceholderNode,
+  ifElse: buildIfElseNode,
+  humanInput: buildHumanInputNode,
   template: buildPlaceholderNode,
   end: buildPlaceholderNode,
 } satisfies Record<WorkflowNodeType, RuntimeNodeBuilder>;
@@ -82,7 +111,15 @@ export async function executeWorkflowRuntime(
     const { startNode, reachableNodes } = validateWorkflow(workflow);
     const reachableNodeIds = new Set(reachableNodes.map((node) => node.id));
     const graph = new StateGraph(RuntimeStateAnnotation) as any;
-    const context: RuntimeNodeBuildContext = { fetchImpl, input, workflow };
+    const context: RuntimeNodeBuildContext = {
+      embeddings: options.embeddings,
+      fetchImpl,
+      input,
+      knowledge: options.knowledge,
+      userId: options.userId ?? null,
+      workflow,
+      emailSender: options.emailSender,
+    };
 
     for (const node of reachableNodes) {
       graph.addNode(node.id, async (state: RuntimeGraphState) => {
@@ -112,8 +149,16 @@ export async function executeWorkflowRuntime(
             label: node.label,
             ...result.logMetadata,
           });
-          return { values: { [node.id]: result.stateValue } };
+          return {
+            values: { [node.id]: result.stateValue },
+            ...(result.appendMessages && result.appendMessages.length > 0 ? { messages: result.appendMessages } : {}),
+          };
         } catch (error) {
+          // A Human Input node pausing via interrupt() is not a failure: let the
+          // pause bubble up to LangGraph without recording a failed node result.
+          if (isGraphInterrupt(error)) {
+            throw error;
+          }
           logger.error("runtime.node.failed", {
             nodeId: node.id,
             nodeType: node.type,
@@ -136,9 +181,55 @@ export async function executeWorkflowRuntime(
       if (!nodeById.has(edge.source) || !nodeById.has(edge.target)) {
         throw new RuntimeValidationError(`Workflow edge "${edge.id}" references a missing node.`);
       }
-      if (reachableNodeIds.has(edge.source) && reachableNodeIds.has(edge.target)) {
-        graph.addEdge(edge.source, edge.target);
+    }
+
+    const reachableEdges = workflow.graph.edges.filter(
+      (edge) => reachableNodeIds.has(edge.source) && reachableNodeIds.has(edge.target),
+    );
+
+    // If/Else nodes route exclusively through conditional edges keyed by the
+    // matched branch's source handle; every other node fans out unconditionally.
+    const conditionalSourceIds = new Set(
+      reachableNodes.filter((node) => node.type === "ifElse").map((node) => node.id),
+    );
+
+    for (const node of reachableNodes) {
+      if (node.type !== "ifElse") {
+        continue;
       }
+      const outgoing = reachableEdges.filter((edge) => edge.source === node.id);
+      if (outgoing.length === 0) {
+        // No connected branches: handled as a terminal node below.
+        conditionalSourceIds.delete(node.id);
+        continue;
+      }
+
+      const targetsByHandle = new Map<string, string[]>();
+      for (const edge of outgoing) {
+        const handle = edge.sourceHandle ?? IFELSE_ELSE_HANDLE_ID;
+        const targets = targetsByHandle.get(handle) ?? [];
+        targets.push(edge.target);
+        targetsByHandle.set(handle, targets);
+      }
+      const possibleTargets = [...new Set(outgoing.map((edge) => edge.target))];
+
+      graph.addConditionalEdges(
+        node.id,
+        (state: RuntimeGraphState) => {
+          const matched = state.values[node.id]?.matched;
+          const targets = typeof matched === "string" ? targetsByHandle.get(matched) : undefined;
+          // An unconnected branch ends this path rather than throwing.
+          return targets && targets.length > 0 ? targets : END;
+        },
+        [...possibleTargets, END],
+      );
+    }
+
+    for (const edge of reachableEdges) {
+      if (conditionalSourceIds.has(edge.source)) {
+        continue;
+      }
+      graph.addEdge(edge.source, edge.target);
     }
 
     const terminalIds = reachableNodes
@@ -149,10 +240,14 @@ export async function executeWorkflowRuntime(
     }
 
     const compiled = graph.compile({ checkpointer });
-    let finalGraphState: RuntimeGraphState = { values: {} };
+    let finalGraphState: RuntimeGraphState = { values: {}, messages: [] };
+
+    // Fresh runs start from empty state; resumes re-enter the paused thread with
+    // the reviewer's answer, which `interrupt()` returns inside the node.
+    const streamInput = options.resume ? new Command({ resume: options.resume.value }) : { values: {} };
 
     const streamEventsIterable = compiled.streamEvents(
-      { values: {} },
+      streamInput,
       {
         version: "v2",
         configurable: { thread_id: threadId },
@@ -244,6 +339,31 @@ export async function executeWorkflowRuntime(
       throw new Error("AI credits exhausted.");
     }
 
+    // A Human Input node may have paused the graph via interrupt(). Inspect the
+    // checkpoint: a non-empty `next` with a pending interrupt means the run is
+    // waiting for a reviewer rather than finished.
+    const snapshot = await compiled.getState({ configurable: { thread_id: threadId } });
+    const pendingInterrupt = extractPendingInterrupt(snapshot);
+    if (pendingInterrupt) {
+      const snapshotState = isRuntimeGraphState(snapshot.values)
+        ? (snapshot.values as RuntimeGraphState).values
+        : finalGraphState.values;
+      logger.info("runtime.execution.waiting_human", {
+        workflowName: workflow.metadata.name,
+        nodeId: pendingInterrupt.nodeId,
+        threadId,
+      });
+      return {
+        ok: true,
+        status: "waiting_human",
+        interrupt: pendingInterrupt,
+        state: snapshotState,
+        nodeResults,
+        streamEvents,
+        consumedTokens,
+      };
+    }
+
     logger.info("runtime.execution.completed", {
       workflowName: workflow.metadata.name,
       nodeResultCount: nodeResults.length,
@@ -252,7 +372,7 @@ export async function executeWorkflowRuntime(
       threadId,
     });
 
-    return { ok: true, state: finalGraphState.values, nodeResults, streamEvents, consumedTokens };
+    return { ok: true, status: "completed", state: finalGraphState.values, nodeResults, streamEvents, consumedTokens };
   } catch (error) {
     // A credit-budget abort surfaces as a generic abort error; report it as a
     // first-class credits_exhausted failure instead.
@@ -321,13 +441,211 @@ async function buildLlmNode(
     throw new RuntimeValidationError(`Node "${node.id}" cannot run with the LLM node builder.`);
   }
 
-  const output = await callChatCompletion(context.workflow, node, state.values, context.fetchImpl);
+  const useMemory = node.config.memory === true;
+  const history = useMemory ? state.messages : [];
+  const output = await callChatCompletion(context.workflow, node, state.values, context.fetchImpl, history);
   return {
     output: output.text,
     data: output,
     stateValue: output,
-    logMetadata: { outputLength: output.text.length },
+    logMetadata: { outputLength: output.text.length, memory: useMemory, historyTurns: history.length },
+    ...(useMemory
+      ? {
+          appendMessages: [
+            { role: "user", content: output.userPrompt },
+            { role: "assistant", content: output.text },
+          ] satisfies ChatMessage[],
+        }
+      : {}),
   };
+}
+
+async function buildKnowledgeNode(
+  node: WorkflowNode,
+  state: RuntimeGraphState,
+  context: RuntimeNodeBuildContext,
+): Promise<RuntimeNodeOutput> {
+  if (node.type !== "knowledge") {
+    throw new RuntimeValidationError(`Node "${node.id}" cannot run with the Knowledge node builder.`);
+  }
+  if (!context.knowledge) {
+    throw new RuntimeValidationError("Knowledge repository is not configured for workflow runtime.");
+  }
+  if (!context.embeddings) {
+    throw new RuntimeValidationError("Embedding adapter is not configured for Knowledge retrieval.");
+  }
+  if (node.config.retrieval.mode !== "semantic") {
+    throw new RuntimeValidationError(`Knowledge retrieval mode "${node.config.retrieval.mode}" is not supported yet.`);
+  }
+
+  const knowledgeBaseIds = node.config.knowledgeBaseIds.filter(Boolean);
+  if (knowledgeBaseIds.length === 0) {
+    throw new RuntimeValidationError(`Knowledge node "${node.id}" must select a knowledge base.`);
+  }
+
+  await Promise.all(
+    knowledgeBaseIds.map(async (knowledgeBaseId) => {
+      const knowledgeBase = await context.knowledge!.get(context.userId, knowledgeBaseId);
+      if (!knowledgeBase) {
+        throw new RuntimeValidationError(`Knowledge base "${knowledgeBaseId}" was not found or is not readable.`);
+      }
+    }),
+  );
+
+  const readyChunkCount = await context.knowledge.countReadyChunks(context.userId, knowledgeBaseIds);
+  if (readyChunkCount === 0) {
+    throw new RuntimeValidationError("Selected knowledge base has no ready indexed content yet.");
+  }
+
+  const query = resolvePrompt(node.config.queryTemplate, state.values).trim();
+  if (!query) {
+    throw new RuntimeValidationError(`Knowledge node "${node.id}" resolved an empty query.`);
+  }
+
+  const [queryEmbedding] = await context.embeddings.embedTexts([query]);
+  const result = await context.knowledge.searchReadyChunks(context.userId, knowledgeBaseIds, queryEmbedding, {
+    topK: node.config.retrieval.topK,
+    scoreThreshold: node.config.retrieval.scoreThreshold,
+  });
+  const outputData = KnowledgeNodeOutputDataSchema.parse({
+    result,
+    context: formatKnowledgeContext(result),
+    query,
+  } satisfies KnowledgeNodeOutputData);
+
+  return {
+    output: outputData.context || `Knowledge retrieval returned ${outputData.result.length} segment(s).`,
+    data: outputData,
+    stateValue: outputData,
+    logMetadata: { resultCount: outputData.result.length, queryLength: query.length },
+  };
+}
+
+function buildIfElseNode(node: WorkflowNode, state: RuntimeGraphState): RuntimeNodeOutput {
+  if (node.type !== "ifElse") {
+    throw new RuntimeValidationError(`Node "${node.id}" cannot run with the If/Else node builder.`);
+  }
+
+  const matched = evaluateIfElseNode(node, state.values);
+  const isElse = matched === IFELSE_ELSE_HANDLE_ID;
+  const matchedCase = node.config.cases.find((branch) => branch.id === matched);
+  const label = isElse ? "else" : matchedCase?.id ?? matched;
+
+  return {
+    output: `Matched branch: ${label}`,
+    data: { matched },
+    stateValue: { matched },
+    logMetadata: { matched },
+  };
+}
+
+async function buildToolNode(
+  node: WorkflowNode,
+  state: RuntimeGraphState,
+  context: RuntimeNodeBuildContext,
+): Promise<RuntimeNodeOutput> {
+  if (node.type !== "tool") {
+    throw new RuntimeValidationError(`Node "${node.id}" cannot run with the Tool node builder.`);
+  }
+
+  if (node.config.adapter === "currentTime") {
+    const timeZone = node.config.timezone || "UTC";
+    let formatted: string;
+    try {
+      formatted = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        dateStyle: "medium",
+        timeStyle: "medium",
+      }).format(new Date());
+    } catch {
+      throw new RuntimeValidationError(`Tool node "${node.id}" has an invalid timezone "${timeZone}".`);
+    }
+    const data = { timezone: timeZone, iso: new Date().toISOString(), formatted };
+    return {
+      output: formatted,
+      data: { text: formatted, data },
+      stateValue: { text: formatted, data },
+      logMetadata: { adapter: "currentTime", timezone: timeZone },
+    };
+  }
+
+  // emailSend adapter
+  const to = resolvePrompt(node.config.to, state.values).trim();
+  const subject = resolvePrompt(node.config.subject, state.values);
+  const body = resolvePrompt(node.config.body, state.values);
+  if (!to) {
+    throw new RuntimeValidationError(`Email tool node "${node.id}" resolved an empty recipient.`);
+  }
+
+  // Dry-run (default): compose and output only — nothing is sent, no cost.
+  if (!node.config.send) {
+    const email = { to, subject, body, sent: false, dryRun: true as const };
+    return {
+      output: `Email composed (dry-run) → ${to}`,
+      data: { text: `Email composed (dry-run) → ${to}`, data: email },
+      stateValue: { text: `Email composed (dry-run) → ${to}`, data: email },
+      logMetadata: { adapter: "emailSend", dryRun: true, to },
+    };
+  }
+
+  // Real send: requires a server-configured sender (env-gated Resend).
+  if (!context.emailSender) {
+    throw new RuntimeValidationError(
+      "Email sending is not configured on the server. Disable “Send for real” to compose a dry-run instead.",
+    );
+  }
+  const result = await context.emailSender({ to, subject, body });
+  const email = { to, subject, body, sent: true as const, dryRun: false as const, id: result.id };
+  return {
+    output: `Email sent → ${to}`,
+    data: { text: `Email sent → ${to}`, data: email },
+    stateValue: { text: `Email sent → ${to}`, data: email },
+    logMetadata: { adapter: "emailSend", dryRun: false, to },
+  };
+}
+
+function buildHumanInputNode(node: WorkflowNode, state: RuntimeGraphState): RuntimeNodeOutput {
+  if (node.type !== "humanInput") {
+    throw new RuntimeValidationError(`Node "${node.id}" cannot run with the Human Input node builder.`);
+  }
+
+  const prompt = resolvePrompt(node.config.prompt, state.values);
+  const defaultText = node.config.defaultText ? resolvePrompt(node.config.defaultText, state.values) : undefined;
+
+  // First pass: throws GraphInterrupt and pauses the graph. On resume the
+  // reviewer's `{ action_id, action_value }` answer is returned here.
+  const answer = interrupt({
+    nodeId: node.id,
+    prompt,
+    actions: node.config.actions,
+    allowTextInput: node.config.allowTextInput,
+    inputLabel: node.config.inputLabel,
+    defaultText,
+  }) as { action_id?: unknown; action_value?: unknown } | undefined;
+
+  const action_id = typeof answer?.action_id === "string" ? answer.action_id : "";
+  const action_value = typeof answer?.action_value === "string" ? answer.action_value : "";
+
+  return {
+    output: action_id ? `Human selected: ${action_id}` : "Human input received.",
+    data: { action_id, action_value },
+    stateValue: { action_id, action_value },
+    logMetadata: { action_id },
+  };
+}
+
+function extractPendingInterrupt(snapshot: {
+  tasks?: ReadonlyArray<{ name?: string; interrupts?: ReadonlyArray<{ id?: string; value?: unknown }> }>;
+}): RuntimeInterrupt | undefined {
+  for (const task of snapshot.tasks ?? []) {
+    const pending = task.interrupts?.[0];
+    if (pending) {
+      const value = pending.value as { nodeId?: unknown } | undefined;
+      const nodeId = value && typeof value.nodeId === "string" ? value.nodeId : task.name ?? "";
+      return { nodeId, interruptId: pending.id, value: pending.value };
+    }
+  }
+  return undefined;
 }
 
 function buildPlaceholderNode(node: WorkflowNode): RuntimeNodeOutput {
@@ -345,6 +663,20 @@ function buildPlaceholderNode(node: WorkflowNode): RuntimeNodeOutput {
     stateValue: output,
     logMetadata: { placeholder: true },
   };
+}
+
+function formatKnowledgeContext(result: KnowledgeNodeOutputData["result"]): string {
+  return result
+    .map((segment, index) => {
+      const score = Number.isFinite(segment.metadata.score) ? segment.metadata.score.toFixed(3) : "0.000";
+      return [
+        `【资料 ${index + 1}】${segment.title}`,
+        `来源: ${segment.url ?? segment.metadata.documentId}`,
+        `相关度: ${score}`,
+        segment.content,
+      ].join("\n");
+    })
+    .join("\n\n");
 }
 
 function extractStreamDelta(data: unknown): string | undefined {
@@ -365,12 +697,47 @@ function extractTokenUsage(data: unknown): { inputTokens?: number; outputTokens?
   if (!isRecord(data)) return undefined;
   const output = data.output;
   if (!isRecord(output)) return undefined;
-  const usage = (output as Record<string, unknown>).usage_metadata;
-  if (isRecord(usage)) {
-    return {
-      inputTokens: typeof usage.input_tokens === "number" ? usage.input_tokens : undefined,
-      outputTokens: typeof usage.output_tokens === "number" ? usage.output_tokens : undefined,
-    };
+  const usageMetadata = extractUsageRecord(output.usage_metadata);
+  if (usageMetadata) return usageMetadata;
+
+  const responseMetadata = output.response_metadata;
+  if (isRecord(responseMetadata)) {
+    const tokenUsage = extractUsageRecord(responseMetadata.tokenUsage);
+    if (tokenUsage) return tokenUsage;
+
+    const rawUsage = extractUsageRecord(responseMetadata.usage);
+    if (rawUsage) return rawUsage;
+  }
+
+  const rawUsage = extractUsageRecord(output.usage);
+  if (rawUsage) return rawUsage;
+
+  return undefined;
+}
+
+function extractUsageRecord(value: unknown): { inputTokens?: number; outputTokens?: number } | undefined {
+  if (!isRecord(value)) return undefined;
+
+  const inputTokens = firstNumber(value, ["input_tokens", "prompt_tokens", "inputTokens", "promptTokens"]);
+  const outputTokens = firstNumber(value, ["output_tokens", "completion_tokens", "outputTokens", "completionTokens"]);
+  if (inputTokens != null || outputTokens != null) {
+    return { inputTokens, outputTokens };
+  }
+
+  const totalTokens = firstNumber(value, ["total_tokens", "totalTokens"]);
+  if (totalTokens != null) {
+    return { inputTokens: totalTokens, outputTokens: 0 };
+  }
+
+  return undefined;
+}
+
+function firstNumber(record: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
   }
   return undefined;
 }

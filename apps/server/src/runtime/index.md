@@ -12,8 +12,8 @@ progress.
 - `index.ts` is the public module entrypoint used by `src/app.ts`.
 - `executor.ts` builds and streams the LangGraph `StateGraph`, records node
   results, normalizes stream chunks, emits execution/node lifecycle logs, and
-  normalizes run-level failures. It owns the node-builder registry and
-  placeholder builders.
+  normalizes run-level failures. It owns the node-builder registry, including
+  Start, LLM, Knowledge retrieval, and placeholder builders.
 - `validation.ts` validates graph shape and reachable node set without
   hard-coding the executable node type list.
 - `startValues.ts` materializes Start field values from run input.
@@ -30,13 +30,16 @@ progress.
 
 The runtime accepts a validated workflow payload and run input, compiles the
 reachable nodes into LangGraph, stores each node output under its node id in
-runtime state, and returns structured node results for API persistence. Start
-and LLM nodes execute real runtime behavior. Other known node types currently
-save placeholder state containing their type, label, description, and config.
+runtime state, and returns structured node results for API persistence. Start,
+LLM, and Knowledge nodes execute real runtime behavior. Knowledge nodes resolve
+`queryTemplate`, require readable selected KBs with ready chunks, embed the
+query, retrieve top semantic chunks, and emit `result`, `context`, and `query`.
+Other known node types currently save placeholder state containing their type,
+label, description, and config.
 
 Compiled graphs use a LangGraph checkpointer and execute through `.stream()`
 with `updates`, `messages`, and `values`. `executeWorkflowRuntime` collects
 normalized stream events and can call `RuntimeExecutorOptions.onStreamEvent` for
-each chunk. Tests can inject `fetch`, `checkpointer`, and `threadId` through
-`RuntimeExecutorOptions` so provider calls and checkpoint assertions remain
-deterministic.
+each chunk. Tests can inject `fetch`, `checkpointer`, `threadId`, `knowledge`,
+and `embeddings` through `RuntimeExecutorOptions` so provider calls, retrieval,
+and checkpoint assertions remain deterministic.

@@ -13,6 +13,12 @@ Electron, server, or runtime execution dependencies.
   define `config.modelSettings` overrides and use `resolveLLMModelSettings` to
   merge node settings, workflow defaults, advanced sampling values, and provider
   keyring values.
+  Knowledge nodes use a dedicated config schema for user-level RAG resources:
+  `knowledgeBaseIds`, `queryTemplate`, and semantic retrieval settings. The file
+  also exports output-variable metadata helpers for LLM and Knowledge nodes, the
+  well-known example KB id (`EXAMPLE_KNOWLEDGE_BASE_ID`, re-exported by the server
+  seed so storage and fixtures never drift), and `createKnowledgeDemoWorkflow`,
+  the anonymous Chinese customer-support RAG demo wiring Start → Knowledge → LLM.
 - `src/promptVariables.ts` defines namespaced prompt placeholder parsing,
   runtime-state resolution, and legacy variable value merging.
 - `src/index.ts` exports the stable public API used by app, runtime, and tests.

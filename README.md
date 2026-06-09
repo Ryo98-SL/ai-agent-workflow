@@ -45,12 +45,37 @@ at `http://127.0.0.1:5173`. The web and desktop renderers use
   prompt variable helpers.
 - `packages/tsconfig`: shared TypeScript presets.
 
+## Knowledge Bases (RAG)
+
+User-level reusable Knowledge Bases feed a Knowledge node that retrieves context
+for downstream LLM nodes (semantic vector search). Anonymous visitors land on a
+seeded read-only Chinese customer-support demo (`云舵客服知识库`) and can run the
+Start → Knowledge → LLM flow without signing in; authenticated users can create
+KBs and add pasted text or `.txt`/`.md` files.
+
+- **Deployment**: requires Postgres with the `pgvector` extension (e.g. Railway
+  Postgres) for stored chunk embeddings.
+- **Embedding env** (`apps/server`): `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`,
+  `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY` (falls back to `CREDITS_OPENAI_API_KEY`),
+  and `KNOWLEDGE_INDEXER_CONCURRENCY`. See `apps/server/.env.example`.
+- **MVP limits**: 20 documents per KB, 100k characters per document, and 500k
+  characters total per account.
+- **Deferred**: PDF/DOCX/webpage ingestion, keyword/hybrid retrieval, reranking,
+  and user-selected embedding providers/models are reserved in the schema/API but
+  not enabled in the MVP.
+- **Destructive actions require confirmation**: deleting a knowledge base (or a
+  document) must go through an explicit confirm step in the UI — never delete on a
+  single click. Use the shared inline confirmation pattern (confirm + cancel),
+  matching `WorkflowSwitcher`/`RunHistoryMenu`.
+
 ## Known Limits
 
-- Production graph execution beyond the supported Start-to-LLM subset is
-  deferred.
-- Tool calls, durable run history, and secret storage are not yet server-owned
-  production systems.
-- Auth, authorization, database persistence, queues, retries, and hosted secret
-  management are deferred.
+- Production graph execution beyond the supported Start, Knowledge, and LLM
+  subset is deferred.
+- Anonymous Knowledge runs are limited to the seeded read-only example KB;
+  anonymous uploads are not supported.
+- Knowledge ingestion is pasted text and `.txt`/`.md` files only; PDF/DOCX,
+  hybrid retrieval, and user-managed embedding providers are deferred.
+- Indexing runs in-process with low concurrency; no Redis, BullMQ, separate
+  worker, or external vector database is used.
 - Desktop file open/save parity is intentionally out of scope for this migration.

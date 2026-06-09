@@ -10,19 +10,25 @@ import {
   ListRunEventsResponseSchema,
   ListWorkflowRunsResponseSchema,
   ListWorkflowsResponseSchema,
+  ResumeRunRequestSchema,
+  ResumeRunResponseSchema,
   UpdateWorkflowRequestSchema,
   UpdateWorkflowResponseSchema,
   apiPaths,
   createApiErrorResponse,
   zodIssuesToApiIssues,
   type RunEvent,
+  type RunInput,
+  type RunInterrupt,
   type RunSseEvent,
   type WorkflowDto,
   type WorkflowRun,
+  type WorkflowRunOutput,
   type WorkflowSummary,
 } from "@ai-agent-workflow/api-contracts";
 import {
   createDefaultWorkflow,
+  type ModelProvider,
   type ModelProviderKeys,
   type OpenAICompatibleSettings,
   type WorkflowFile,
@@ -35,9 +41,19 @@ import { auth } from "./auth/auth";
 import { resolveUserId } from "./auth/middleware";
 import { logger } from "./logger";
 import { createAccountRoutes, loadDecryptedProviderKey, loadDecryptedProviderKeyById } from "./routes/account";
-import { consumeCredits, createCreditRoutes, loadCreditBalance } from "./routes/credits";
-import { executeWorkflowRuntime } from "./runtime";
-import { frontendOrigins } from "./config";
+import {
+  consumeCredits,
+  createCreditRoutes,
+  loadCreditBalance,
+  loadPlatformCreditsProvider,
+  type PlatformCreditsProvider,
+} from "./routes/credits";
+import { createKnowledgeRoutes } from "./routes/knowledge";
+import { executeWorkflowRuntime, type EmailSender } from "./runtime";
+import { frontendOrigins, getPlatformEmbeddingConfig } from "./config";
+import { createPlatformEmbeddingAdapter, type EmbeddingAdapter } from "./knowledge/embeddings";
+import { createKnowledgeIndexingRunner, type KnowledgeIndexingRunner } from "./knowledge/indexer";
+import { createPrismaKnowledgeRepository, type KnowledgeRepository } from "./knowledge/repository";
 import { createPrismaWorkflowRepository, type WorkflowRepository } from "./workflows/repository";
 import { createPrismaRunRepository, type RunRepository } from "./runs/repository";
 import { randomUUID } from "node:crypto";
@@ -61,6 +77,8 @@ type ServerState = {
   // Effective workflow used for each run, kept for SSE replay; keyed by runId.
   runWorkflows: Map<string, WorkflowFile>;
   runOwners: Map<string, string | null>;
+  // LangGraph thread id per run (= conversationId for multi-turn memory, else runId).
+  runThreads: Map<string, string>;
   checkpointer: BaseCheckpointSaver;
 };
 
@@ -70,6 +88,20 @@ export type CreateServerAppOptions = {
   workflows?: WorkflowRepository;
   /** Run persistence (authed runs). Defaults to the Prisma-backed repository. */
   runs?: RunRepository;
+  /** Knowledge Base persistence. Defaults to the Prisma-backed repository. */
+  knowledge?: KnowledgeRepository;
+  /** Platform embedding adapter for KB indexing. Defaults to env-configured OpenAI-compatible embeddings. */
+  embeddings?: EmbeddingAdapter;
+  /** Optional runner override for tests. */
+  knowledgeIndexer?: KnowledgeIndexingRunner;
+  /** Platform provider key loader for AI credits. Defaults to the DB-backed DeepSeek-only loader. */
+  platformCreditsProvider?: (provider: string) => Promise<PlatformCreditsProvider | null>;
+  /** Credit balance loader override for tests. Defaults to the Prisma-backed grant store. */
+  creditBalanceLoader?: (userId: string) => Promise<number | null>;
+  /** Credit consumption override for tests. Defaults to the Prisma-backed grant store. */
+  creditConsumer?: (userId: string, tokens: number) => Promise<void>;
+  /** Email sender for the Email tool. Defaults to env-gated Resend (undefined when unset → dry-run only). */
+  emailSender?: EmailSender;
   /** Durable LangGraph checkpointer for authed runs. Anonymous runs use MemorySaver. */
   authedCheckpointer?: BaseCheckpointSaver;
   /** Resolves the session userId. Defaults to the Better Auth resolver. */
@@ -87,6 +119,7 @@ function createState(): ServerState {
     streamBuffers: new Map(),
     runWorkflows: new Map(),
     runOwners: new Map(),
+    runThreads: new Map(),
     checkpointer: new MemorySaver(),
   };
 }
@@ -103,26 +136,143 @@ function workflowSummary(stored: WorkflowDto): WorkflowSummary {
   };
 }
 
+function resolveRunProvider(workflow: WorkflowFile, modelProvider?: OpenAICompatibleSettings): ModelProvider | undefined {
+  const llmProviders = new Set<ModelProvider>();
+  for (const node of workflow.graph.nodes) {
+    if (node.type !== "llm") continue;
+    const provider = node.config.modelSettings?.provider ?? modelProvider?.provider ?? workflow.settings.modelProvider?.provider;
+    if (provider) {
+      llmProviders.add(provider);
+    }
+  }
+
+  if (llmProviders.size === 1) {
+    return [...llmProviders][0];
+  }
+
+  return modelProvider?.provider ?? workflow.settings.modelProvider?.provider;
+}
+
+/**
+ * Env-gated Resend sender for the Email tool's real-send path. Returns
+ * undefined when RESEND_API_KEY/EMAIL_FROM are unset, so the node falls back to
+ * a clear "not configured" error and dry-run stays the default everywhere.
+ */
+function createEnvEmailSender(fetchImpl?: typeof fetch): EmailSender | undefined {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+  if (!apiKey || !from) {
+    return undefined;
+  }
+  const doFetch = fetchImpl ?? fetch;
+  return async (email) => {
+    const response = await doFetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({ from, to: email.to, subject: email.subject, text: email.body }),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Email send failed (${response.status}): ${detail.slice(0, 200)}`);
+    }
+    const payload = (await response.json().catch(() => ({}))) as { id?: string };
+    return { id: payload.id };
+  };
+}
+
+/** Maps a runtime interrupt (the node's `interrupt()` payload) to the DTO. */
+function toRunInterrupt(interrupt: { nodeId: string; interruptId?: string; value: unknown }): RunInterrupt {
+  const value = (interrupt.value ?? {}) as Record<string, unknown>;
+  const actions = Array.isArray(value.actions)
+    ? value.actions.map((action) => {
+        const entry = (action ?? {}) as Record<string, unknown>;
+        return { id: String(entry.id ?? ""), label: String(entry.label ?? ""), value: String(entry.value ?? "") };
+      })
+    : [];
+  return {
+    nodeId: interrupt.nodeId,
+    interruptId: interrupt.interruptId,
+    prompt: typeof value.prompt === "string" ? value.prompt : "",
+    actions,
+    allowTextInput: Boolean(value.allowTextInput),
+    inputLabel: typeof value.inputLabel === "string" ? value.inputLabel : undefined,
+    defaultText: typeof value.defaultText === "string" ? value.defaultText : undefined,
+  };
+}
+
+/** Unions node results across run legs (resume re-runs only the tail). */
+function mergeNodeResults(
+  prior: WorkflowRunOutput["nodeResults"],
+  next: ReadonlyArray<{
+    nodeId: string;
+    label: string;
+    status: "succeeded" | "failed";
+    output: string;
+    data?: Record<string, unknown>;
+  }>,
+): WorkflowRunOutput["nodeResults"] {
+  const byId = new Map<string, WorkflowRunOutput["nodeResults"][number]>();
+  for (const result of prior) {
+    byId.set(result.nodeId, result);
+  }
+  for (const result of next) {
+    byId.set(result.nodeId, {
+      nodeId: result.nodeId,
+      label: result.label,
+      status: result.status,
+      output: result.output,
+      data: result.data,
+    });
+  }
+  return [...byId.values()];
+}
+
 function workflowForRun(
   workflow: WorkflowFile,
   modelProvider?: OpenAICompatibleSettings,
   modelProviderKeys?: ModelProviderKeys,
+  // When set (credits runs), force this base URL at both the workflow and node
+  // level and drop node-level apiKey overrides so the injected platform key can
+  // only ever reach the official provider endpoint.
+  forceBaseURL?: string,
 ): WorkflowFile {
-  if (!modelProvider && !modelProviderKeys) {
+  if (!modelProvider && !modelProviderKeys && !forceBaseURL) {
     return workflow;
   }
 
-  return {
-    ...cloneWorkflow(workflow),
+  const baseProvider = modelProvider || workflow.settings.modelProvider;
+  const clone = cloneWorkflow(workflow);
+
+  const result: WorkflowFile = {
+    ...clone,
     settings: {
       ...workflow.settings,
-      modelProvider: modelProvider || workflow.settings.modelProvider,
+      modelProvider: baseProvider && forceBaseURL ? { ...baseProvider, baseURL: forceBaseURL } : baseProvider,
       modelProviderKeys: {
         ...workflow.settings.modelProviderKeys,
         ...modelProviderKeys,
       },
     },
   };
+
+  if (forceBaseURL) {
+    result.graph = {
+      ...result.graph,
+      nodes: result.graph.nodes.map((node) =>
+        node.type === "llm" && node.config.modelSettings
+          ? {
+              ...node,
+              config: {
+                ...node.config,
+                modelSettings: { ...node.config.modelSettings, baseURL: forceBaseURL, apiKey: undefined },
+              },
+            }
+          : node,
+      ),
+    };
+  }
+
+  return result;
 }
 
 async function readJsonBody(request: Request): Promise<unknown> {
@@ -213,8 +363,31 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
   const state = createState();
   const workflows = options.workflows ?? createPrismaWorkflowRepository();
   const runRepo = options.runs ?? createPrismaRunRepository();
+  const knowledge = options.knowledge ?? createPrismaKnowledgeRepository();
+  const platformCreditsProvider = options.platformCreditsProvider ?? loadPlatformCreditsProvider;
+  const creditBalanceLoader = options.creditBalanceLoader ?? loadCreditBalance;
+  const creditConsumer = options.creditConsumer ?? consumeCredits;
+  // Undefined unless RESEND_API_KEY + EMAIL_FROM are set; then the Email tool's
+  // "send for real" path works (otherwise it errors and dry-run is the default).
+  const emailSender = options.emailSender ?? createEnvEmailSender(options.fetch);
+  const embeddingConfig = getPlatformEmbeddingConfig();
+  const embeddings = options.embeddings ?? (embeddingConfig ? createPlatformEmbeddingAdapter(options.fetch, embeddingConfig) : undefined);
+  const knowledgeIndexer =
+    options.knowledgeIndexer ??
+    (embeddings
+      ? createKnowledgeIndexingRunner({ repository: knowledge, embedding: embeddings })
+      : {
+          start() {
+            logger.warn("knowledge.indexing.disabled", {
+              reason: "Platform embedding API key is not configured.",
+            });
+          },
+          stop() {},
+          trigger() {},
+        });
   const resolveUser = options.resolveUserId ?? resolveUserId;
   const app = new Hono();
+  knowledgeIndexer.start();
 
   function evictRunFromMemory(runId: string) {
     setTimeout(() => {
@@ -222,8 +395,247 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       state.events.delete(runId);
       state.runWorkflows.delete(runId);
       state.runOwners.delete(runId);
+      state.runThreads.delete(runId);
       state.streamBuffers.delete(runId);
     }, RUN_MEMORY_TTL_MS);
+  }
+
+  type LaunchRunParams = {
+    runId: string;
+    workflowId: string;
+    runWorkflow: WorkflowFile;
+    pendingRun: WorkflowRun;
+    input: RunInput;
+    userId: string | null;
+    /** LangGraph thread id (= conversationId for memory, else runId). */
+    threadId: string;
+    modelProvider?: OpenAICompatibleSettings;
+    effectiveProviderKeys?: ModelProviderKeys;
+    creditsBaseURL?: string;
+    creditBudget?: number;
+    /** Resume answer for a paused Human Input interrupt (re-enters the thread). */
+    resume?: { value: unknown };
+    /** Node results from earlier legs, merged into the persisted run output. */
+    priorNodeResults?: WorkflowRunOutput["nodeResults"];
+  };
+
+  // Runs (or resumes) a workflow on its own SSE buffer, then records the outcome.
+  // Shared by the create and resume routes so pause/resume reuses one pipeline.
+  function launchRunExecution(params: LaunchRunParams) {
+    const {
+      runId,
+      workflowId,
+      runWorkflow,
+      pendingRun,
+      input,
+      userId,
+      threadId,
+      modelProvider,
+      effectiveProviderKeys,
+      creditsBaseURL,
+      creditBudget,
+      resume,
+      priorNodeResults,
+    } = params;
+
+    const nodeOutputs = new Map<
+      string,
+      { output: string; data?: Record<string, unknown>; inputTokens?: number; outputTokens?: number }
+    >();
+
+    // Authed runs use the durable Postgres checkpointer (when available);
+    // anonymous runs use the ephemeral in-memory MemorySaver.
+    const checkpointer = userId && options.authedCheckpointer ? options.authedCheckpointer : state.checkpointer;
+
+    void executeWorkflowRuntime(
+      workflowForRun(runWorkflow, modelProvider, effectiveProviderKeys, creditsBaseURL),
+      input,
+      {
+        checkpointer,
+        embeddings,
+        fetch: options.fetch,
+        knowledge,
+        threadId,
+        creditBudget,
+        userId,
+        emailSender,
+        resume,
+        onStreamEvent: (event) => {
+          const buf = state.streamBuffers.get(runId);
+          if (!buf) return;
+
+          if (event.type === "node.started" && event.nodeId && event.nodeType) {
+            pushToBuffer(buf, {
+              type: "node.started",
+              runId,
+              nodeId: event.nodeId,
+              nodeType: event.nodeType as RunSseEvent extends { type: "node.started"; nodeType: infer T } ? T : never,
+            });
+          } else if (event.type === "node.stream" && event.nodeId && event.message) {
+            pushToBuffer(buf, { type: "node.stream", runId, nodeId: event.nodeId, delta: event.message });
+          } else if (event.type === "node.completed" && event.nodeId && event.nodeType) {
+            const stored = nodeOutputs.get(event.nodeId);
+            pushToBuffer(buf, {
+              type: "node.completed",
+              runId,
+              nodeId: event.nodeId,
+              nodeType: event.nodeType as RunSseEvent extends { type: "node.completed"; nodeType: infer T } ? T : never,
+              output: event.output ?? stored?.output ?? "",
+              data: event.data ?? stored?.data,
+              durationMs: event.durationMs ?? 0,
+              inputTokens: stored?.inputTokens,
+              outputTokens: stored?.outputTokens,
+            });
+          } else if (event.type === "node.failed" && event.nodeId && event.nodeType) {
+            pushToBuffer(buf, {
+              type: "node.failed",
+              runId,
+              nodeId: event.nodeId,
+              nodeType: event.nodeType as RunSseEvent extends { type: "node.failed"; nodeType: infer T } ? T : never,
+              error: event.message ?? "Node execution failed.",
+              durationMs: event.durationMs ?? 0,
+            });
+          } else if (event.type === "node.tokens" && event.nodeId && event.tokenUsage) {
+            const existing = nodeOutputs.get(event.nodeId) ?? { output: "" };
+            nodeOutputs.set(event.nodeId, { ...existing, ...event.tokenUsage });
+          }
+        },
+      },
+    )
+      .then(async (execution) => {
+        // Deduct metered tokens from the credit balance (credits runs only).
+        if (creditBudget != null && userId && execution.consumedTokens > 0) {
+          try {
+            await creditConsumer(userId, execution.consumedTokens);
+          } catch (error) {
+            logger.error("credits.consume_failed", {
+              runId,
+              message: error instanceof Error ? error.message : "consume failed",
+            });
+          }
+        }
+
+        const mergedNodeResults = mergeNodeResults(priorNodeResults ?? [], execution.nodeResults);
+        const existingEvents = state.events.get(runId) ?? [];
+        const base = existingEvents.length;
+        const nodeEvents = execution.nodeResults.map((result, index) =>
+          createEvent(
+            runId,
+            base + index,
+            result.status === "failed" ? "node.failed" : "node.completed",
+            `${result.label} ${result.status === "failed" ? "failed" : "completed"}.`,
+            new Date().toISOString(),
+            { nodeId: result.nodeId, output: result.output, data: result.data },
+          ),
+        );
+
+        // Paused on a Human Input interrupt: record the waiting state and close
+        // this SSE leg. The run stays in memory until a resume re-enters it.
+        if (execution.ok && execution.status === "waiting_human") {
+          const interrupt = execution.interrupt ? toRunInterrupt(execution.interrupt) : null;
+          const waitingRun: WorkflowRun = {
+            ...pendingRun,
+            status: "waiting_human",
+            interrupt,
+            output: {
+              summary: `Workflow run awaiting human input for ${runWorkflow.metadata.name}.`,
+              nodeResults: mergedNodeResults,
+            },
+            error: null,
+            completedAt: null,
+          };
+          state.runs.set(runId, waitingRun);
+
+          const waitingEvent = createEvent(
+            runId,
+            base + execution.nodeResults.length,
+            "run.waiting",
+            `Run ${runId} is awaiting human input.`,
+            new Date().toISOString(),
+            { nodeId: interrupt?.nodeId },
+          );
+          state.events.set(runId, [...existingEvents, ...nodeEvents, waitingEvent]);
+
+          const buf = state.streamBuffers.get(runId);
+          if (buf) {
+            if (interrupt) {
+              pushToBuffer(buf, { type: "run.waiting", runId, interrupt });
+            }
+            buf.done = true;
+            buf.listeners.clear();
+            setTimeout(() => state.streamBuffers.delete(runId), 30_000);
+          }
+
+          logger.info("run.waiting_human", { runId, workflowId, nodeId: interrupt?.nodeId });
+          return;
+        }
+
+        const completedAt = new Date().toISOString();
+        const status = execution.ok ? "succeeded" : "failed";
+        const finalRun: WorkflowRun = {
+          ...pendingRun,
+          status,
+          interrupt: null,
+          output: {
+            summary: execution.ok
+              ? `Workflow run completed for ${runWorkflow.metadata.name}.`
+              : `Workflow run failed for ${runWorkflow.metadata.name}.`,
+            nodeResults: mergedNodeResults,
+          },
+          error: execution.ok ? null : execution.error,
+          completedAt,
+        };
+        state.runs.set(runId, finalRun);
+
+        const completionEvent = createEvent(
+          runId,
+          base + execution.nodeResults.length,
+          execution.ok ? "run.completed" : "run.failed",
+          `Run ${runId} ${execution.ok ? "completed" : "failed"}.`,
+          completedAt,
+          { status, streamEventCount: execution.streamEvents.length },
+        );
+        const allEvents = [...existingEvents, ...nodeEvents, completionEvent];
+        state.events.set(runId, allEvents);
+
+        const buf = state.streamBuffers.get(runId);
+        if (buf) {
+          pushToBuffer(buf, { type: "run.completed", runId, status: status === "succeeded" ? "succeeded" : "failed" });
+          buf.done = true;
+          buf.listeners.clear();
+          setTimeout(() => state.streamBuffers.delete(runId), 30_000);
+        }
+
+        // Persist the final state for authed runs, then evict from memory.
+        if (userId) {
+          runRepo.complete(userId, finalRun, allEvents).catch((error) => {
+            logger.error("run.persist_complete_failed", {
+              runId,
+              message: error instanceof Error ? error.message : "persist failed",
+            });
+          });
+        }
+        evictRunFromMemory(runId);
+
+        logger.info("run.finished", {
+          runId,
+          workflowId,
+          status,
+          nodeResultCount: mergedNodeResults.length,
+          errorCode: execution.ok ? null : execution.error.code,
+        });
+      })
+      .catch((error) => {
+        const buf = state.streamBuffers.get(runId);
+        const message = error instanceof Error ? error.message : "Execution failed.";
+        if (buf) {
+          pushToBuffer(buf, { type: "run.completed", runId, status: "failed" });
+          buf.done = true;
+          buf.listeners.clear();
+          setTimeout(() => state.streamBuffers.delete(runId), 30_000);
+        }
+        logger.error("run.execution_error", { runId, message });
+      });
   }
 
   // Credentialed CORS locked to the frontend origin so the Better Auth session
@@ -234,7 +646,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       origin: frontendOrigins,
       credentials: true,
       allowHeaders: ["Content-Type", "Authorization"],
-      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     }),
   );
 
@@ -245,6 +657,8 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
   app.route("/", createAccountRoutes());
   // AI credits: status + one-time auto-approved application.
   app.route("/", createCreditRoutes());
+  // User-level reusable Knowledge Bases plus the read-only anonymous example KB.
+  app.route("/", createKnowledgeRoutes({ repository: knowledge, resolveUserId: resolveUser, indexer: knowledgeIndexer }));
 
   app.get(apiPaths.workflows(), async (c) => {
     const userId = await resolveUser(c);
@@ -341,6 +755,95 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     return c.body(null, 204);
   });
 
+  // Resolves which provider key the run uses and whether it draws on AI credits
+  // (and the metering budget). Shared by the create and resume routes.
+  async function resolveRunCredentials(args: {
+    userId: string | null;
+    runWorkflow: WorkflowFile;
+    modelProviderKeys?: ModelProviderKeys;
+    modelProvider?: OpenAICompatibleSettings;
+    providerKeyId?: string;
+  }): Promise<
+    | { ok: true; effectiveProviderKeys?: ModelProviderKeys; creditBudget?: number; creditsBaseURL?: string }
+    | { ok: false; error: ReturnType<typeof createApiErrorResponse>; status: 402 }
+  > {
+    let effectiveProviderKeys = args.modelProviderKeys;
+    const runProvider = resolveRunProvider(args.runWorkflow, args.modelProvider);
+    const savedPref = runProvider ? args.runWorkflow.settings.providerKeyPrefs?.[runProvider] : undefined;
+    const savedUsagePriority = savedPref?.usagePriority ?? "credits";
+    const requestModelProvider = args.modelProvider;
+    const hasResolvedProviderKey =
+      Boolean(runProvider && effectiveProviderKeys?.[runProvider]) ||
+      Boolean(runProvider && args.runWorkflow.settings.modelProviderKeys?.[runProvider]);
+    const hasTransientProviderApiKey = requestModelProvider
+      ? requestModelProvider.provider === runProvider && Boolean(requestModelProvider.apiKey)
+      : false;
+    const usesCredits =
+      savedUsagePriority === "credits" &&
+      !args.providerKeyId &&
+      !hasTransientProviderApiKey &&
+      !hasResolvedProviderKey;
+    if (runProvider && runProvider !== "ollama" && !effectiveProviderKeys?.[runProvider] && args.userId && !usesCredits) {
+      const selectedKeyId = args.providerKeyId ?? savedPref?.providerKeyId;
+      const storedKey = selectedKeyId
+        ? await loadDecryptedProviderKeyById(args.userId, selectedKeyId)
+        : await loadDecryptedProviderKey(args.userId, runProvider);
+      if (storedKey) {
+        effectiveProviderKeys = { ...effectiveProviderKeys, [runProvider]: storedKey };
+      }
+    }
+
+    // Credits path: when a paid provider runs on AI credits (no key resolved),
+    // require an approved grant with a positive balance, inject the platform's
+    // provider key, force the official endpoint, and meter the run.
+    let creditBudget: number | undefined;
+    let creditsBaseURL: string | undefined;
+    const needsCredits = Boolean(runProvider) && runProvider !== "ollama" && usesCredits;
+    if (needsCredits) {
+      if (!args.userId) {
+        return {
+          ok: false,
+          status: 402,
+          error: createApiErrorResponse(
+            "credits_required",
+            "Sign in and apply for AI credits, or add an API key for this provider.",
+          ),
+        };
+      }
+      const balance = await creditBalanceLoader(args.userId);
+      if (balance == null) {
+        return {
+          ok: false,
+          status: 402,
+          error: createApiErrorResponse("credits_required", "Apply for AI credits or add an API key for this provider."),
+        };
+      }
+      if (balance <= 0) {
+        return {
+          ok: false,
+          status: 402,
+          error: createApiErrorResponse("credits_exhausted", "AI credits exhausted. Apply for more or add an API key."),
+        };
+      }
+      const platform = await platformCreditsProvider(runProvider!);
+      if (!platform) {
+        return {
+          ok: false,
+          status: 402,
+          error: createApiErrorResponse(
+            "credits_required",
+            `AI credits aren't available for ${runProvider} yet — add an API key for this provider.`,
+          ),
+        };
+      }
+      effectiveProviderKeys = { ...effectiveProviderKeys, [runProvider!]: platform.apiKey };
+      creditsBaseURL = platform.baseURL;
+      creditBudget = balance;
+    }
+
+    return { ok: true, effectiveProviderKeys, creditBudget, creditsBaseURL };
+  }
+
   app.post(API_ROUTE_TEMPLATES.workflowRuns, async (c) => {
     const workflowId = c.req.param("id");
 
@@ -370,58 +873,30 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     // not supply a transient one for the run's provider. The plaintext key is
     // decrypted here just-in-time and never leaves the server.
     //
-    // Usage priority gates this: when the provider is explicitly set to "credits"
-    // we skip key injection (the credits path is owned by a later phase). For
-    // "apiKey" — or legacy runs with no saved preference — we resolve a key by:
-    // the request's providerKeyId override → the saved providerKeyPrefs
-    // selection → the most recent stored key (back-compat).
-    let effectiveProviderKeys = parsed.data.modelProviderKeys;
-    const runProvider = parsed.data.modelProvider?.provider ?? runWorkflow.settings.modelProvider?.provider;
-    const savedPref = runProvider ? runWorkflow.settings.providerKeyPrefs?.[runProvider] : undefined;
-    const usesCredits = savedPref?.usagePriority === "credits" && !parsed.data.providerKeyId;
-    if (runProvider && runProvider !== "ollama" && !effectiveProviderKeys?.[runProvider] && userId && !usesCredits) {
-      const selectedKeyId = parsed.data.providerKeyId ?? savedPref?.providerKeyId;
-      const storedKey = selectedKeyId
-        ? await loadDecryptedProviderKeyById(userId, selectedKeyId)
-        : await loadDecryptedProviderKey(userId, runProvider);
-      if (storedKey) {
-        effectiveProviderKeys = { ...effectiveProviderKeys, [runProvider]: storedKey };
-      }
+    // Usage priority gates this: when the provider runs on "credits" we skip
+    // user-key injection and let the platform key path handle it. Missing saved
+    // preference defaults to credits, matching the UI's default. Only explicit
+    // API-key mode resolves a key by: the request's providerKeyId override →
+    // the saved providerKeyPrefs selection → the most recent stored key
+    // (back-compat).
+    const credentials = await resolveRunCredentials({
+      userId,
+      runWorkflow,
+      modelProviderKeys: parsed.data.modelProviderKeys,
+      modelProvider: parsed.data.modelProvider,
+      providerKeyId: parsed.data.providerKeyId,
+    });
+    if (!credentials.ok) {
+      return c.json(credentials.error, credentials.status);
     }
-
-    // Credits path: when a paid provider runs on AI credits (no key resolved),
-    // require an approved grant with a positive balance and meter the run.
-    let creditBudget: number | undefined;
-    const needsCredits =
-      Boolean(runProvider) && runProvider !== "ollama" && usesCredits && !effectiveProviderKeys?.[runProvider!];
-    if (needsCredits) {
-      if (!userId) {
-        return c.json(
-          createApiErrorResponse(
-            "credits_required",
-            "Sign in and apply for AI credits, or add an API key for this provider.",
-          ),
-          402,
-        );
-      }
-      const balance = await loadCreditBalance(userId);
-      if (balance == null) {
-        return c.json(
-          createApiErrorResponse("credits_required", "Apply for AI credits or add an API key for this provider."),
-          402,
-        );
-      }
-      if (balance <= 0) {
-        return c.json(
-          createApiErrorResponse("credits_exhausted", "AI credits exhausted. Apply for more or add an API key."),
-          402,
-        );
-      }
-      creditBudget = balance;
-    }
+    const { effectiveProviderKeys, creditBudget, creditsBaseURL } = credentials;
 
     const runId = randomUUID();
+    // Multi-turn memory: runs sharing a conversationId share a LangGraph thread,
+    // so memory-enabled nodes accumulate history across turns.
+    const threadId = parsed.data.conversationId?.trim() || runId;
     state.runWorkflows.set(runId, runWorkflow);
+    state.runThreads.set(runId, threadId);
     const createdAt = new Date().toISOString();
     const startedAt = new Date().toISOString();
 
@@ -467,156 +942,81 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       hasTransientModelProviderKeys: Boolean(parsed.data.modelProviderKeys),
     });
 
-    const nodeOutputs = new Map<string, { output: string; data?: Record<string, unknown>; inputTokens?: number; outputTokens?: number }>();
-
-    // Authed runs use the durable Postgres checkpointer (when available);
-    // anonymous runs use the ephemeral in-memory MemorySaver.
-    const checkpointer = userId && options.authedCheckpointer ? options.authedCheckpointer : state.checkpointer;
-
-    void executeWorkflowRuntime(
-      workflowForRun(runWorkflow, parsed.data.modelProvider, effectiveProviderKeys),
-      parsed.data.input,
-      {
-        checkpointer,
-        fetch: options.fetch,
-        threadId: runId,
-        creditBudget,
-        onStreamEvent: (event) => {
-          const buf = state.streamBuffers.get(runId);
-          if (!buf) return;
-
-          if (event.type === "node.started" && event.nodeId && event.nodeType) {
-            pushToBuffer(buf, {
-              type: "node.started",
-              runId,
-              nodeId: event.nodeId,
-              nodeType: event.nodeType as RunSseEvent extends { type: "node.started"; nodeType: infer T } ? T : never,
-            });
-          } else if (event.type === "node.stream" && event.nodeId && event.message) {
-            pushToBuffer(buf, { type: "node.stream", runId, nodeId: event.nodeId, delta: event.message });
-          } else if (event.type === "node.completed" && event.nodeId && event.nodeType) {
-            const stored = nodeOutputs.get(event.nodeId);
-            pushToBuffer(buf, {
-              type: "node.completed",
-              runId,
-              nodeId: event.nodeId,
-              nodeType: event.nodeType as RunSseEvent extends { type: "node.completed"; nodeType: infer T } ? T : never,
-              output: event.output ?? stored?.output ?? "",
-              data: event.data ?? stored?.data,
-              durationMs: event.durationMs ?? 0,
-              inputTokens: stored?.inputTokens,
-              outputTokens: stored?.outputTokens,
-            });
-          } else if (event.type === "node.failed" && event.nodeId && event.nodeType) {
-            pushToBuffer(buf, {
-              type: "node.failed",
-              runId,
-              nodeId: event.nodeId,
-              nodeType: event.nodeType as RunSseEvent extends { type: "node.failed"; nodeType: infer T } ? T : never,
-              error: event.message ?? "Node execution failed.",
-              durationMs: event.durationMs ?? 0,
-            });
-          } else if (event.type === "node.tokens" && event.nodeId && event.tokenUsage) {
-            const existing = nodeOutputs.get(event.nodeId) ?? { output: "" };
-            nodeOutputs.set(event.nodeId, { ...existing, ...event.tokenUsage });
-          }
-        },
-      },
-    ).then(async (execution) => {
-      // Deduct metered tokens from the credit balance (credits runs only).
-      if (creditBudget != null && userId && execution.consumedTokens > 0) {
-        try {
-          await consumeCredits(userId, execution.consumedTokens);
-        } catch (error) {
-          logger.error("credits.consume_failed", {
-            runId,
-            message: error instanceof Error ? error.message : "consume failed",
-          });
-        }
-      }
-
-      for (const result of execution.nodeResults) {
-        const existing = nodeOutputs.get(result.nodeId) ?? {};
-        nodeOutputs.set(result.nodeId, { ...existing, output: result.output, data: result.data });
-      }
-
-      const completedAt = new Date().toISOString();
-      const status = execution.ok ? "succeeded" : "failed";
-      const finalRun: WorkflowRun = {
-        ...pendingRun,
-        status,
-        output: {
-          summary: execution.ok
-            ? `Workflow run completed for ${runWorkflow.metadata.name}.`
-            : `Workflow run failed for ${runWorkflow.metadata.name}.`,
-          nodeResults: execution.nodeResults,
-        },
-        error: execution.ok ? null : execution.error,
-        completedAt,
-      };
-      state.runs.set(runId, finalRun);
-
-      const existingEvents = state.events.get(runId) ?? [];
-      const nodeEvents = execution.nodeResults.map((result, index) =>
-        createEvent(
-          runId,
-          index + 2,
-          result.status === "failed" ? "node.failed" : "node.completed",
-          `${result.label} ${result.status === "failed" ? "failed" : "completed"}.`,
-          new Date().toISOString(),
-          { nodeId: result.nodeId, output: result.output, data: result.data },
-        ),
-      );
-      const completionEvent = createEvent(
-        runId,
-        execution.nodeResults.length + 2,
-        execution.ok ? "run.completed" : "run.failed",
-        `Run ${runId} ${execution.ok ? "completed" : "failed"}.`,
-        completedAt,
-        { status, streamEventCount: execution.streamEvents.length },
-      );
-      const allEvents = [...existingEvents, ...nodeEvents, completionEvent];
-      state.events.set(runId, allEvents);
-
-      const buf = state.streamBuffers.get(runId);
-      if (buf) {
-        pushToBuffer(buf, { type: "run.completed", runId, status: status === "succeeded" ? "succeeded" : "failed" });
-        buf.done = true;
-        buf.listeners.clear();
-        setTimeout(() => state.streamBuffers.delete(runId), 30_000);
-      }
-
-      // Persist the final state for authed runs, then evict from memory.
-      if (userId) {
-        runRepo.complete(userId, finalRun, allEvents).catch((error) => {
-          logger.error("run.persist_complete_failed", {
-            runId,
-            message: error instanceof Error ? error.message : "persist failed",
-          });
-        });
-      }
-      evictRunFromMemory(runId);
-
-      logger.info("run.created", {
-        runId,
-        workflowId,
-        status,
-        nodeResultCount: execution.nodeResults.length,
-        errorCode: execution.ok ? null : execution.error.code,
-      });
-    }).catch((error) => {
-      const buf = state.streamBuffers.get(runId);
-      const message = error instanceof Error ? error.message : "Execution failed.";
-      if (buf) {
-        pushToBuffer(buf, { type: "run.completed", runId, status: "failed" });
-        buf.done = true;
-        buf.listeners.clear();
-        setTimeout(() => state.streamBuffers.delete(runId), 30_000);
-      }
-      logger.error("run.execution_error", { runId, message });
+    launchRunExecution({
+      runId,
+      workflowId,
+      runWorkflow,
+      pendingRun,
+      input: parsed.data.input,
+      userId,
+      threadId,
+      modelProvider: parsed.data.modelProvider,
+      effectiveProviderKeys,
+      creditsBaseURL,
+      creditBudget,
     });
 
     return c.json(responseFromSchema(CreateRunResponseSchema, { run: pendingRun }), 201);
+  });
+
+  // Resume a run paused on a Human Input interrupt. Re-enters the same thread
+  // with the reviewer's answer and opens a fresh SSE leg for the continuation.
+  app.post(API_ROUTE_TEMPLATES.runResume, async (c) => {
+    const runId = c.req.param("id");
+
+    const parsed = await parseJsonRequest(c.req.raw, ResumeRunRequestSchema);
+    if (!parsed.ok) {
+      return c.json(parsed.body, parsed.status);
+    }
+
+    const userId = await resolveUser(c);
+
+    // The waiting run, its owner, and its workflow are all held in memory while
+    // paused (waiting runs are never evicted until they finish).
+    const run = state.runs.get(runId) ?? null;
+    if (!run || state.runOwners.get(runId) !== userId) {
+      logger.warn("run.not_found", { runId, route: c.req.path });
+      return c.json(normalizedNotFound(`Run ${runId} was not found.`), 404);
+    }
+    if (run.status !== "waiting_human") {
+      return c.json(createApiErrorResponse("conflict", `Run ${runId} is not awaiting human input.`), 409);
+    }
+    const runWorkflow = state.runWorkflows.get(runId);
+    if (!runWorkflow) {
+      return c.json(normalizedNotFound(`Run ${runId} can no longer be resumed.`), 404);
+    }
+
+    const credentials = await resolveRunCredentials({ userId, runWorkflow });
+    if (!credentials.ok) {
+      return c.json(credentials.error, credentials.status);
+    }
+
+    // Fresh SSE buffer for the resumed leg; the client re-subscribes to stream.
+    const buffer: RunStreamBuffer = { events: [], done: false, listeners: new Set() };
+    state.streamBuffers.set(runId, buffer);
+    pushToBuffer(buffer, { type: "run.started", runId });
+
+    const resumedRun: WorkflowRun = { ...run, status: "running", interrupt: null };
+    state.runs.set(runId, resumedRun);
+
+    logger.info("run.resume_requested", { runId, workflowId: run.workflowId, actionId: parsed.data.action_id });
+
+    launchRunExecution({
+      runId,
+      workflowId: run.workflowId,
+      runWorkflow,
+      pendingRun: resumedRun,
+      input: run.input,
+      userId,
+      threadId: state.runThreads.get(runId) ?? runId,
+      effectiveProviderKeys: credentials.effectiveProviderKeys,
+      creditsBaseURL: credentials.creditsBaseURL,
+      creditBudget: credentials.creditBudget,
+      resume: { value: { action_id: parsed.data.action_id, action_value: parsed.data.action_value } },
+      priorNodeResults: run.output?.nodeResults ?? [],
+    });
+
+    return c.json(responseFromSchema(ResumeRunResponseSchema, { run: resumedRun }), 200);
   });
 
   // List a workflow's run history (authed; durable). Anonymous runs have no
@@ -665,6 +1065,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       state.events.delete(id);
       state.runWorkflows.delete(id);
       state.runOwners.delete(id);
+      state.runThreads.delete(id);
       state.streamBuffers.delete(id);
       deleted = true;
     }

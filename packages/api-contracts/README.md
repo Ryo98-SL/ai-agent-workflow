@@ -9,3 +9,7 @@ the exported schemas before crossing package boundaries.
 Run inputs accept string or `null` values, run requests may include transient
 model provider settings and provider keyring values for execution, and node
 results can include structured `data` metadata alongside display output.
+
+Knowledge Base contracts cover reusable KB resources, text/file document
+ingestion metadata, document indexing statuses, platform-managed embedding
+settings, and Dify-style Knowledge node retrieval output data.

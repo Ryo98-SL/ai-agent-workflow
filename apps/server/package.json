@@ -13,10 +13,12 @@
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.build.json",
-    "dev": "tsx --env-file=.env src/index.ts",
+    "dev": "pnpm db:up && tsx --env-file=.env src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",

@@ -1,6 +1,13 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { RunEvent, WorkflowDto, WorkflowRun, WorkflowSummary } from "@ai-agent-workflow/api-contracts";
+import type {
+  KnowledgeBaseDto,
+  KnowledgeDocumentDto,
+  RunEvent,
+  WorkflowDto,
+  WorkflowRun,
+  WorkflowSummary,
+} from "@ai-agent-workflow/api-contracts";
 import { createDefaultWorkflow, type WorkflowFile } from "@ai-agent-workflow/workflow-domain";
 import { describe, expect, it, vi } from "vitest";
 import { AppWorkbench, type WorkbenchWorkflowApi } from "../src";
@@ -69,6 +76,7 @@ describe("MVP smoke loop", () => {
     expect((await screen.findAllByText("Memory runtime output.")).length).toBeGreaterThan(0);
     expect(api.createRun).toHaveBeenLastCalledWith("workflow-1", {
       input: { topic: "workbench tests" },
+      conversationId: expect.any(String),
       modelProvider: expect.objectContaining({
         model: "deepseek-v4-flash-smoke",
         provider: "deepseek",
@@ -95,6 +103,45 @@ describe("MVP smoke loop", () => {
     await user.click(screen.getByRole("button", { name: "Switch workflow" }));
     await user.click(await screen.findByRole("button", { name: "Seed Workflow" }));
     expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+  });
+
+  it("shows a save & switch bar before switching workflows with unsaved changes", async () => {
+    const user = userEvent.setup();
+    const { api, workflows, calls } = createMemoryWorkflowApi();
+    // Seed a second workflow to switch into.
+    const seed = workflows.get("workflow-1")!;
+    workflows.set("workflow-2", {
+      id: "workflow-2",
+      workflow: { ...seed.workflow, metadata: { ...seed.workflow.metadata, name: "Second Workflow" } },
+    });
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+
+    // Make an unsaved edit so the workflow is dirty.
+    fireEvent.click(screen.getByText("Start"));
+    await user.clear(screen.getByLabelText("Node label"));
+    await user.type(screen.getByLabelText("Node label"), "Start edited");
+    await user.click(screen.getByRole("button", { name: "Close node inspector" }));
+
+    // Switching away raises the top bar instead of switching immediately.
+    await user.click(screen.getByRole("button", { name: "Switch workflow" }));
+    await user.click(await screen.findByRole("button", { name: "Second Workflow" }));
+    expect(await screen.findByRole("button", { name: "Save & switch" })).toBeInTheDocument();
+    expect(api.getWorkflow).not.toHaveBeenCalledWith("workflow-2");
+
+    // Cancel dismisses the bar without switching.
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("button", { name: "Save & switch" })).not.toBeInTheDocument();
+    expect(api.getWorkflow).not.toHaveBeenCalledWith("workflow-2");
+
+    // Re-open and this time save & switch: it persists then loads the target.
+    await user.click(screen.getByRole("button", { name: "Switch workflow" }));
+    await user.click(await screen.findByRole("button", { name: "Second Workflow" }));
+    await user.click(await screen.findByRole("button", { name: "Save & switch" }));
+    expect(await screen.findByText("Second Workflow")).toBeInTheDocument();
+    expect(calls.updateWorkflow).toHaveBeenCalled();
+    expect(api.getWorkflow).toHaveBeenCalledWith("workflow-2");
   });
 
   it("edits Start fields and prevents adding a second Start node", async () => {
@@ -448,6 +495,22 @@ describe("MVP smoke loop", () => {
       expect(savedNode.config.modelSettings?.apiKey).toBeUndefined();
     }
   });
+
+  it("opens knowledge base management from the settings popover", async () => {
+    const user = userEvent.setup();
+    const { api } = createMemoryWorkflowApi();
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open model settings" }));
+    await user.click(screen.getByRole("button", { name: "Knowledge Bases" }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("云舵客服知识库")).toBeInTheDocument();
+    expect(screen.getByText("Example")).toBeInTheDocument();
+    expect(api.listKnowledgeBases).toHaveBeenCalled();
+  });
 });
 
 function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => WorkflowFile = (workflow) => workflow) {
@@ -469,6 +532,48 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
   ]);
   const events = new Map<string, RunEvent[]>();
   const runs = new Map<string, WorkflowRun>();
+  const knowledgeBases = new Map<string, KnowledgeBaseDto>([
+    [
+      "kb_customer_support_example",
+      {
+        id: "kb_customer_support_example",
+        name: "云舵客服知识库",
+        description: "匿名演示用中文客服知识库。",
+        visibility: "example",
+        readOnly: true,
+        settings: {
+          embedding: { mode: "platform", provider: "openai", model: "text-embedding-3-small" },
+          chunking: { strategy: "recursive", chunkSize: 800, chunkOverlap: 120 },
+          retrieval: { mode: "semantic", topK: 5 },
+        },
+        documentCount: 1,
+        characterCount: 120,
+        createdAt: "2026-06-07T00:00:00.000Z",
+        updatedAt: "2026-06-07T00:00:00.000Z",
+      },
+    ],
+  ]);
+  const knowledgeDocuments = new Map<string, KnowledgeDocumentDto[]>([
+    [
+      "kb_customer_support_example",
+      [
+        {
+          id: "kb_example_doc_login",
+          knowledgeBaseId: "kb_customer_support_example",
+          title: "登录问题",
+          sourceType: "text",
+          filename: null,
+          mimeType: "text/plain",
+          parser: { type: "plainText", version: "1" },
+          characterCount: 120,
+          status: "ready",
+          errorMessage: null,
+          createdAt: "2026-06-07T00:00:00.000Z",
+          updatedAt: "2026-06-07T00:00:00.000Z",
+        },
+      ],
+    ],
+  ]);
   let nextWorkflowNumber = 2;
   let nextRunNumber = 1;
   const calls = {
@@ -573,8 +678,106 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
       runs.delete(runId);
       events.delete(runId);
     }),
+    resumeRun: vi.fn(async (runId) => ({ run: runs.get(runId)! })),
     deleteWorkflow: vi.fn(async () => undefined),
     runStreamUrl: vi.fn((runId) => `http://test/api/runs/${runId}/stream`),
+    listKnowledgeBases: vi.fn(async () => ({ knowledgeBases: Array.from(knowledgeBases.values()) })),
+    createKnowledgeBase: vi.fn(async (request) => {
+      const now = new Date().toISOString();
+      const knowledgeBase: KnowledgeBaseDto = {
+        id: `kb-${knowledgeBases.size + 1}`,
+        name: request.name,
+        description: request.description ?? null,
+        visibility: "private",
+        readOnly: false,
+        settings:
+          request.settings ??
+          ({
+            embedding: { mode: "platform", provider: "openai", model: "text-embedding-3-small" },
+            chunking: { strategy: "recursive", chunkSize: 800, chunkOverlap: 120 },
+            retrieval: { mode: "semantic", topK: 5 },
+          } satisfies KnowledgeBaseDto["settings"]),
+        documentCount: 0,
+        characterCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+      knowledgeBases.set(knowledgeBase.id, knowledgeBase);
+      knowledgeDocuments.set(knowledgeBase.id, []);
+      return { knowledgeBase };
+    }),
+    getKnowledgeBase: vi.fn(async (id) => {
+      const knowledgeBase = knowledgeBases.get(id);
+      if (!knowledgeBase) throw new Error(`Knowledge base ${id} was not found.`);
+      return { knowledgeBase };
+    }),
+    updateKnowledgeBase: vi.fn(async (id, request) => {
+      const knowledgeBase = knowledgeBases.get(id);
+      if (!knowledgeBase) throw new Error(`Knowledge base ${id} was not found.`);
+      const next = { ...knowledgeBase, ...request, updatedAt: new Date().toISOString() };
+      knowledgeBases.set(id, next);
+      return { knowledgeBase: next };
+    }),
+    deleteKnowledgeBase: vi.fn(async (id) => {
+      knowledgeBases.delete(id);
+      knowledgeDocuments.delete(id);
+    }),
+    listKnowledgeBaseDocuments: vi.fn(async (knowledgeBaseId) => ({
+      documents: knowledgeDocuments.get(knowledgeBaseId) ?? [],
+    })),
+    createTextKnowledgeDocument: vi.fn(async (knowledgeBaseId, request) => {
+      const now = new Date().toISOString();
+      const document: KnowledgeDocumentDto = {
+        id: `doc-${knowledgeBaseId}-${(knowledgeDocuments.get(knowledgeBaseId) ?? []).length + 1}`,
+        knowledgeBaseId,
+        title: request.title,
+        sourceType: "text",
+        filename: null,
+        mimeType: request.mimeType,
+        parser: { type: request.mimeType === "text/markdown" ? "markdown" : "plainText", version: "1" },
+        characterCount: request.content.length,
+        status: "queued",
+        errorMessage: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      knowledgeDocuments.set(knowledgeBaseId, [...(knowledgeDocuments.get(knowledgeBaseId) ?? []), document]);
+      return { document };
+    }),
+    createFileKnowledgeDocument: vi.fn(async (knowledgeBaseId, request) => {
+      const now = new Date().toISOString();
+      const document: KnowledgeDocumentDto = {
+        id: `doc-${knowledgeBaseId}-${(knowledgeDocuments.get(knowledgeBaseId) ?? []).length + 1}`,
+        knowledgeBaseId,
+        title: request.filename,
+        sourceType: "file",
+        filename: request.filename,
+        mimeType: request.mimeType,
+        parser: { type: request.mimeType === "text/markdown" ? "markdown" : "plainText", version: "1" },
+        characterCount: request.content?.length ?? 0,
+        status: "queued",
+        errorMessage: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      knowledgeDocuments.set(knowledgeBaseId, [...(knowledgeDocuments.get(knowledgeBaseId) ?? []), document]);
+      return { document };
+    }),
+    deleteKnowledgeDocument: vi.fn(async (id) => {
+      for (const [knowledgeBaseId, documents] of knowledgeDocuments) {
+        knowledgeDocuments.set(
+          knowledgeBaseId,
+          documents.filter((document) => document.id !== id),
+        );
+      }
+    }),
+    reindexKnowledgeDocument: vi.fn(async (id) => {
+      for (const documents of knowledgeDocuments.values()) {
+        const document = documents.find((item) => item.id === id);
+        if (document) return { document: { ...document, status: "queued" as const } };
+      }
+      throw new Error(`Knowledge document ${id} was not found.`);
+    }),
     listProviderKeys: vi.fn(async () => ({ keys: [] })),
     createProviderKey: vi.fn(async (request) => ({
       key: {

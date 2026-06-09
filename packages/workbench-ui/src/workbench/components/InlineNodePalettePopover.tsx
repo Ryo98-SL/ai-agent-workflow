@@ -8,6 +8,7 @@ export type InlineNodePaletteState = {
   sourceNodeId: string;
   sourceNodeLabel: string;
   handleType: WorkflowNodePaletteHandleType;
+  sourceHandleId?: string;
   anchorElement: HTMLElement;
 };
 
@@ -46,7 +47,11 @@ export function InlineNodePalettePopover({ hasStartNode, palette, onAddNode, onC
             hasStartNode={hasStartNode}
             onAddNode={(type) => {
               if (palette) {
-                onAddNode(type, { sourceNodeId: palette.sourceNodeId, handleType: palette.handleType });
+                onAddNode(type, {
+                  sourceNodeId: palette.sourceNodeId,
+                  handleType: palette.handleType,
+                  sourceHandleId: palette.sourceHandleId,
+                });
                 onClose();
               }
             }}

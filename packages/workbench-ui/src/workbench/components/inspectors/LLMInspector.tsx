@@ -14,6 +14,7 @@ import { ModelCapabilityTags } from "../ModelCapabilityTags";
 import { DEFAULT_MODEL_SETTINGS, ModelSettingsPanel } from "../ModelSettingsPanel";
 import { getModelCapabilities } from "../modelCatalog";
 import { ModelProviderLogo } from "../modelProviderVisuals";
+import { NodeOutputVariablesPanel } from "../NodeOutputVariablesPanel";
 import { Popover } from "../Popover";
 
 type LLMInspectorProps = {
@@ -73,6 +74,20 @@ export function LLMInspector({
           className="min-h-28 resize-y leading-5"
         />
       </Field>
+      <label className="flex items-start justify-between gap-3 rounded-md border border-border bg-card p-3">
+        <span className="min-w-0">
+          <span className="block text-sm font-medium text-foreground">Conversation memory</span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            Remember prior turns across runs in the same conversation (multi-turn chat).
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={node.config.memory ?? false}
+          onChange={(event) => updateConfig({ memory: event.target.checked })}
+          className="mt-0.5 size-4 shrink-0 accent-[hsl(var(--brand))]"
+        />
+      </label>
       <section>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prompt Variables</h3>
         {variables.length === 0 ? (
@@ -100,6 +115,7 @@ export function LLMInspector({
           </div>
         )}
       </section>
+      <NodeOutputVariablesPanel nodeType="llm" />
     </div>
   );
 }
@@ -214,6 +230,10 @@ function referenceStatus(workflow: WorkflowFile, nodeId: string, path: string[])
   }
 
   if (producer.type === "llm" && ["text", "usage", "reasoning"].includes(firstField)) {
+    return "resolvable";
+  }
+
+  if (producer.type === "knowledge" && ["result", "context", "query"].includes(firstField)) {
     return "resolvable";
   }
 

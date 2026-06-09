@@ -15,7 +15,12 @@ Core responsibilities:
 - `src/workbench/workflowDirtySnapshot.ts` owns the canonical content snapshot
   used for Save button dirty state.
 - `src/workbench/components` owns the canvas-first shell, popovers, inspectors,
-  model settings, node palette, run panel, and ReactFlow adapters.
+  model settings, Knowledge Base management, node palette, run panel, and
+  ReactFlow adapters.
+- `src/data/useKnowledgeBases.ts` exposes React Query hooks for KB metadata and
+  document mutations through the injected workbench API. Anonymous workflow
+  storage stays local, but KB reads/mutations always delegate to the server
+  boundary.
 - `src/workbench/assets` stores bundled DeepSeek, OpenAI, Anthropic, and
   Ollama provider logos so model UI never depends on external image URLs at
   runtime.
@@ -80,6 +85,13 @@ Design constraints:
   `Button` component. Model search temporarily expands matching provider groups,
   and nested provider-key popovers should dismiss when users click elsewhere in
   the selector.
+- Knowledge Base management stays in the header Settings popover via a shared
+  dialog. The dialog reads the anonymous example KB, keeps private KB mutation
+  actions disabled when signed out/read-only, supports pasted text and `.txt` /
+  `.md` file ingestion, and renders disabled platform embedding fields for the
+  MVP. Knowledge node settings select one KB while persisting the array-shaped
+  `knowledgeBaseIds` config, edit the query template, tune semantic retrieval
+  limits, and render output variables.
 
 ## Test Strategy
 

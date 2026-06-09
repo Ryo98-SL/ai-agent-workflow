@@ -1,5 +1,6 @@
 export { CodeWorkflowNode } from "./CodeWorkflowNode";
 export { EndWorkflowNode } from "./EndWorkflowNode";
+export { HumanInputWorkflowNode } from "./HumanInputWorkflowNode";
 export { IfElseWorkflowNode } from "./IfElseWorkflowNode";
 export { KnowledgeWorkflowNode } from "./KnowledgeWorkflowNode";
 export { LlmWorkflowNode } from "./LlmWorkflowNode";

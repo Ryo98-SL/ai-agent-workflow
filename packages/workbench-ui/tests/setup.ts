@@ -18,6 +18,17 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
+// jsdom lacks Pointer Capture APIs; sonner calls these on toast pointerdown.
+for (const method of ["setPointerCapture", "releasePointerCapture", "hasPointerCapture"] as const) {
+  if (!(method in Element.prototype)) {
+    Object.defineProperty(Element.prototype, method, {
+      writable: true,
+      configurable: true,
+      value: method === "hasPointerCapture" ? () => false : () => {},
+    });
+  }
+}
+
 class ResizeObserverMock {
   observe() {}
   unobserve() {}

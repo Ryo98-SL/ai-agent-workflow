@@ -70,6 +70,83 @@ describe("workflow client", () => {
     );
   });
 
+  it("lists knowledge bases and validates the response", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        knowledgeBases: [
+          {
+            id: "kb_customer_support_example",
+            name: "云舵客服知识库",
+            description: "Demo",
+            visibility: "example",
+            readOnly: true,
+            settings: {
+              embedding: {
+                mode: "platform",
+                provider: "openai",
+                model: "text-embedding-3-small",
+              },
+              chunking: { strategy: "recursive", chunkSize: 800, chunkOverlap: 120 },
+              retrieval: { mode: "semantic", topK: 5 },
+            },
+            documentCount: 8,
+            characterCount: 4096,
+            createdAt: "2026-06-07T00:00:00.000Z",
+            updatedAt: "2026-06-07T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    const client = createWorkflowClient({ baseUrl: "http://api.test", fetch: fetchMock });
+
+    await expect(client.listKnowledgeBases()).resolves.toMatchObject({
+      knowledgeBases: [{ id: "kb_customer_support_example", readOnly: true }],
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://api.test/api/knowledge-bases", {
+      method: "GET",
+      credentials: "include",
+      headers: undefined,
+      body: undefined,
+    });
+  });
+
+  it("updates knowledge base settings as JSON", async () => {
+    const settings = {
+      embedding: { mode: "platform", provider: "openai", model: "text-embedding-3-small" },
+      chunking: { strategy: "recursive", chunkSize: 800, chunkOverlap: 120 },
+      retrieval: { mode: "semantic", topK: 4 },
+    } as const;
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        knowledgeBase: {
+          id: "kb-1",
+          name: "客服知识库",
+          description: null,
+          visibility: "private",
+          readOnly: false,
+          settings,
+          documentCount: 0,
+          characterCount: 0,
+          createdAt: "2026-06-07T00:00:00.000Z",
+          updatedAt: "2026-06-07T00:00:00.000Z",
+        },
+      }),
+    );
+    const client = createWorkflowClient({ baseUrl: "http://api.test", fetch: fetchMock });
+
+    await client.updateKnowledgeBase("kb-1", { settings });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://api.test/api/knowledge-bases/kb-1",
+      expect.objectContaining({
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ settings }),
+      }),
+    );
+  });
+
   it("deletes a run by id", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
     const client = createWorkflowClient({ baseUrl: "http://api.test", fetch: fetchMock });

@@ -21,6 +21,8 @@ Focused React components for the server-backed workbench shell.
 - `modelProviderVisuals.tsx` maps provider names to bundled logo assets and
   normalizes their mixed source dimensions in the model UI.
 - `WorkbenchLayout.tsx` owns the canvas-first shell and panel placement.
+- `knowledge/` owns Knowledge Base management and Knowledge node inspector UI;
+  see `knowledge/index.md`.
 - `RunHistoryMenu.tsx` owns the header run-history drawer. It uses a backdrop
   to prevent accidental canvas interaction, portals the drawer to `document.body`
   so canvas stacking contexts cannot cover it, renders an inset rounded panel
@@ -69,8 +71,9 @@ Focused React components for the server-backed workbench shell.
   floating panel header uses its exported editable title component for the node
   icon and label; the body provides borderless description editing and Settings
   / History tabs. Settings selects the node-type inspector, while History uses
-  `NodeRunList.tsx` for the active node. Workflow runs force History active and
-  disable Settings until the run leaves the running state.
+  `NodeRunList.tsx` for the active node. LLM and Knowledge settings render
+  output variable shapes for downstream prompt authoring. Workflow runs force
+  History active and disable Settings until the run leaves the running state.
 - `NodePalette.tsx` lists creatable schema nodes and prevents duplicate Start.
 - `ModelSelectorField.tsx` renders the provider/model picker. Each provider group
   header is collapsible (session-only, not persisted) and hosts a
@@ -91,10 +94,21 @@ Focused React components for the server-backed workbench shell.
   dialog and product `Button` chrome; the key popover dismisses when focus/click
   moves elsewhere in the model selector. Ollama groups omit it.
 - `WorkflowSwitcher.tsx` shows each workflow's saved icon in the popover list
-  and keeps row-level edit/delete actions together on the right edge.
+  and keeps row-level edit/delete actions together on the right edge. It always
+  closes the popover and delegates the switch to the parent via `onSwitch(id,
+  name)`; the parent (`AppWorkbench`) switches immediately when clean, or — when
+  the open workflow has unsaved changes (`dirty`) — shows `WorkflowSwitchBar`
+  instead. (Per-row delete still uses the inline confirm row.)
+- `WorkflowSwitchBar.tsx` is a floating, top-centered notification (absolutely
+  positioned over the workbench, not in flow) shown when a switch is attempted
+  with unsaved changes. It offers "Save & switch" (persist then switch) and
+  "Cancel", built from the shared `Button`. State (`pendingSwitch`/`switching`)
+  lives in `AppWorkbench`.
 - `ProjectFileActions.tsx` contains file controls.
-- `Button.tsx`, `inspectors/`, and `workflowNodes/` contain focused controls,
-  forms, and node renderers.
+- `NodeOutputVariablesPanel.tsx` renders shared field/type descriptions for
+  model-output node types.
+- `Button.tsx`, `inspectors/`, `knowledge/`, and `workflowNodes/` contain
+  focused controls, forms, and node renderers.
 
 ## Constraints
 

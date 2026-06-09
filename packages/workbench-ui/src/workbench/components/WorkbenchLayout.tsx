@@ -1,4 +1,5 @@
-import { Loader2, Play, Plus, Settings } from "lucide-react";
+import { useState } from "react";
+import { Database, Loader2, Play, Plus, Settings } from "lucide-react";
 import type {
   ModelProvider,
   ModelProviderKeys,
@@ -8,12 +9,13 @@ import type {
   WorkflowNode,
   WorkflowNodeType,
 } from "@ai-agent-workflow/workflow-domain";
-import type { RunInput } from "@ai-agent-workflow/api-contracts";
+import type { ResumeRunRequest, RunInput } from "@ai-agent-workflow/api-contracts";
 import { Button } from "./Button";
 import { DebugPanel } from "./DebugPanel";
 import { FloatingPanel } from "./FloatingPanel";
 import { ModelSettingsPanel } from "./ModelSettingsPanel";
 import { NodeInspector, NodeInspectorPanelTitle } from "./NodeInspector";
+import { KnowledgeBasesDialog } from "./knowledge/KnowledgeBasesDialog";
 import { NodePalette } from "./NodePalette";
 import { Popover } from "./Popover";
 import { ProjectFileActions } from "./ProjectFileActions";
@@ -21,6 +23,7 @@ import { ThemeMenu } from "../../theme/ThemeMenu";
 import { AuthMenu } from "../../auth/AuthMenu";
 import { RunHistoryMenu } from "./RunHistoryMenu";
 import { WorkflowSwitcher } from "./WorkflowSwitcher";
+import { WorkflowSwitchBar } from "./WorkflowSwitchBar";
 import type { WorkflowMetaPatch } from "./WorkflowMetaEditor";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import type { WorkflowGraphHistoryEntry } from "../hooks/useWorkflowGraphHistory";
@@ -50,7 +53,14 @@ type WorkbenchLayoutProps = {
   onRedo: () => void;
   onToggleRunPanel: () => void;
   onRunWorkflow: (input: RunInput) => void;
-  onSwitchWorkflow: (id: string) => void;
+  onResumeRun: (runId: string, request: ResumeRunRequest) => void;
+  onNewConversation: () => void;
+  conversationTurns: number;
+  onSwitchWorkflow: (id: string, name: string) => void;
+  pendingSwitchName?: string | null;
+  switching: boolean;
+  onConfirmSwitch: () => void;
+  onCancelSwitch: () => void;
   onCreateWorkflow: () => void;
   onDeleteWorkflow: (id: string) => void;
   onSaveWorkflowMeta: (id: string, patch: WorkflowMetaPatch) => Promise<boolean>;
@@ -88,7 +98,14 @@ export function WorkbenchLayout({
   onRedo,
   onToggleRunPanel,
   onRunWorkflow,
+  onResumeRun,
+  onNewConversation,
+  conversationTurns,
   onSwitchWorkflow,
+  pendingSwitchName,
+  switching,
+  onConfirmSwitch,
+  onCancelSwitch,
   onCreateWorkflow,
   onDeleteWorkflow,
   onSaveWorkflowMeta,
@@ -102,9 +119,18 @@ export function WorkbenchLayout({
   onUpdateNode,
 }: WorkbenchLayoutProps) {
   const hasStartNode = workflow.graph.nodes.some((node) => node.type === "start");
+  const [knowledgeBasesOpen, setKnowledgeBasesOpen] = useState(false);
 
   return (
     <main className="relative h-full min-h-0 flex flex-col overflow-hidden bg-background text-foreground">
+      {pendingSwitchName != null && (
+        <WorkflowSwitchBar
+          targetName={pendingSwitchName}
+          busy={switching}
+          onSaveAndSwitch={onConfirmSwitch}
+          onCancel={onCancelSwitch}
+        />
+      )}
       <header className="z-30 flex h-12 shrink-0 items-center gap-3 border-b border-border bg-card/95 px-4 shadow-sm backdrop-blur">
         <WorkflowSwitcher
           workflow={workflow}
@@ -158,8 +184,21 @@ export function WorkbenchLayout({
                 onChange={onUpdateModelSettings}
                 onProviderKeyPreferenceChange={onUpdateProviderKeyPreference}
             />
+            <div className="mt-4 border-t border-border p-2">
+              <Button
+                variant="secondary"
+                size="md"
+                fullWidth
+                className={`!border-none !rounded-none !shadow-none`}
+                onClick={() => setKnowledgeBasesOpen(true)}
+              >
+                <Database size={15} aria-hidden />
+                Knowledge Bases
+              </Button>
+            </div>
           </FloatingPanel>
         </Popover>
+        <KnowledgeBasesDialog open={knowledgeBasesOpen} onOpenChange={setKnowledgeBasesOpen} />
       </header>
 
       <section className=" flex-1 relative h-full ">
@@ -266,6 +305,9 @@ export function WorkbenchLayout({
                   debugState={debugState}
                   nodeStates={nodeStates}
                   onRun={onRunWorkflow}
+                  onResumeRun={onResumeRun}
+                  onNewConversation={onNewConversation}
+                  conversationTurns={conversationTurns}
                 />
               </div>
             </FloatingPanel>
@@ -289,6 +331,7 @@ export function WorkbenchLayout({
               debugState={debugState}
               nodeStates={nodeStates}
               showDevModelProviders={showDevModelProviders}
+              onOpenKnowledgeBases={() => setKnowledgeBasesOpen(true)}
               onProviderKeyPreferenceChange={onUpdateProviderKeyPreference}
               updateNode={onUpdateNode}
             />

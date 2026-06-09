@@ -8,7 +8,8 @@ any transport implementation.
 
 - `src/index.ts` exports REST route templates, path builders, request schemas,
   response schemas, transient run model-provider settings, transient provider
-  keyring settings, run input/output schemas, DTO types, and error helpers.
+  keyring settings, run input/output schemas, Knowledge Base schemas, DTO types,
+  and error helpers.
 - `tests/contracts.test.ts` validates representative request and response
   payloads against the public schemas.
 
@@ -22,5 +23,5 @@ avoid duplicating API payload shapes. Workflow graph data comes from
 
 Package tests exercise schema acceptance/rejection, nullable run input,
 transient run model-provider/keyring settings, structured node result metadata,
-and path generation. Server and client packages cover route behavior and fetch
-behavior using these same schemas.
+Knowledge Base payloads, and path generation. Server and client packages cover
+route behavior and fetch behavior using these same schemas.

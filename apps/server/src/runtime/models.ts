@@ -1,4 +1,4 @@
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { ChatOllama } from "@langchain/ollama";
@@ -25,12 +25,18 @@ function chooseModelSettings(workflow: WorkflowFile, node: LLMNode): OpenAICompa
 }
 
 type RuntimeChatModel = {
-  invoke: (messages: Array<SystemMessage | HumanMessage>) => Promise<Record<string, any>>;
+  invoke: (messages: Array<SystemMessage | HumanMessage | AIMessage>) => Promise<Record<string, any>>;
 };
 
 function createChatModel(settings: OpenAICompatibleSettings, _node: LLMNode, fetchImpl: typeof fetch): RuntimeChatModel {
   const temperature = settings.temperature;
   const maxTokens = settings.maxTokens;
+  const requireApiKey = (provider: ModelProvider) => {
+    if (!settings.apiKey) {
+      throw new RuntimeModelError(`API key is not configured for provider ${provider}.`);
+    }
+    return settings.apiKey;
+  };
   const providerFactories: Record<ModelProvider, () => RuntimeChatModel> = {
     deepseek: () =>
       new ChatDeepSeek({
@@ -39,7 +45,7 @@ function createChatModel(settings: OpenAICompatibleSettings, _node: LLMNode, fet
         maxTokens,
         maxRetries: 0,
         timeout: 10_000,
-        apiKey: settings.apiKey || "missing-deepseek-api-key",
+        apiKey: requireApiKey("deepseek"),
         configuration: {
           baseURL: settings.baseURL,
           fetch: fetchImpl as any,
@@ -59,7 +65,7 @@ function createChatModel(settings: OpenAICompatibleSettings, _node: LLMNode, fet
         model: settings.model,
         temperature,
         maxTokens,
-        apiKey: settings.apiKey || "missing-openai-api-key",
+        apiKey: requireApiKey("openai"),
         configuration: {
           baseURL: settings.baseURL,
           fetch: fetchImpl as any,
@@ -70,7 +76,7 @@ function createChatModel(settings: OpenAICompatibleSettings, _node: LLMNode, fet
         model: settings.model,
         temperature,
         maxTokens,
-        apiKey: settings.apiKey || "missing-anthropic-api-key",
+        apiKey: requireApiKey("anthropic"),
         anthropicApiUrl: settings.baseURL,
         clientOptions: {
           fetch: fetchImpl as any,
@@ -143,12 +149,20 @@ export async function callChatCompletion(
   node: LLMNode,
   state: WorkflowRuntimeState,
   fetchImpl: typeof fetch,
+  history: Array<{ role: "user" | "assistant"; content: string }> = [],
 ) {
   const settings = chooseModelSettings(workflow, node);
   const systemPrompt = node.config.systemPrompt ? resolvePrompt(node.config.systemPrompt, state) : "";
   const userPrompt = resolvePrompt(node.config.userPrompt, state);
   const model = createChatModel(settings, node, fetchImpl);
-  const messages = [...(systemPrompt ? [new SystemMessage(systemPrompt)] : []), new HumanMessage(userPrompt)];
+  const historyMessages = history.map((message) =>
+    message.role === "assistant" ? new AIMessage(message.content) : new HumanMessage(message.content),
+  );
+  const messages = [
+    ...(systemPrompt ? [new SystemMessage(systemPrompt)] : []),
+    ...historyMessages,
+    new HumanMessage(userPrompt),
+  ];
 
   let response: Record<string, any>;
   try {
@@ -184,6 +198,7 @@ export async function callChatCompletion(
 
   return {
     text,
+    userPrompt,
     usage: response.usage_metadata ?? response.response_metadata?.tokenUsage ?? null,
     reasoning: extractReasoning(response),
   };

@@ -5,6 +5,13 @@ namespaced prompt variable utilities for AI Agent Workflow apps and services.
 Every persisted workflow node carries a user-editable `description` alongside
 its label and type-specific config.
 
+Knowledge nodes now have a strong RAG config with `knowledgeBaseIds`,
+`queryTemplate`, and semantic retrieval defaults. The package also exposes
+output-variable metadata helpers so UI/runtime consumers can describe LLM and
+Knowledge node outputs consistently, plus `createKnowledgeDemoWorkflow` — a
+ready-to-run Chinese customer-support RAG demo (Start → Knowledge → LLM) over the
+seeded example KB (`EXAMPLE_KNOWLEDGE_BASE_ID`).
+
 Model settings are provider-aware. Persisted workflow settings support
 `deepseek`, `openai`, `anthropic`, and `ollama`, defaulting to DeepSeek
 `deepseek-v4-flash` at `https://api.deepseek.com`. Workflow settings also keep

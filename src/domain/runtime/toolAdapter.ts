@@ -15,7 +15,7 @@ export async function executeCurrentTimeTool(
   void _context;
   const started = performance.now();
   const startedAt = new Date().toISOString();
-  const timezone = node.config.timezone || "UTC";
+  const timezone = (node.config.adapter === "currentTime" ? node.config.timezone : undefined) || "UTC";
 
   try {
     const now = new Date();

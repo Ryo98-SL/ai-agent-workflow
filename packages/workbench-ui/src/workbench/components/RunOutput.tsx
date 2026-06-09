@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, UserCheck } from "lucide-react";
 import type { WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 import type { DebugState, NodeExecutionState } from "../types";
 import { RunNodeCardList } from "./RunNodeCard";
@@ -104,6 +104,15 @@ function RunStatusHeader({ debugState }: { debugState: DebugState }) {
       <div className="flex items-center gap-2 rounded-md border border-brand/30 bg-brand/10 px-3 py-2">
         <Loader2 size={16} className="shrink-0 animate-spin text-brand" aria-hidden />
         <span className="text-sm font-semibold text-brand">Running workflow...</span>
+      </div>
+    );
+  }
+
+  if (debugState.status === "waiting") {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+        <UserCheck size={16} className="shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+        <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">Awaiting human review…</span>
       </div>
     );
   }

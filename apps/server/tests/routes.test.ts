@@ -1,8 +1,10 @@
-import { createDefaultWorkflow } from "@ai-agent-workflow/workflow-domain";
+import { createDefaultWorkflow, createNode } from "@ai-agent-workflow/workflow-domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createServerApp as buildServerApp } from "@ai-agent-workflow/server";
 import { createInMemoryWorkflowRepository } from "../src/workflows/repository";
 import { createInMemoryRunRepository } from "../src/runs/repository";
+import { EXAMPLE_KNOWLEDGE_BASE_ID } from "../src/knowledge/constants";
+import { createInMemoryKnowledgeRepository } from "../src/knowledge/repository";
 
 async function json(response: Response) {
   return response.json() as Promise<unknown>;
@@ -55,6 +57,7 @@ function createOpenAIStreamResponse(text: string, usage: Record<string, unknown>
 }
 
 type HonoApp = ReturnType<typeof buildServerApp>;
+type ServerAppOptions = NonNullable<Parameters<typeof buildServerApp>[0]>;
 
 const SEED_TIME = "2026-06-01T00:00:00.000Z";
 const TEST_USER = "test-user";
@@ -69,7 +72,13 @@ function withSeedMetadata(workflow: ReturnType<typeof createDefaultWorkflow>) {
 // Builds the app with an in-memory workflow repo (seeded as "workflow-1") and a
 // fake authenticated user, so route tests stay DB-free.
 function createTestApp(
-  options: { seedWorkflow?: ReturnType<typeof createDefaultWorkflow>; fetch?: typeof fetch } = {},
+  options: {
+    seedWorkflow?: ReturnType<typeof createDefaultWorkflow>;
+    fetch?: typeof fetch;
+    platformCreditsProvider?: ServerAppOptions["platformCreditsProvider"];
+    creditBalanceLoader?: ServerAppOptions["creditBalanceLoader"];
+    creditConsumer?: ServerAppOptions["creditConsumer"];
+  } = {},
 ): HonoApp {
   const seed = withSeedMetadata(options.seedWorkflow ?? createDefaultWorkflow());
   return buildServerApp({
@@ -77,6 +86,11 @@ function createTestApp(
     resolveUserId: async () => TEST_USER,
     workflows: createInMemoryWorkflowRepository({ id: "workflow-1", userId: TEST_USER, workflow: seed }),
     runs: createInMemoryRunRepository(),
+    knowledge: createInMemoryKnowledgeRepository(),
+    knowledgeIndexer: { start() {}, stop() {}, trigger() {} },
+    platformCreditsProvider: options.platformCreditsProvider,
+    creditBalanceLoader: options.creditBalanceLoader,
+    creditConsumer: options.creditConsumer,
   });
 }
 
@@ -104,6 +118,56 @@ async function waitForRun(app: HonoApp, runId: string): Promise<unknown> {
   }
   const runRes = await app.request(`/api/runs/${runId}`);
   return (await runRes.json() as { run: unknown }).run;
+}
+
+async function pollRun(
+  app: HonoApp,
+  runId: string,
+  until: (status: string) => boolean,
+  tries = 100,
+): Promise<{ status: string; interrupt?: { nodeId: string; prompt: string; actions: unknown[] }; output: { nodeResults: Array<{ nodeId: string }> } | null }> {
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    const res = await app.request(`/api/runs/${runId}`);
+    const run = (await res.json() as { run: { status: string; interrupt?: { nodeId: string; prompt: string; actions: unknown[] }; output: { nodeResults: Array<{ nodeId: string }> } | null } }).run;
+    if (until(run.status)) {
+      return run;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`Run ${runId} did not reach the expected status.`);
+}
+
+/** Start → Human Input → done, runnable without a model provider. */
+function humanInputSeedWorkflow() {
+  const workflow = createDefaultWorkflow();
+  const start = workflow.graph.nodes.find((node) => node.type === "start")!;
+  const hitl = createNode("humanInput", { x: 300, y: 120 }, workflow.graph.nodes);
+  hitl.id = "humanInput1";
+  if (hitl.type === "humanInput") {
+    hitl.config = { prompt: "approve refund?", actions: [{ id: "approve", label: "OK", value: "yes" }], allowTextInput: true };
+  }
+  const done = createNode("template", { x: 560, y: 120 }, workflow.graph.nodes);
+  done.id = "done1";
+  return {
+    ...workflow,
+    graph: {
+      nodes: [start, hitl, done],
+      edges: [
+        { id: "edge-start-hitl", source: "start1", target: "humanInput1" },
+        { id: "edge-hitl-done", source: "humanInput1", target: "done1" },
+      ],
+    },
+  };
+}
+
+/** Start → LLM(memory) seed whose human prompt is exactly the topic (Ollama, no credits). */
+function memorySeedWorkflow() {
+  const workflow = createDefaultWorkflow();
+  const llm = workflow.graph.nodes.find((node) => node.type === "llm");
+  if (llm?.type === "llm") {
+    llm.config = { ...llm.config, systemPrompt: "sys", userPrompt: "{{start1.topic}}", memory: true };
+  }
+  return workflow;
 }
 
 afterEach(() => {
@@ -225,6 +289,64 @@ describe("workflow API server", () => {
     });
   });
 
+  it("lists the read-only Chinese example knowledge base", async () => {
+    const app = createTestApp();
+    const response = await app.request("/api/knowledge-bases");
+
+    expect(response.status).toBe(200);
+    expect(await json(response)).toMatchObject({
+      knowledgeBases: [
+        {
+          id: EXAMPLE_KNOWLEDGE_BASE_ID,
+          name: "云舵客服知识库",
+          visibility: "example",
+          readOnly: true,
+        },
+      ],
+    });
+  });
+
+  it("creates a user knowledge base and queues text documents", async () => {
+    const app = createTestApp();
+    const createResponse = await app.request("/api/knowledge-bases", {
+      method: "POST",
+      body: JSON.stringify({ name: "我的客服知识库", description: "测试" }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const created = (await json(createResponse)) as { knowledgeBase: { id: string } };
+    const documentResponse = await app.request(`/api/knowledge-bases/${created.knowledgeBase.id}/documents/text`, {
+      method: "POST",
+      body: JSON.stringify({ title: "退款规则", content: "购买后 7 天内可以申请退款。" }),
+    });
+
+    expect(documentResponse.status).toBe(201);
+    expect(await json(documentResponse)).toMatchObject({
+      document: {
+        title: "退款规则",
+        status: "queued",
+        characterCount: expect.any(Number),
+      },
+    });
+  });
+
+  it("rejects knowledge document quota overages", async () => {
+    const app = createTestApp();
+    const createResponse = await app.request("/api/knowledge-bases", {
+      method: "POST",
+      body: JSON.stringify({ name: "限额测试" }),
+    });
+    const created = (await json(createResponse)) as { knowledgeBase: { id: string } };
+
+    const response = await app.request(`/api/knowledge-bases/${created.knowledgeBase.id}/documents/text`, {
+      method: "POST",
+      body: JSON.stringify({ title: "超长", content: "x".repeat(100_001) }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await json(response)).toMatchObject({ error: { code: "validation_error" } });
+  });
+
   it("creates LangGraph workflow runs and events", async () => {
     const app = createTestApp({ fetch: createModelFetch("Server runtime output.") });
     const createRunResponse = await app.request("/api/workflows/workflow-1/runs", {
@@ -275,6 +397,90 @@ describe("workflow API server", () => {
       "node.completed",
       "run.completed",
     ]);
+  });
+
+  it("pauses a Human Input run and resumes it with the reviewer's answer", async () => {
+    const app = createTestApp({ seedWorkflow: humanInputSeedWorkflow(), fetch: createModelFetch() });
+
+    const createRunResponse = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "refund" } }),
+    });
+    expect(createRunResponse.status).toBe(201);
+    const runId = ((await json(createRunResponse)) as { run: { id: string } }).run.id;
+
+    const waiting = await pollRun(app, runId, (status) => status === "waiting_human");
+    expect(waiting.status).toBe("waiting_human");
+    expect(waiting.interrupt?.nodeId).toBe("humanInput1");
+    expect(waiting.interrupt?.prompt).toBe("approve refund?");
+    expect(waiting.interrupt?.actions).toHaveLength(1);
+
+    const resumeResponse = await app.request(`/api/runs/${runId}/resume`, {
+      method: "POST",
+      body: JSON.stringify({ action_id: "approve", action_value: "yes" }),
+    });
+    expect(resumeResponse.status).toBe(200);
+
+    const settled = await pollRun(app, runId, (status) => status === "succeeded" || status === "failed");
+    expect(settled.status).toBe("succeeded");
+    const ranNodeIds = settled.output?.nodeResults.map((result) => result.nodeId) ?? [];
+    expect(ranNodeIds).toContain("humanInput1");
+    expect(ranNodeIds).toContain("done1");
+  });
+
+  it("rejects resuming a run that is not awaiting human input", async () => {
+    const app = createTestApp({ fetch: createModelFetch() });
+    const createRunResponse = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "hi" } }),
+    });
+    const runId = ((await json(createRunResponse)) as { run: { id: string } }).run.id;
+    await waitForRun(app, runId);
+
+    const resumeResponse = await app.request(`/api/runs/${runId}/resume`, {
+      method: "POST",
+      body: JSON.stringify({ action_id: "approve", action_value: "yes" }),
+    });
+    expect(resumeResponse.status).toBe(409);
+  });
+
+  it("accumulates conversation memory across runs with the same conversationId", async () => {
+    const requests: Array<{ messages?: Array<{ content: string }> }> = [];
+    const fetch = (async (_url: Parameters<typeof globalThis.fetch>[0], init?: Parameters<typeof globalThis.fetch>[1]) => {
+      const body = init?.body ? (JSON.parse(String(init.body)) as { messages?: Array<{ content: string }> }) : {};
+      requests.push(body);
+      return new Response(
+        JSON.stringify({
+          model: "qwen3.5:0.8b",
+          created_at: "2026-06-01T00:00:00.000Z",
+          message: { role: "assistant", content: "好的" },
+          done: true,
+          prompt_eval_count: 5,
+          eval_count: 6,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof globalThis.fetch;
+
+    const app = createTestApp({ seedWorkflow: memorySeedWorkflow(), fetch });
+    const conversationId = "conv-routes-1";
+
+    const r1 = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "我叫小明" }, conversationId }),
+    });
+    await waitForRun(app, ((await json(r1)) as { run: { id: string } }).run.id);
+
+    const r2 = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "我叫什么" }, conversationId }),
+    });
+    await waitForRun(app, ((await json(r2)) as { run: { id: string } }).run.id);
+
+    const contents = (requests.at(-1)?.messages ?? []).map((message) => message.content);
+    expect(contents).toContain("我叫小明"); // prior user turn
+    expect(contents).toContain("好的"); // prior assistant turn
+    expect(contents).toContain("我叫什么"); // current turn
   });
 
   it("uses transient run model provider settings without storing API keys", async () => {
@@ -391,6 +597,69 @@ describe("workflow API server", () => {
     expect(requestedBody).toMatchObject({ model: "gpt-5.2", max_completion_tokens: 1200, temperature: 0.2 });
   });
 
+  it("defaults missing provider preference to the platform provider key for credits runs", async () => {
+    const workflow = createDefaultWorkflow();
+    workflow.settings.modelProvider = {
+      provider: "deepseek",
+      baseURL: "https://user-controlled.example",
+      model: "deepseek-chat",
+    };
+
+    let authorization = "";
+    let requestedUrl = "";
+    let consumed: { userId: string; tokens: number } | undefined;
+    const app = createTestApp({
+      seedWorkflow: workflow,
+      platformCreditsProvider: async (provider) =>
+        provider === "deepseek" ? { apiKey: "platform-deepseek-key", baseURL: "https://api.deepseek.com" } : null,
+      creditBalanceLoader: async () => 1000,
+      creditConsumer: async (userId, tokens) => {
+        consumed = { userId, tokens };
+      },
+      fetch: async (url, init) => {
+        requestedUrl = String(url);
+        authorization = requestHeader(init, "authorization") ?? "";
+        const requestedBody = JSON.parse(String(init?.body));
+        if (requestedBody.stream) {
+          return createOpenAIStreamResponse("Credits output.", {
+            prompt_tokens: 5,
+            completion_tokens: 8,
+            total_tokens: 13,
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: "Credits output." } }],
+            usage: { prompt_tokens: 5, completion_tokens: 8, total_tokens: 13 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    const response = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "credits" } }),
+    });
+
+    expect(response.status).toBe(201);
+    const created = (await json(response)) as { run: { id: string } };
+    const run = (await waitForRun(app, created.run.id)) as {
+      status: string;
+      output: { nodeResults: Array<{ output: string }> };
+    };
+
+    expect(run.status).toBe("succeeded");
+    expect(run.output.nodeResults[1].output).toBe("Credits output.");
+    expect(requestedUrl).toBe("https://api.deepseek.com/chat/completions");
+    expect(authorization).toBe("Bearer platform-deepseek-key");
+    expect(consumed).toEqual({ userId: TEST_USER, tokens: 13 });
+
+    const readResponse = await app.request("/api/workflows/workflow-1");
+    const stored = (await json(readResponse)) as { workflow: { workflow: { settings: { modelProvider?: { apiKey?: string } } } } };
+    expect(stored.workflow.workflow.settings.modelProvider?.apiKey).toBeUndefined();
+  });
+
   it("fails missing required Start input before model calls", async () => {
     let called = false;
     const workflow = createDefaultWorkflow();
@@ -504,13 +773,13 @@ describe("workflow API server", () => {
   it("saves placeholder output for reachable node types that do not have runtime implementations yet", async () => {
     const workflow = createDefaultWorkflow();
     workflow.graph.nodes.push({
-      id: "tool1",
-      type: "tool",
-      label: "Tool",
+      id: "template1",
+      type: "template",
+      label: "Template",
       position: { x: 360, y: 240 },
-      config: { adapter: "currentTime", timezone: "UTC" },
+      config: {},
     });
-    workflow.graph.edges = [{ id: "edge-start-tool", source: "start1", target: "tool1" }];
+    workflow.graph.edges = [{ id: "edge-start-template", source: "start1", target: "template1" }];
     const app = createTestApp({ seedWorkflow: workflow, fetch: createModelFetch() });
 
     const response = await app.request("/api/workflows/workflow-1/runs", {
@@ -527,12 +796,11 @@ describe("workflow API server", () => {
     expect(placeholderRun.status).toBe("succeeded");
     expect(placeholderRun.output.nodeResults).toHaveLength(2);
     expect(placeholderRun.output.nodeResults[1]).toMatchObject({
-      nodeId: "tool1",
-      output: "tool placeholder saved.",
+      nodeId: "template1",
+      output: "template placeholder saved.",
       data: {
-        type: "tool",
-        label: "Tool",
-        config: { adapter: "currentTime", timezone: "UTC" },
+        type: "template",
+        label: "Template",
         placeholder: true,
       },
     });
@@ -614,6 +882,8 @@ describe("workflow API server", () => {
     const app = buildServerApp({
       resolveUserId: async () => null,
       workflows: createInMemoryWorkflowRepository(),
+      knowledge: createInMemoryKnowledgeRepository(),
+      knowledgeIndexer: { start() {}, stop() {}, trigger() {} },
     });
 
     const response = await app.request("/api/workflows");
@@ -626,6 +896,8 @@ describe("workflow API server", () => {
       fetch: createModelFetch("Anonymous output."),
       resolveUserId: async () => null,
       workflows: createInMemoryWorkflowRepository(),
+      knowledge: createInMemoryKnowledgeRepository(),
+      knowledgeIndexer: { start() {}, stop() {}, trigger() {} },
     });
 
     const response = await app.request("/api/workflows/local/runs", {
