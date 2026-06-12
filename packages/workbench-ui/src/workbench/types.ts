@@ -136,6 +136,18 @@ export type AddNodeOptions = {
    * placement from the left palette; ignored when connecting from a source node.
    */
   position?: { x: number; y: number };
+  /**
+   * Edge Insert: splice the new node onto an existing edge. The original edge is
+   * deleted; the node is wired in as `source → N (→ target)`. For multi-output
+   * nodes only the input is wired and the target is left dangling. See CONTEXT.md
+   * "Edge Insert". Takes precedence over `sourceNodeId`/`position`.
+   */
+  insertOnEdge?: {
+    edgeId: string;
+    sourceNodeId: string;
+    sourceHandleId?: string;
+    targetNodeId: string;
+  };
 };
 
 export type WorkflowMutators = {

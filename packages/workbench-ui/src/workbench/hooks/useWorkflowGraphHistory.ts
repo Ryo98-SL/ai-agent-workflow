@@ -11,7 +11,15 @@ export type WorkflowGraphHistoryEntry =
   | { type: "addNode"; node: WorkflowNode; edges: WorkflowEdge[] }
   | { type: "removeNodes"; nodes: WorkflowNode[]; edges: WorkflowEdge[] }
   | { type: "addEdge"; edge: WorkflowEdge }
-  | { type: "removeEdges"; edges: WorkflowEdge[] };
+  | { type: "removeEdges"; edges: WorkflowEdge[] }
+  | {
+      // Atomic Edge Insert: drop the original edge and add the spliced node with
+      // its new edge(s) as a single undoable step. See CONTEXT.md "Edge Insert".
+      type: "insertNodeOnEdge";
+      node: WorkflowNode;
+      addedEdges: WorkflowEdge[];
+      removedEdge: WorkflowEdge;
+    };
 
 type WorkflowGraphHistoryOptions = {
   historyLimit?: number;
@@ -102,6 +110,17 @@ export function applyWorkflowGraphHistoryEntry(
             entry.edges.map((edge) => edge.id),
           )
         : addEdges(workflow, entry.edges);
+    case "insertNodeOnEdge":
+      return direction === "redo"
+        ? addNodesAndEdges(removeEdges(workflow, [entry.removedEdge.id]), [entry.node], entry.addedEdges)
+        : addEdges(
+            removeNodesAndIncidentEdges(
+              workflow,
+              [entry.node.id],
+              entry.addedEdges.map((edge) => edge.id),
+            ),
+            [entry.removedEdge],
+          );
   }
 }
 

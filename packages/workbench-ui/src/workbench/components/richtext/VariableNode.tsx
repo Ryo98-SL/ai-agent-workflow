@@ -1,7 +1,16 @@
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { useLexicalNodeSelection } from "@lexical/react/useLexicalNodeSelection";
 import {
   $applyNodeReplacement,
+  $getNodeByKey,
+  $getSelection,
+  $isNodeSelection,
+  CLICK_COMMAND,
+  COMMAND_PRIORITY_LOW,
   DecoratorNode,
+  KEY_BACKSPACE_COMMAND,
+  KEY_DELETE_COMMAND,
   type LexicalNode,
   type NodeKey,
   type SerializedLexicalNode,
@@ -60,7 +69,7 @@ export class VariableNode extends DecoratorNode<ReactNode> {
   }
 
   decorate(): ReactNode {
-    return <VariableTag reference={this.__reference} />;
+    return <VariableChip nodeKey={this.getKey()} reference={this.__reference} />;
   }
 
   static importJSON(serialized: SerializedVariableNode): VariableNode {
@@ -70,6 +79,62 @@ export class VariableNode extends DecoratorNode<ReactNode> {
   exportJSON(): SerializedVariableNode {
     return { type: "variable", version: 1, reference: this.__reference };
   }
+}
+
+/**
+ * Renders a Variable chip that can be selected as one atomic unit. A
+ * `DecoratorNode` has no internal caret positions, so without explicit node
+ * selection a click would only place the caret beside it and the chip could
+ * never be highlighted or deleted as a whole. We claim the click for this node,
+ * reflect the selected state as a ring on the tag, and remove the node on
+ * Backspace/Delete while it's selected.
+ */
+function VariableChip({ nodeKey, reference }: { nodeKey: NodeKey; reference: string }) {
+  const [editor] = useLexicalComposerContext();
+  const [isSelected, setSelected, clearSelection] = useLexicalNodeSelection(nodeKey);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  const onDelete = useCallback(
+    (event: KeyboardEvent) => {
+      const selection = $getSelection();
+      if (!isSelected || !$isNodeSelection(selection)) {
+        return false;
+      }
+      event.preventDefault();
+      $getNodeByKey(nodeKey)?.remove();
+      return true;
+    },
+    [isSelected, nodeKey],
+  );
+
+  useEffect(() => {
+    const unregister = [
+      editor.registerCommand<MouseEvent>(
+        CLICK_COMMAND,
+        (event) => {
+          const target = event.target as Node | null;
+          if (ref.current && target && ref.current.contains(target)) {
+            if (!event.shiftKey) {
+              clearSelection();
+            }
+            setSelected(!isSelected);
+            return true;
+          }
+          return false;
+        },
+        COMMAND_PRIORITY_LOW,
+      ),
+      editor.registerCommand(KEY_BACKSPACE_COMMAND, onDelete, COMMAND_PRIORITY_LOW),
+      editor.registerCommand(KEY_DELETE_COMMAND, onDelete, COMMAND_PRIORITY_LOW),
+    ];
+    return () => unregister.forEach((fn) => fn());
+  }, [editor, isSelected, clearSelection, setSelected, onDelete]);
+
+  return (
+    <span ref={ref} className="inline-flex align-middle">
+      <VariableTag reference={reference} selected={isSelected} />
+    </span>
+  );
 }
 
 export function $createVariableNode(reference: string): VariableNode {

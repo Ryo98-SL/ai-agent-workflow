@@ -76,7 +76,7 @@ const runtimeNodeBuilders = {
   ifElse: buildIfElseNode,
   humanInput: buildHumanInputNode,
   template: buildPlaceholderNode,
-  end: buildPlaceholderNode,
+  end: buildEndNode,
 } satisfies Record<WorkflowNodeType, RuntimeNodeBuilder>;
 
 export async function executeWorkflowRuntime(
@@ -646,6 +646,25 @@ function extractPendingInterrupt(snapshot: {
     }
   }
   return undefined;
+}
+
+/**
+ * Resolves the End node's Answer Template against runtime state; the result is the
+ * run's final output for the path that reached this node. An empty `answer` yields
+ * an empty output (no placeholder text).
+ */
+function buildEndNode(node: WorkflowNode, state: RuntimeGraphState): RuntimeNodeOutput {
+  if (node.type !== "end") {
+    throw new RuntimeValidationError(`Node "${node.id}" cannot run with the End node builder.`);
+  }
+
+  const answer = resolvePrompt(node.config.answer ?? "", state.values);
+  return {
+    output: answer,
+    data: { answer },
+    stateValue: { answer },
+    logMetadata: { outputLength: answer.length },
+  };
 }
 
 function buildPlaceholderNode(node: WorkflowNode): RuntimeNodeOutput {

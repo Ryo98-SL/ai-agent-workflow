@@ -346,6 +346,22 @@ const HumanInputNodeSchema = BaseNodeSchema.extend({
     }),
 });
 
+/**
+ * End node. Owns a free-form `answer` Answer Template (literal text interleaved
+ * with `{{nodeId.path}}` Variable References). When a run reaches this node the
+ * template is resolved against runtime state and becomes the node's final output;
+ * an empty `answer` yields an empty output. `note` is retained for back-compat.
+ */
+const EndNodeSchema = BaseNodeSchema.extend({
+  type: z.literal("end"),
+  config: z
+    .object({
+      answer: z.string().default(""),
+      note: z.string().optional(),
+    })
+    .default({}),
+});
+
 export const WorkflowNodeSchema = z.discriminatedUnion("type", [
   StartNodeSchema,
   LLMNodeSchema,
@@ -355,7 +371,7 @@ export const WorkflowNodeSchema = z.discriminatedUnion("type", [
   IfElseNodeSchema,
   HumanInputNodeSchema,
   BasicConfigNodeSchema("template"),
-  BasicConfigNodeSchema("end"),
+  EndNodeSchema,
 ]);
 
 export const WorkflowEdgeSchema = z.object({
@@ -408,6 +424,7 @@ export type ConditionRow = IfElseCase["conditions"][number];
 export type ConditionOperator = z.infer<typeof ConditionOperatorSchema>;
 export type HumanInputNode = Extract<WorkflowNode, { type: "humanInput" }>;
 export type HumanInputAction = HumanInputNode["config"]["actions"][number];
+export type EndNode = Extract<WorkflowNode, { type: "end" }>;
 export type WorkflowEdge = z.infer<typeof WorkflowEdgeSchema>;
 
 /**
@@ -853,14 +870,14 @@ export function createSupportBotWithReviewWorkflow(): WorkflowFile {
           type: "end",
           label: "人工已确认",
           position: { x: 1460, y: 90 },
-          config: {},
+          config: { answer: "" },
         },
         {
           id: "endAuto",
           type: "end",
           label: "自动回复已发送",
           position: { x: 1180, y: 320 },
-          config: {},
+          config: { answer: "" },
         },
       ],
       edges: [

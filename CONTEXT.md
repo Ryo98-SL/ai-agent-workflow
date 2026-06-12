@@ -32,3 +32,25 @@ The searchable popover, opened from a Variable Tag (if/else) or by typing `/` in
 rich-text field, that lists Available Variables grouped by node and inserts/swaps
 the chosen Variable Reference. One shared component across both entry points.
 _Avoid_: variable menu, autocomplete, dropdown
+
+### Output
+
+**Answer Template**:
+The free-form rich-text template authored on an **End** node (`config.answer`),
+holding literal text interleaved with Variable References. When a run reaches that
+End node, the template is resolved against runtime state and the resulting text is
+that node's final output. A graph may hold several End nodes, each with its own
+Answer Template; only the End node actually reached on a given run contributes its
+output. Mirrors the role of Dify's *Answer* node (not Dify's *End* node).
+_Avoid_: output template, reply, response, final message
+
+### Graph Editing
+
+**Edge Insert**:
+The act of adding a new node onto an existing edge `A → B` via the hover "+"
+button at the edge's midpoint. The original edge is *always consumed* (deleted).
+For a single-input/single-output node it splices: `A → N → B`, with N inheriting
+A's source handle. For a multi-output node (e.g. **If/Else**) only the input is
+wired (`A → N`); none of N's outputs auto-connect, so B is left dangling for the
+user to rewire. Start/End are never offered as the inserted node.
+_Avoid_: split edge, edge drop, insert between

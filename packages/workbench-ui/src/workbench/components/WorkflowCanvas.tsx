@@ -25,6 +25,7 @@ import type { WorkflowGraphHistoryEntry } from "../hooks/useWorkflowGraphHistory
 import type { AddNodeOptions, NodeExecutionState, WorkflowNodeActionHandler } from "../types";
 import { useTheme } from "../../theme/ThemeProvider";
 import { InlineNodePalettePopover, type InlineNodePaletteState } from "./InlineNodePalettePopover";
+import { WorkflowInsertableEdge, type WorkflowInsertableEdgeData } from "./WorkflowInsertableEdge";
 import {
   CodeWorkflowNode,
   EndWorkflowNode,
@@ -73,6 +74,10 @@ const nodeTypes = {
   humanInput: HumanInputWorkflowNode,
   template: TemplateWorkflowNode,
   end: EndWorkflowNode,
+};
+
+const edgeTypes = {
+  workflow: WorkflowInsertableEdge,
 };
 
 type WorkflowFlowNode = WorkflowReactNode;
@@ -143,11 +148,17 @@ function toFlowNodes(
   });
 }
 
-function toFlowEdges(edges: WorkflowEdge[], selectedEdgeIds: Set<string>, hoveredNodeId?: string): Edge[] {
+function toFlowEdges(
+  edges: WorkflowEdge[],
+  selectedEdgeIds: Set<string>,
+  hoveredNodeId?: string,
+  onInsert?: WorkflowInsertableEdgeData["onInsert"],
+): Edge[] {
   return edges.map((edge) => {
     const selected = selectedEdgeIds.has(edge.id);
     return {
       id: edge.id,
+      type: "workflow",
       source: edge.source,
       target: edge.target,
       sourceHandle: edge.sourceHandle,
@@ -155,6 +166,7 @@ function toFlowEdges(edges: WorkflowEdge[], selectedEdgeIds: Set<string>, hovere
       markerEnd: { type: MarkerType.ArrowClosed, color: isConnectedToHoveredNode(edge, hoveredNodeId) ? "#10b981" : undefined },
       selected,
       style: isConnectedToHoveredNode(edge, hoveredNodeId) || selected ? { stroke: "#10b981", strokeWidth: 2.5 } : undefined,
+      data: { onInsert } satisfies WorkflowInsertableEdgeData,
       // zIndex: isConnectedToHoveredNode(edge, hoveredNodeId) ? 1 : undefined,
     }
   });
@@ -199,6 +211,7 @@ export function WorkflowCanvas({
   const [isInteractive, setIsInteractive] = useState(true);
   const openInlinePalette = useCallback<OpenWorkflowNodePalette>((sourceNode, handleType, anchorElement, sourceHandleId) => {
     setInlinePalette({
+      mode: "fromHandle",
       sourceNodeId: sourceNode.id,
       sourceNodeLabel: sourceNode.label,
       handleType,
@@ -206,12 +219,35 @@ export function WorkflowCanvas({
       anchorElement,
     });
   }, []);
+  const openEdgeInsertPalette = useCallback<NonNullable<WorkflowInsertableEdgeData["onInsert"]>>(
+    (edgeId, anchorElement) => {
+      const edge = workflow.graph.edges.find((candidate) => candidate.id === edgeId);
+      if (!edge) {
+        return;
+      }
+      const sourceNode = workflow.graph.nodes.find((node) => node.id === edge.source);
+      const targetNode = workflow.graph.nodes.find((node) => node.id === edge.target);
+      if (!sourceNode || !targetNode) {
+        return;
+      }
+      setInlinePalette({
+        mode: "insertOnEdge",
+        edgeId: edge.id,
+        sourceNodeId: sourceNode.id,
+        sourceNodeLabel: sourceNode.label,
+        sourceHandleId: edge.sourceHandle,
+        targetNodeId: targetNode.id,
+        anchorElement,
+      });
+    },
+    [workflow.graph.edges, workflow.graph.nodes],
+  );
   const [nodes, setNodes] = useState(() =>
     toFlowNodes(workflow, openInlinePalette, nodeStates, waitingNodeId, onNodeAction),
   );
   const edges = useMemo(
-    () => toFlowEdges(workflow.graph.edges, selectedEdgeIds, hoveredNodeId),
-    [hoveredNodeId, selectedEdgeIds, workflow.graph.edges],
+    () => toFlowEdges(workflow.graph.edges, selectedEdgeIds, hoveredNodeId, isInteractive ? openEdgeInsertPalette : undefined),
+    [hoveredNodeId, isInteractive, openEdgeInsertPalette, selectedEdgeIds, workflow.graph.edges],
   );
   const flowKey = workflow.metadata.createdAt;
   const hasStartNode = workflow.graph.nodes.some((node) => node.type === "start");
@@ -360,6 +396,7 @@ export function WorkflowCanvas({
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         elementsSelectable={isInteractive}
         nodesConnectable={isInteractive}

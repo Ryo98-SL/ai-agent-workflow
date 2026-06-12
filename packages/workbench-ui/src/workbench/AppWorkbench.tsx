@@ -25,7 +25,7 @@ import type { RunInput } from "@ai-agent-workflow/api-contracts";
 import { WorkbenchLayout } from "./components/WorkbenchLayout";
 import { WorkflowGraphProvider } from "./components/WorkflowGraphContext";
 import { isWorkflowCanvasFocus, isWorkflowShortcutEditableTarget } from "./shortcutFocus";
-import { getWorkflowNodeSize } from "./components/workflowNodes";
+import { getWorkflowNodeHandles, getWorkflowNodeSize } from "./components/workflowNodes";
 import { NewWorkflowDialog } from "./components/NewWorkflowDialog";
 import { Toaster } from "../components/ui/sonner";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -246,6 +246,40 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
         return;
       }
 
+      // Edge Insert: splice the new node onto an existing edge as one atomic step.
+      const insert = options?.insertOnEdge;
+      if (insert) {
+        const sourceNode = workflow.graph.nodes.find((node) => node.id === insert.sourceNodeId);
+        const targetNode = workflow.graph.nodes.find((node) => node.id === insert.targetNodeId);
+        const removedEdge = workflow.graph.edges.find((edge) => edge.id === insert.edgeId);
+        if (!sourceNode || !targetNode || !removedEdge) {
+          return;
+        }
+
+        const node = createNode(type, { x: 0, y: 0 }, workflow.graph.nodes);
+        const size = getWorkflowNodeSize(node);
+        node.position = {
+          x: (sourceNode.position.x + targetNode.position.x) / 2 - size.width / 2,
+          y: (sourceNode.position.y + targetNode.position.y) / 2 - size.height / 2,
+        };
+
+        // Single-output nodes splice through (source → N → target); multi-output
+        // nodes (If/Else) only wire the input and leave the target dangling.
+        const sourceHandles = getWorkflowNodeHandles(node).filter((handle) => handle.type === "source");
+        const isSingleOutput = sourceHandles.length === 1 && sourceHandles[0].id == null;
+        const addedEdges = [
+          createConnectedNodeEdge(sourceNode.id, node.id, "source", insert.sourceHandleId),
+          ...(isSingleOutput ? [createConnectedNodeEdge(node.id, targetNode.id, "source")] : []),
+        ];
+
+        commitGraphHistoryEntry({ type: "insertNodeOnEdge", node, addedEdges, removedEdge });
+        setSelectedNodeId(node.id);
+        setInspectorOpen(true);
+        setDebugOpen(false);
+        setPaletteOpen(false);
+        return;
+      }
+
       const anchorNode = options?.sourceNodeId
         ? workflow.graph.nodes.find((node) => node.id === options.sourceNodeId)
         : undefined;
@@ -271,7 +305,7 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
       setDebugOpen(false);
       setPaletteOpen(false);
     },
-    [commitGraphHistoryEntry, workflow.graph.nodes],
+    [commitGraphHistoryEntry, workflow.graph.edges, workflow.graph.nodes],
   );
 
   // Cursor-follow placement (left palette only): a node type is "armed" and a

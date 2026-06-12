@@ -4,13 +4,26 @@ import { FloatingPanel } from "./FloatingPanel";
 import { NodePalette } from "./NodePalette";
 import { Popover } from "./Popover";
 
-export type InlineNodePaletteState = {
-  sourceNodeId: string;
-  sourceNodeLabel: string;
-  handleType: WorkflowNodePaletteHandleType;
-  sourceHandleId?: string;
-  anchorElement: HTMLElement;
-};
+export type InlineNodePaletteState =
+  | {
+      mode: "fromHandle";
+      sourceNodeId: string;
+      sourceNodeLabel: string;
+      handleType: WorkflowNodePaletteHandleType;
+      sourceHandleId?: string;
+      anchorElement: HTMLElement;
+    }
+  | {
+      // Edge Insert: opened from the "+" on an edge's midpoint. Splices the chosen
+      // node onto the edge. See CONTEXT.md "Edge Insert".
+      mode: "insertOnEdge";
+      edgeId: string;
+      sourceNodeId: string;
+      sourceNodeLabel: string;
+      sourceHandleId?: string;
+      targetNodeId: string;
+      anchorElement: HTMLElement;
+    };
 
 type InlineNodePalettePopoverProps = {
   hasStartNode: boolean;
@@ -20,7 +33,21 @@ type InlineNodePalettePopoverProps = {
 };
 
 export function InlineNodePalettePopover({ hasStartNode, palette, onAddNode, onClose }: InlineNodePalettePopoverProps) {
-  const disabledTypes: WorkflowNodeType[] = palette?.handleType === "target" ? ["end"] : [];
+  const disabledTypes: WorkflowNodeType[] =
+    palette?.mode === "insertOnEdge"
+      ? ["start", "end"]
+      : palette?.handleType === "target"
+        ? ["end"]
+        : [];
+
+  const description =
+    palette?.mode === "insertOnEdge"
+      ? `Insert after ${palette.sourceNodeLabel}`
+      : palette
+        ? `Connect from ${palette.sourceNodeLabel}`
+        : undefined;
+
+  const placement = palette?.mode === "insertOnEdge" ? "right" : palette?.handleType === "target" ? "left-start" : "right-start";
 
   return (
     <Popover
@@ -32,11 +59,11 @@ export function InlineNodePalettePopover({ hasStartNode, palette, onAddNode, onC
         }
       }}
       referenceElement={palette?.anchorElement ?? null}
-      placement={palette?.handleType === "target" ? "left-start" : "right-start"}
+      placement={placement}
     >
       <FloatingPanel
         title="Node Palette"
-        description={palette ? `Connect from ${palette.sourceNodeLabel}` : undefined}
+        description={description}
         closeLabel="Close node palette"
         onClose={onClose}
         className="h-[min(70vh,520px)] w-[300px]"
@@ -46,14 +73,26 @@ export function InlineNodePalettePopover({ hasStartNode, palette, onAddNode, onC
             disabledTypes={disabledTypes}
             hasStartNode={hasStartNode}
             onAddNode={(type) => {
-              if (palette) {
+              if (!palette) {
+                return;
+              }
+              if (palette.mode === "insertOnEdge") {
+                onAddNode(type, {
+                  insertOnEdge: {
+                    edgeId: palette.edgeId,
+                    sourceNodeId: palette.sourceNodeId,
+                    sourceHandleId: palette.sourceHandleId,
+                    targetNodeId: palette.targetNodeId,
+                  },
+                });
+              } else {
                 onAddNode(type, {
                   sourceNodeId: palette.sourceNodeId,
                   handleType: palette.handleType,
                   sourceHandleId: palette.sourceHandleId,
                 });
-                onClose();
               }
+              onClose();
             }}
           />
         </div>

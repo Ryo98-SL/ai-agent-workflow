@@ -7,11 +7,14 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $createLineBreakNode,
+  $createNodeSelection,
   $createTextNode,
   $getSelection,
   $insertNodes,
+  $isNodeSelection,
   $isRangeSelection,
   $isTextNode,
+  $setSelection,
   COMMAND_PRIORITY_LOW,
   KEY_ARROW_LEFT_COMMAND,
   KEY_ARROW_RIGHT_COMMAND,
@@ -24,6 +27,7 @@ import { parseVariableReference } from "@ai-agent-workflow/workflow-domain";
 import { VariableNode, $createVariableNode, $isVariableNode } from "./VariableNode";
 import { $populateFromString, $serializeToString, CARET_ANCHOR_CHAR } from "./variableSerialization";
 import { SlashVariablePlugin } from "./SlashVariablePlugin";
+import { VariableConsumerProvider } from "../WorkflowGraphContext";
 
 type VariableRichTextEditorProps = {
   /** Consumer node id — scopes the `/` typeahead to its Available Variables. */
@@ -67,31 +71,33 @@ export function VariableRichTextEditor({
         theme: { paragraph: "m-0" },
       }}
     >
-      <div
-        className={[
-          "relative rounded-md border border-input bg-background px-3 py-2 text-sm leading-5 focus-within:ring-1 focus-within:ring-ring",
-          className ?? "",
-        ].join(" ")}
-      >
-        <PlainTextPlugin
-          contentEditable={
-            <ContentEditable
-              aria-label={ariaLabel}
-              className="min-h-[1.25rem] whitespace-pre-wrap break-words outline-none [&_*]:align-middle"
-            />
-          }
-          placeholder={
-            <div className="pointer-events-none absolute left-3 top-2 text-muted-foreground/60">{placeholder}</div>
-          }
-          ErrorBoundary={LexicalErrorBoundary}
-        />
-        <HistoryPlugin />
-        <CaretSkipPlugin />
-        <SlashVariablePlugin nodeId={nodeId} />
-        <ValueSyncPlugin value={value} multiline={multiline} onChange={onChange} />
-        <SingleLinePlugin enabled={!multiline} />
-        <PlainPastePlugin multiline={multiline} />
-      </div>
+      <VariableConsumerProvider nodeId={nodeId}>
+        <div
+          className={[
+            "relative flex cursor-text flex-col rounded-md border border-input bg-background px-3 py-2 text-sm leading-5 focus-within:ring-1 focus-within:ring-ring",
+            className ?? "",
+          ].join(" ")}
+        >
+          <PlainTextPlugin
+            contentEditable={
+              <ContentEditable
+                aria-label={ariaLabel}
+                className="min-h-[1.25rem] flex-1 whitespace-pre-wrap break-words outline-none [&_*]:align-middle"
+              />
+            }
+            placeholder={
+              <div className="pointer-events-none absolute left-3 top-2 text-muted-foreground/60">{placeholder}</div>
+            }
+            ErrorBoundary={LexicalErrorBoundary}
+          />
+          <HistoryPlugin />
+          <ChipArrowNavPlugin />
+          <SlashVariablePlugin nodeId={nodeId} />
+          <ValueSyncPlugin value={value} multiline={multiline} onChange={onChange} />
+          <SingleLinePlugin enabled={!multiline} />
+          <PlainPastePlugin multiline={multiline} />
+        </div>
+      </VariableConsumerProvider>
     </LexicalComposer>
   );
 }
@@ -182,12 +188,23 @@ function $landCaretBeside(chip: LexicalNode, isBackward: boolean): void {
 }
 
 /**
- * Variable chips are atomic inline `DecoratorNode`s with `user-select: none`, so
- * the browser has no caret position inside them — arrow-keying across one would
- * drop the caret. This intercepts Left/Right at a chip boundary and lands the
- * caret on the far side of the chip in a single press.
+ * Steps the caret through atomic chips the way inline tokens behave in editors
+ * like Notion/Dify, keeping arrow navigation and the visual chip selection in
+ * sync. A `DecoratorNode` has `user-select: none` and no internal caret
+ * positions, so the browser can't place a caret "inside" it; the old behavior
+ * silently jumped the caret across, which left the NodeSelection (used by click
+ * and Backspace) completely disconnected from keyboard movement. Instead we
+ * take two presses to cross a chip:
+ *
+ *   caret at a chip edge ──arrow toward chip──▶ chip becomes node-selected
+ *   chip node-selected ───arrow same way─────▶ caret lands on the far side
+ *
+ * So Left at the chip's right edge selects it (the ring appears), and Left
+ * again moves the caret to its left edge; Right is symmetric. Selection uses the
+ * same `NodeSelection` the click handler and Backspace rely on, so the highlight
+ * and the selection model stay in lockstep.
  */
-function CaretSkipPlugin() {
+function ChipArrowNavPlugin() {
   const [editor] = useLexicalComposerContext();
   useEffect(() => {
     const handle = (isBackward: boolean) => (event: KeyboardEvent): boolean => {
@@ -196,6 +213,19 @@ function CaretSkipPlugin() {
         return false;
       }
       const selection = $getSelection();
+
+      // A chip is selected: collapse the caret onto the side we're moving toward.
+      if ($isNodeSelection(selection)) {
+        const chip = selection.getNodes().find($isVariableNode);
+        if (!chip) {
+          return false;
+        }
+        $landCaretBeside(chip, isBackward);
+        event.preventDefault();
+        return true;
+      }
+
+      // A collapsed caret sits at a chip boundary: select the chip as one unit.
       if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
         return false;
       }
@@ -215,7 +245,9 @@ function CaretSkipPlugin() {
       if (!$isVariableNode(chip)) {
         return false;
       }
-      $landCaretBeside(chip, isBackward);
+      const nodeSelection = $createNodeSelection();
+      nodeSelection.add(chip.getKey());
+      $setSelection(nodeSelection);
       event.preventDefault();
       return true;
     };

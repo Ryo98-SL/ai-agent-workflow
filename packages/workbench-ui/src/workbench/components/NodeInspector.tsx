@@ -3,6 +3,7 @@ import type { ResumeRunRequest } from "@ai-agent-workflow/api-contracts";
 import type { ModelProvider, ProviderKeyPreference, WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 import type { DebugState, NodeExecutionState } from "../types";
 import { KnowledgeInspector } from "./knowledge/KnowledgeInspector";
+import { EndInspector } from "./inspectors/EndInspector";
 import { HumanInputInspector } from "./inspectors/HumanInputInspector";
 import { HumanReviewForm } from "./HumanReviewForm";
 import { IfElseInspector } from "./inspectors/IfElseInspector";
@@ -150,6 +151,8 @@ export function NodeInspector({
             <IfElseInspector node={selectedNode} updateNode={updateNode} />
           ) : selectedNode.type === "humanInput" ? (
             <HumanInputInspector node={selectedNode} updateNode={updateNode} />
+          ) : selectedNode.type === "end" ? (
+            <EndInspector node={selectedNode} updateNode={updateNode} />
           ) : (
             <UnsupportedInspector node={selectedNode} updateNode={updateNode} />
           )
