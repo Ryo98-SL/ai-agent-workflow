@@ -1,6 +1,7 @@
 import type { WorkflowDto } from "@ai-agent-workflow/api-contracts";
-import { createDefaultWorkflow, type WorkflowFile } from "@ai-agent-workflow/workflow-domain";
+import { createDefaultWorkflow, validateWorkflowFile, type WorkflowFile } from "@ai-agent-workflow/workflow-domain";
 import { prisma } from "../db/prisma";
+import { logger } from "../logger";
 
 /**
  * User-scoped persistence for workflows. The production implementation is
@@ -19,8 +20,26 @@ type WorkflowRow = {
   document: unknown;
 };
 
+/**
+ * Normalizes a stored document through `WorkflowFileSchema` so legacy/partial
+ * payloads gain their defaults and migrations on load — most importantly the LLM
+ * `messages[]` migration from the old `{ systemPrompt, userPrompt }` shape, and the
+ * `metadata.mode` / `settings.memory` defaults. Without this the raw document runs
+ * as-is and an LLM node missing `config.messages` throws `reading 'map'`. On a
+ * genuinely invalid document we fall back to the raw value (and warn) rather than
+ * failing the load.
+ */
+export function normalizeStoredWorkflow(id: string, document: unknown): WorkflowFile {
+  const parsed = validateWorkflowFile(document);
+  if (parsed.ok) {
+    return parsed.data;
+  }
+  logger.warn("workflow.document.invalid_on_load", { id, error: parsed.error });
+  return document as WorkflowFile;
+}
+
 function toDto(row: WorkflowRow): WorkflowDto {
-  return { id: row.id, workflow: row.document as WorkflowFile };
+  return { id: row.id, workflow: normalizeStoredWorkflow(row.id, row.document) };
 }
 
 export function createPrismaWorkflowRepository(): WorkflowRepository {
@@ -97,11 +116,13 @@ export function createInMemoryWorkflowRepository(seed?: {
     async list(userId) {
       return [...store.entries()]
         .filter(([, value]) => value.userId === userId)
-        .map(([id, value]) => ({ id, workflow: value.workflow }));
+        .map(([id, value]) => ({ id, workflow: normalizeStoredWorkflow(id, value.workflow) }));
     },
     async get(userId, id) {
       const entry = store.get(id);
-      return entry && entry.userId === userId ? { id, workflow: entry.workflow } : null;
+      return entry && entry.userId === userId
+        ? { id, workflow: normalizeStoredWorkflow(id, entry.workflow) }
+        : null;
     },
     async create(userId, workflow) {
       const id = `workflow-${++counter}`;

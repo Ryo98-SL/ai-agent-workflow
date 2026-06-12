@@ -154,6 +154,14 @@ export async function callChatCompletion(
   summary = "",
 ) {
   const settings = chooseModelSettings(workflow, node);
+  // Guard against an unmigrated/legacy config reaching the runtime (e.g. a stored
+  // workflow that bypassed schema normalization): surface a clear error instead of
+  // a cryptic `reading 'map'`. Normal runs always have a parsed `messages[]`.
+  if (!Array.isArray(node.config.messages)) {
+    throw new RuntimeValidationError(
+      `LLM node "${node.id}" has no prompt messages configured. Re-open and save the workflow to migrate it.`,
+    );
+  }
   // Resolve every configured prompt message, dropping ones that are blank after
   // variable substitution (matches the prior "skip empty system prompt" behavior).
   const resolved = node.config.messages
