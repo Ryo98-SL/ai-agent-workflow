@@ -1,4 +1,7 @@
 import {
+  USER_INPUT_FIELDS,
+  USER_INPUT_LABEL,
+  USER_INPUT_NAMESPACE,
   workflowNodeOutputFields,
   type WorkflowEdge,
   type WorkflowNode,
@@ -32,7 +35,40 @@ export type AvailableVariableGroup = {
   nodeType: WorkflowNodeType;
   nodeLabel: string;
   fields: AvailableVariableField[];
+  /**
+   * True for the synthetic `userInput` Ambient Variable group (Chat Mode), which
+   * has no producing node. UI renders it with a dedicated icon and never flags its
+   * chips as unavailable; `nodeType` is a placeholder for ambient groups.
+   */
+  ambient?: boolean;
 };
+
+/** Options controlling which Ambient Variables are surfaced. */
+export type AvailableVariablesOptions = {
+  /** When true, prepend the `userInput` ambient namespace group (Chat Mode). */
+  chatMode?: boolean;
+};
+
+/** Builds the synthetic `userInput` ambient group (Chat Mode only). */
+function buildUserInputGroup(): AvailableVariableGroup {
+  return {
+    nodeId: USER_INPUT_NAMESPACE,
+    // Placeholder: ambient groups render via a dedicated icon, not nodeType.
+    nodeType: "start",
+    nodeLabel: USER_INPUT_LABEL,
+    ambient: true,
+    fields: USER_INPUT_FIELDS.map((field) => ({
+      nodeId: USER_INPUT_NAMESPACE,
+      path: [field.name],
+      name: field.name,
+      type: field.type,
+      description: field.description,
+      reference: formatVariableReference(USER_INPUT_NAMESPACE, [field.name]),
+      // Array-typed fields (e.g. files) can't resolve to a scalar reference yet.
+      selectable: !field.type.startsWith("Array"),
+    })),
+  };
+}
 
 /** Formats a node id + path into the canonical `{{nodeId.path}}` reference. */
 export function formatVariableReference(nodeId: string, path: string[]): string {
@@ -215,12 +251,14 @@ export function getAvailableVariables(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[],
   nodeId: string,
+  options: AvailableVariablesOptions = {},
 ): AvailableVariableGroup[] {
   const ancestorIds = connectedAncestorIds(edges, nodeId);
   const byId = new Map(nodes.map((node) => [node.id, node] as const));
   const order = topologicalOrder(nodes, edges);
 
-  const groups: AvailableVariableGroup[] = [];
+  // Ambient `userInput` namespace is available to every node (no ancestry).
+  const groups: AvailableVariableGroup[] = options.chatMode ? [buildUserInputGroup()] : [];
   for (const id of order) {
     if (!ancestorIds.has(id)) {
       continue;
@@ -248,12 +286,13 @@ export function resolveAvailableVariable(
   edges: WorkflowEdge[],
   consumerNodeId: string,
   reference: string,
+  options: AvailableVariablesOptions = {},
 ): AvailableVariableField | undefined {
   const parsed = parseVariableReference(reference);
   if (!parsed.ok) {
     return undefined;
   }
-  const groups = getAvailableVariables(nodes, edges, consumerNodeId);
+  const groups = getAvailableVariables(nodes, edges, consumerNodeId, options);
   const target = formatVariableReference(parsed.nodeId, parsed.path);
   for (const group of groups) {
     const match = group.fields.find((field) => field.reference === target && field.selectable);

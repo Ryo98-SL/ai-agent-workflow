@@ -157,6 +157,10 @@ export const CreateRunRequestSchema = z.object({
   // LangGraph thread so memory-enabled nodes see prior turns. Defaults to the
   // run id (single-shot) when absent.
   conversationId: z.string().optional(),
+  // Chat Mode: the user's chat message for this turn, exposed to every node as
+  // the `{{userInput.query}}` ambient variable. (`files` is reserved for deferred
+  // multimodal input and not accepted yet.)
+  query: z.string().optional(),
   modelProvider: OpenAICompatibleSettingsSchema.optional(),
   modelProviderKeys: ModelProviderKeysSchema.optional(),
   // Active stored-key selection for the run's provider, overriding any saved

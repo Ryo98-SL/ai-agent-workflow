@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Database, Loader2, Play, Plus, Settings } from "lucide-react";
 import type {
+  MemorySummarySettings,
   ModelProvider,
   ModelProviderKeys,
   OpenAICompatibleSettings,
   ProviderKeyPreference,
   WorkflowFile,
+  WorkflowMode,
   WorkflowNode,
   WorkflowNodeType,
 } from "@ai-agent-workflow/workflow-domain";
@@ -28,7 +30,7 @@ import { WorkflowSwitchBar } from "./WorkflowSwitchBar";
 import type { WorkflowMetaPatch } from "./WorkflowMetaEditor";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import type { WorkflowGraphHistoryEntry } from "../hooks/useWorkflowGraphHistory";
-import type { AddNodeOptions, DebugState, NodeExecutionState, WorkflowNodeActionHandler } from "../types";
+import type { AddNodeOptions, ChatTurn, DebugState, NodeExecutionState, WorkflowNodeActionHandler } from "../types";
 
 type WorkbenchLayoutProps = {
   workflow: WorkflowFile;
@@ -63,6 +65,10 @@ type WorkbenchLayoutProps = {
   onResumeRun: (runId: string, request: ResumeRunRequest) => void;
   onNewConversation: () => void;
   conversationTurns: number;
+  transcript: ChatTurn[];
+  onSendChatMessage: (query: string, baseInput: Record<string, string>) => void;
+  onSetWorkflowMode: (mode: WorkflowMode) => void;
+  onMemorySummaryChange: (summary: MemorySummarySettings) => void;
   onSwitchWorkflow: (id: string, name: string) => void;
   pendingSwitchName?: string | null;
   switching: boolean;
@@ -115,6 +121,10 @@ export function WorkbenchLayout({
   onResumeRun,
   onNewConversation,
   conversationTurns,
+  transcript,
+  onSendChatMessage,
+  onSetWorkflowMode,
+  onMemorySummaryChange,
   onSwitchWorkflow,
   pendingSwitchName,
   switching,
@@ -335,6 +345,10 @@ export function WorkbenchLayout({
                   onResumeRun={onResumeRun}
                   onNewConversation={onNewConversation}
                   conversationTurns={conversationTurns}
+                  transcript={transcript}
+                  onSendMessage={onSendChatMessage}
+                  onMemorySummaryChange={onMemorySummaryChange}
+                  onSetMode={onSetWorkflowMode}
                   view={debugView}
                   onViewChange={onDebugViewChange}
                 />

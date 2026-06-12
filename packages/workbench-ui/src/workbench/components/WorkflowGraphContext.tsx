@@ -10,6 +10,8 @@ type WorkflowGraphValue = {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   nodesById: Map<string, WorkflowNode>;
+  /** Chat Mode: surfaces the `userInput` ambient namespace in Available Variables. */
+  chatMode: boolean;
 };
 
 const WorkflowGraphContext = createContext<WorkflowGraphValue | null>(null);
@@ -32,15 +34,17 @@ const VariableConsumerContext = createContext<string | undefined>(undefined);
 export function WorkflowGraphProvider({
   nodes,
   edges,
+  chatMode = false,
   children,
 }: {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+  chatMode?: boolean;
   children: ReactNode;
 }) {
   const value = useMemo<WorkflowGraphValue>(
-    () => ({ nodes, edges, nodesById: new Map(nodes.map((node) => [node.id, node])) }),
-    [nodes, edges],
+    () => ({ nodes, edges, nodesById: new Map(nodes.map((node) => [node.id, node])), chatMode }),
+    [nodes, edges, chatMode],
   );
   return <WorkflowGraphContext.Provider value={value}>{children}</WorkflowGraphContext.Provider>;
 }
@@ -60,7 +64,7 @@ export function useResolveNode(nodeId: string | undefined): WorkflowNode | undef
 export function useAvailableVariables(nodeId: string): AvailableVariableGroup[] {
   const graph = useContext(WorkflowGraphContext);
   return useMemo(
-    () => (graph ? getAvailableVariables(graph.nodes, graph.edges, nodeId) : []),
+    () => (graph ? getAvailableVariables(graph.nodes, graph.edges, nodeId, { chatMode: graph.chatMode }) : []),
     [graph, nodeId],
   );
 }
@@ -94,7 +98,7 @@ export function useVariableAvailability(producerNodeId: string | undefined): Var
     if (!consumerNodeId || !graph || !producerNodeId) {
       return "unknown";
     }
-    const groups = getAvailableVariables(graph.nodes, graph.edges, consumerNodeId);
+    const groups = getAvailableVariables(graph.nodes, graph.edges, consumerNodeId, { chatMode: graph.chatMode });
     return groups.some((group) => group.nodeId === producerNodeId) ? "available" : "unavailable";
   }, [graph, consumerNodeId, producerNodeId]);
 }

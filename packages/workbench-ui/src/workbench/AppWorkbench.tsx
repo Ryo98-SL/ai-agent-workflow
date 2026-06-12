@@ -10,10 +10,12 @@ import {
   createNode,
   ifElseHandleIds,
   type WorkflowTemplate,
+  type MemorySummarySettings,
   type ModelProvider,
   type ModelProviderKeys,
   type OpenAICompatibleSettings,
   type ProviderKeyPreference,
+  type WorkflowMode,
   parseWorkflowJson,
   serializeWorkflowFile,
   type WorkflowFile,
@@ -66,8 +68,17 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
   const [workflow, setWorkflow] = useState<WorkflowFile>(() => createDefaultWorkflow());
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
-  const { nodeStates, debugState, setDebugState, runWorkflow: execRunWorkflow, resumeRun, newConversation, conversationTurns } =
-    useWorkflowExecution(workflowApi);
+  const {
+    nodeStates,
+    debugState,
+    setDebugState,
+    runWorkflow: execRunWorkflow,
+    sendChatMessage: execSendChatMessage,
+    transcript,
+    resumeRun,
+    newConversation,
+    conversationTurns,
+  } = useWorkflowExecution(workflowApi);
   const [workflowId, setWorkflowId] = useState<string | undefined>();
   const [savedWorkflowSnapshot, setSavedWorkflowSnapshot] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -217,6 +228,26 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
           ...current.settings,
           modelProvider: settings,
           modelProviderKeys: providerKeys,
+        },
+      }));
+    },
+    [markWorkflow],
+  );
+
+  const setWorkflowMode = useCallback(
+    (mode: WorkflowMode) => {
+      markWorkflow((current) => ({ ...current, metadata: { ...current.metadata, mode } }));
+    },
+    [markWorkflow],
+  );
+
+  const updateMemorySummary = useCallback(
+    (summary: MemorySummarySettings) => {
+      markWorkflow((current) => ({
+        ...current,
+        settings: {
+          ...current.settings,
+          memory: { ...current.settings.memory, summary },
         },
       }));
     },
@@ -643,56 +674,65 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [dirty]);
 
+  // Persists (if needed) and resolves the run's provider credentials. Shared by
+  // one-shot runs and Chat Mode sends so both go through the same key resolution.
+  const prepareRun = useCallback(async () => {
+    const persisted = !workflowId || dirty ? await persistWorkflow("save") : { id: workflowId, workflow };
+
+    // Resolve the active stored key for the run's provider. Authed users send
+    // only the key id (the server decrypts it); anonymous users inject the
+    // in-memory plaintext via the transient key map.
+    const provider = workflow.settings.modelProvider?.provider;
+    const preference = provider ? workflow.settings.providerKeyPrefs?.[provider] : undefined;
+    let modelProviderKeys = workflow.settings.modelProviderKeys;
+    let providerKeyId: string | undefined;
+    if (preference?.usagePriority === "apiKey" && preference.providerKeyId && provider) {
+      if (providerKeyStore.isAnon) {
+        const apiKey = providerKeyStore.getApiKey(preference.providerKeyId);
+        if (apiKey) {
+          modelProviderKeys = { ...modelProviderKeys, [provider]: apiKey };
+        }
+      } else {
+        providerKeyId = preference.providerKeyId;
+      }
+    }
+
+    return {
+      id: persisted.id,
+      extras: { modelProvider: workflow.settings.modelProvider, modelProviderKeys, providerKeyId },
+    };
+  }, [dirty, persistWorkflow, providerKeyStore, workflow, workflowId]);
+
   const runWorkflow = useCallback(
     async (input: RunInput) => {
       if (debugState.status === "running") {
         return;
       }
-
       setDebugOpen(true);
-
       try {
-        const persisted = !workflowId || dirty ? await persistWorkflow("save") : { id: workflowId, workflow };
-
-        // Resolve the active stored key for the run's provider. Authed users
-        // send only the key id (the server decrypts it); anonymous users inject
-        // the in-memory plaintext via the transient key map.
-        const provider = workflow.settings.modelProvider?.provider;
-        const preference = provider ? workflow.settings.providerKeyPrefs?.[provider] : undefined;
-        let modelProviderKeys = workflow.settings.modelProviderKeys;
-        let providerKeyId: string | undefined;
-        if (preference?.usagePriority === "apiKey" && preference.providerKeyId && provider) {
-          if (providerKeyStore.isAnon) {
-            const apiKey = providerKeyStore.getApiKey(preference.providerKeyId);
-            if (apiKey) {
-              modelProviderKeys = { ...modelProviderKeys, [provider]: apiKey };
-            }
-          } else {
-            providerKeyId = preference.providerKeyId;
-          }
-        }
-
-        execRunWorkflow(persisted.id, {
-          input,
-          modelProvider: workflow.settings.modelProvider,
-          modelProviderKeys,
-          providerKeyId,
-        });
+        const { id, extras } = await prepareRun();
+        execRunWorkflow(id, { input, ...extras });
       } catch (error) {
         setDebugState({ status: "error", error: errorMessage(error) });
       }
     },
-    [
-      debugState.status,
-      dirty,
-      errorMessage,
-      execRunWorkflow,
-      persistWorkflow,
-      providerKeyStore,
-      setDebugState,
-      workflow,
-      workflowId,
-    ],
+    [debugState.status, errorMessage, execRunWorkflow, prepareRun, setDebugState],
+  );
+
+  const sendChatMessage = useCallback(
+    async (query: string, baseInput: Record<string, string>) => {
+      if (debugState.status === "running") {
+        return;
+      }
+      setDebugOpen(true);
+      try {
+        const { id, extras } = await prepareRun();
+        execSendChatMessage(id, query, baseInput, extras);
+      } catch (error) {
+        setDebugState({ status: "error", error: errorMessage(error) });
+      }
+    },
+    [debugState.status, errorMessage, execSendChatMessage, prepareRun, setDebugState],
   );
 
   const closeDebug = useCallback(() => {
@@ -708,7 +748,11 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
   }
 
   return (
-    <WorkflowGraphProvider nodes={workflow.graph.nodes} edges={workflow.graph.edges}>
+    <WorkflowGraphProvider
+      nodes={workflow.graph.nodes}
+      edges={workflow.graph.edges}
+      chatMode={workflow.metadata.mode === "chat"}
+    >
     <WorkbenchLayout
       workflow={workflow}
       workflowId={workflowId}
@@ -742,6 +786,10 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
       onResumeRun={resumeRun}
       onNewConversation={newConversation}
       conversationTurns={conversationTurns}
+      transcript={transcript}
+      onSendChatMessage={sendChatMessage}
+      onSetWorkflowMode={setWorkflowMode}
+      onMemorySummaryChange={updateMemorySummary}
       onSwitchWorkflow={requestSwitchWorkflow}
       pendingSwitchName={pendingSwitch?.name ?? null}
       switching={switching}

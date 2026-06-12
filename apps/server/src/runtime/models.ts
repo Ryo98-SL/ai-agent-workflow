@@ -150,6 +150,8 @@ export async function callChatCompletion(
   state: WorkflowRuntimeState,
   fetchImpl: typeof fetch,
   history: Array<{ role: "user" | "assistant"; content: string }> = [],
+  /** Running summary of compressed older turns (Chat Mode summary-buffer memory). */
+  summary = "",
 ) {
   const settings = chooseModelSettings(workflow, node);
   // Resolve every configured prompt message, dropping ones that are blank after
@@ -169,11 +171,17 @@ export async function callChatCompletion(
     message.role === "assistant" ? new AIMessage(message.content) : new HumanMessage(message.content),
   );
   // Memory history belongs after any leading system prompts but before this
-  // turn's user/assistant messages, so prior turns frame the new request.
+  // turn's user/assistant messages, so prior turns frame the new request. The
+  // running summary (compressed older turns) sits just ahead of the verbatim
+  // history as additional system context.
   const firstNonSystem = resolved.findIndex((message) => message.role !== "system");
   const splitAt = firstNonSystem === -1 ? resolved.length : firstNonSystem;
+  const summaryMessages = summary.trim()
+    ? [new SystemMessage(`以下是早先对话的摘要，供你参考：\n${summary.trim()}`)]
+    : [];
   const messages = [
     ...resolved.slice(0, splitAt).map(toLangChainMessage),
+    ...summaryMessages,
     ...historyMessages,
     ...resolved.slice(splitAt).map(toLangChainMessage),
   ];
@@ -219,4 +227,44 @@ export async function callChatCompletion(
     usage: response.usage_metadata ?? response.response_metadata?.tokenUsage ?? null,
     reasoning: extractReasoning(response),
   };
+}
+
+/**
+ * Folds a prior running summary plus a batch of overflow turns into one concise
+ * summary, used by the Chat Mode summary-buffer memory when the buffer exceeds its
+ * token budget. Reuses the node's own model settings (no separate summarizer
+ * config). Returns the merged summary text.
+ */
+export async function summarizeMessages(
+  workflow: WorkflowFile,
+  node: LLMNode,
+  priorSummary: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  fetchImpl: typeof fetch,
+): Promise<string> {
+  const settings = chooseModelSettings(workflow, node);
+  const model = createChatModel(settings, node, fetchImpl);
+  const transcript = messages
+    .map((message) => `${message.role === "assistant" ? "助手" : "用户"}：${message.content}`)
+    .join("\n");
+  const system = new SystemMessage(
+    "你是一个对话摘要器。把已有摘要与新的对话片段合并成一段简洁、信息完整的摘要，" +
+      "保留关键事实、用户偏好、已达成的结论与未决事项。只输出摘要正文，不要解释。",
+  );
+  const human = new HumanMessage(
+    `已有摘要：\n${priorSummary.trim() || "（无）"}\n\n新的对话片段：\n${transcript}\n\n请输出合并后的摘要：`,
+  );
+  try {
+    const response = (await model.invoke([system, human])) as Record<string, any>;
+    return stringifyMessageContent(response.content).trim();
+  } catch (error) {
+    const rawMessage = error instanceof Error ? error.message : "Summary failed.";
+    logger.error("runtime.memory.summarize_failed", {
+      nodeId: node.id,
+      provider: settings.provider,
+      model: settings.model,
+      message: rawMessage,
+    });
+    throw new RuntimeModelError(`${settings.provider} model "${settings.model}" — ${humanizeModelError(rawMessage)}`);
+  }
 }

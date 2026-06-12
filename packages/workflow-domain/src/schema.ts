@@ -147,6 +147,40 @@ export const ProviderKeyPreferenceSchema = z.object({
 /** Keyed by provider name (e.g. "openai", "deepseek"). */
 export const ProviderKeyPrefsSchema = z.record(z.string(), ProviderKeyPreferenceSchema).default({});
 
+/**
+ * Workflow capability: `"workflow"` is the default one-shot run; `"chat"` turns
+ * the graph into a multi-turn chatbot (Chat Mode — see CONTEXT.md / ADR 0002),
+ * enabling the `userInput` ambient namespace and conversation memory UX.
+ */
+export const WORKFLOW_MODES = ["workflow", "chat"] as const;
+export const WorkflowModeSchema = z.enum(WORKFLOW_MODES);
+export type WorkflowMode = z.infer<typeof WorkflowModeSchema>;
+
+/**
+ * Summary-buffer compression policy for the shared conversation memory channel.
+ * Conversation-level (not per-node): the `messages` buffer is shared across the
+ * thread, so a single policy governs it. When the buffer's estimated size exceeds
+ * `triggerTokens`, turns older than the last `keepTurns` are folded into a running
+ * summary. Disabled by default.
+ */
+export const MemorySummarySchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    /** Estimated-token budget (char/4 heuristic) that triggers compression. */
+    triggerTokens: z.number().int().positive().default(2000),
+    /** How many of the most recent turns stay verbatim after compression. */
+    keepTurns: z.number().int().min(0).default(4),
+  })
+  .default({});
+export type MemorySummarySettings = z.infer<typeof MemorySummarySchema>;
+
+export const MemorySettingsSchema = z
+  .object({
+    summary: MemorySummarySchema,
+  })
+  .default({});
+export type MemorySettings = z.infer<typeof MemorySettingsSchema>;
+
 export const LLMModelSettingsSchema = OpenAICompatibleSettingsSchema;
 
 /** Roles a prompt message can take, mirroring Dify's LLM node. */
@@ -395,6 +429,8 @@ export const WorkflowFileSchema = z.object({
     // Optional icon key (maps to a lucide icon on the client). Defaults applied
     // in the UI when absent.
     icon: z.string().optional(),
+    /** Workflow vs Chat capability. Absent (legacy) = "workflow". */
+    mode: WorkflowModeSchema.optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
   }),
@@ -406,6 +442,8 @@ export const WorkflowFileSchema = z.object({
     modelProvider: OpenAICompatibleSettingsSchema.optional(),
     modelProviderKeys: ModelProviderKeysSchema,
     providerKeyPrefs: ProviderKeyPrefsSchema,
+    /** Conversation memory policy (summary-buffer compression). Absent = defaults. */
+    memory: MemorySettingsSchema.optional(),
   }),
 });
 
@@ -495,6 +533,36 @@ export function isWorkflowNodeOutputPath(type: WorkflowNodeType, path: string[])
     return false;
   }
   return workflowNodeOutputFields(type).some((field) => field.name === first);
+}
+
+/**
+ * Reserved node id of the `userInput` Ambient Variable namespace (see CONTEXT.md /
+ * ADR 0002). Exposed only in Chat Mode and available to every node regardless of
+ * graph topology. No real node may use this id (`createReadableNodeId` only mints
+ * `<type><n>` ids, so collisions can't occur).
+ */
+export const USER_INPUT_NAMESPACE = "userInput";
+
+/** Display label for the `userInput` ambient namespace in Variable Tags/pickers. */
+export const USER_INPUT_LABEL = "User Input";
+
+/**
+ * Ambient `userInput` fields. `query` is the current chat message (selectable);
+ * `files` is reserved for deferred multimodal input (not selectable yet).
+ */
+export const USER_INPUT_FIELDS: WorkflowNodeOutputField[] = [
+  { name: "query", type: "string", description: "Current chat message" },
+  { name: "files", type: "Array[File]", description: "Uploaded files (reserved, deferred)" },
+];
+
+/** Whether a workflow runs as a multi-turn chatbot (Chat Mode). */
+export function isChatWorkflow(file: WorkflowFile): boolean {
+  return file.metadata.mode === "chat";
+}
+
+/** Summary-buffer defaults applied when `settings.memory` is absent or partial. */
+export function resolveMemorySettings(file: WorkflowFile): MemorySettings {
+  return MemorySettingsSchema.parse(file.settings.memory ?? {});
 }
 
 export type ValidationResult<T> = { ok: true; data: T } | { ok: false; error: string };

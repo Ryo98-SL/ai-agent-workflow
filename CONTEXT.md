@@ -23,15 +23,39 @@ _Avoid_: variable pill, chip, token, badge
 **Available Variables**:
 The set of Variable References a given node may legally reference — the outputs of
 its *connected ancestors* (transitive reverse-edge reachability), grouped by
-producing node in topological order. Disconnected nodes never appear. Computed by
+producing node in topological order, plus any **Ambient Variables** (see below).
+Disconnected nodes never appear. Computed by
 `getAvailableVariables(nodes, edges, nodeId)` in `workflow-domain`.
 _Avoid_: upstream variables, visible variables, scope
+
+**Ambient Variable**:
+A Variable Reference that is *not* produced by any node and is available to every
+node regardless of graph topology — the exception to the "connected ancestors"
+rule above. The only ambient namespace today is `userInput` (a reserved node id),
+exposed in **Chat Mode** workflows as `{{userInput.query}}` (the current chat
+message) and `{{userInput.files}}` (reserved for deferred multimodal input).
+Surfaced as a synthetic Available Variables group prepended ahead of node groups.
+Mirrors Dify's `sys.*` system variables. The id `userInput` is reserved and may
+not be used by a real node.
+_Avoid_: system variable, global variable, sys namespace, context variable
 
 **Variable Picker**:
 The searchable popover, opened from a Variable Tag (if/else) or by typing `/` in a
 rich-text field, that lists Available Variables grouped by node and inserts/swaps
 the chosen Variable Reference. One shared component across both entry points.
 _Avoid_: variable menu, autocomplete, dropdown
+
+### Conversation
+
+**Chat Mode**:
+A persisted, workflow-level capability (vs. the default one-shot **Workflow Mode**)
+that turns a graph into a multi-turn chatbot, mirroring Dify's *Chatflow*. In Chat
+Mode the **DebugPanel** renders a chat transcript, the `userInput` **Ambient
+Variable** namespace becomes available to every node, **Start** fields are
+collected once at conversation start (constant for all turns), and each message
+sets `{{userInput.query}}`. Conversation memory and its summary compression are
+configured here.
+_Avoid_: chatflow, conversation mode, agent mode
 
 ### Output
 

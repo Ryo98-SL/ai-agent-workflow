@@ -68,6 +68,29 @@ export type DebugState = {
   };
 };
 
+/**
+ * One user→assistant exchange in a Chat Mode conversation. The most recent turn
+ * is "live": while it is running/waiting the assistant bubble renders from the
+ * active `nodeStates`/`debugState`; on completion the turn captures a snapshot of
+ * the run (derived `answer`, node states, and result) so its execution trace stays
+ * inspectable after later turns start.
+ */
+export type ChatTurn = {
+  id: string;
+  query: string;
+  status: WorkbenchStatus;
+  /** Derived assistant reply (reached End Answer Template, else last LLM text). */
+  answer: string;
+  runId?: string;
+  error?: string;
+  /** Captured at completion so the per-turn trace survives subsequent turns. */
+  nodeStates?: Map<string, NodeExecutionState>;
+  result?: {
+    run: WorkflowRun;
+    events: RunEvent[];
+  };
+};
+
 export type WorkbenchWorkflowApi = {
   listWorkflows: () => Promise<{ workflows: WorkflowSummary[] }>;
   createWorkflow: (request?: { workflow?: WorkflowFile }) => Promise<{ workflow: WorkflowDto }>;

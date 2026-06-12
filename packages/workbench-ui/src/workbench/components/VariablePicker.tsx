@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Search } from "lucide-react";
+import { MessageSquareText, Search } from "lucide-react";
 import type { AvailableVariableField, AvailableVariableGroup } from "@ai-agent-workflow/workflow-domain";
 import { workflowNodeIcons } from "./workflowNodes/workflowNodeVisuals";
 
@@ -118,7 +118,7 @@ export function VariablePicker({
         ) : (
           rows.map((row, index) => {
             if (row.kind === "header") {
-              const NodeIcon = workflowNodeIcons[row.group.nodeType];
+              const NodeIcon = row.group.ambient ? MessageSquareText : workflowNodeIcons[row.group.nodeType];
               return (
                 <div
                   key={`h-${row.group.nodeId}`}

@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Loader2, Play } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, MessagesSquare, Play, Workflow as WorkflowIcon } from "lucide-react";
 import type { ResumeRunRequest, RunInput } from "@ai-agent-workflow/api-contracts";
-import { type StartNode, type WorkflowFile } from "@ai-agent-workflow/workflow-domain";
-import type { DebugState, NodeExecutionState } from "../types";
+import {
+  type MemorySummarySettings,
+  type StartNode,
+  type WorkflowFile,
+  type WorkflowMode,
+} from "@ai-agent-workflow/workflow-domain";
+import type { ChatTurn, DebugState, NodeExecutionState } from "../types";
 import { Input } from "@workbench/components/ui/input";
 import { Button } from "./Button";
+import { ChatPanel } from "./ChatPanel";
 import { HumanReviewForm } from "./HumanReviewForm";
 import { RunOutput } from "./RunOutput";
 
@@ -17,6 +23,12 @@ type DebugPanelProps = {
   onNewConversation?: () => void;
   conversationTurns?: number;
   readOnly?: boolean;
+  /** Chat Mode (workflow.metadata.mode === "chat") props. */
+  transcript?: ChatTurn[];
+  onSendMessage?: (query: string, baseInput: Record<string, string>) => void;
+  onMemorySummaryChange?: (summary: MemorySummarySettings) => void;
+  /** Switches the workflow between Workflow and Chat mode. */
+  onSetMode?: (mode: WorkflowMode) => void;
   /**
    * Active sub-view. When provided, the panel is controlled so the route
    * persists across panel close/reopen; otherwise it manages its own state.
@@ -34,11 +46,16 @@ export function DebugPanel({
   onNewConversation,
   conversationTurns = 0,
   readOnly = false,
+  transcript = [],
+  onSendMessage,
+  onMemorySummaryChange,
+  onSetMode,
   view: controlledView,
   onViewChange,
 }: DebugPanelProps) {
   const hasMemory = workflow.graph.nodes.some((node) => node.type === "llm" && node.config.memory);
   const startNode = workflow.graph.nodes.find((node): node is StartNode => node.type === "start");
+  const chatMode = workflow.metadata.mode === "chat";
   const initialValues = useMemo(
     () =>
       Object.fromEntries(
@@ -86,6 +103,30 @@ export function DebugPanel({
     onRun(input);
   };
 
+  // Chat Mode: a live conversation drives the workflow with `{{userInput.query}}`.
+  // History (readOnly) still uses the run view since past chat turns aren't replayed.
+  if (chatMode && !readOnly && onSendMessage) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        {onSetMode && <ModeToggle mode="chat" onSetMode={onSetMode} disabled={debugState.status === "running"} />}
+        <div className="min-h-0 flex-1">
+          <ChatPanel
+            workflow={workflow}
+            startNode={startNode}
+            transcript={transcript}
+            debugState={debugState}
+            nodeStates={nodeStates}
+            conversationTurns={conversationTurns}
+            onSendMessage={onSendMessage}
+            onResumeRun={onResumeRun}
+            onNewConversation={onNewConversation}
+            onMemorySummaryChange={onMemorySummaryChange}
+          />
+        </div>
+      </div>
+    );
+  }
+
   // History mode (readOnly) never collects inputs, so it is always the run view.
   if (readOnly || view === "run") {
     return (
@@ -120,6 +161,7 @@ export function DebugPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {onSetMode && <ModeToggle mode="workflow" onSetMode={onSetMode} disabled={debugState.status === "running"} />}
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -187,6 +229,47 @@ export function DebugPanel({
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Segmented control switching the workflow between Workflow and Chat mode. */
+function ModeToggle({
+  mode,
+  onSetMode,
+  disabled,
+}: {
+  mode: WorkflowMode;
+  onSetMode: (mode: WorkflowMode) => void;
+  disabled?: boolean;
+}) {
+  const options: { value: WorkflowMode; label: string; icon: typeof WorkflowIcon }[] = [
+    { value: "workflow", label: "运行", icon: WorkflowIcon },
+    { value: "chat", label: "对话", icon: MessagesSquare },
+  ];
+  return (
+    <div className="flex items-center gap-1 border-b border-border px-3 py-2">
+      <div className="inline-flex rounded-md border border-border p-0.5">
+        {options.map((option) => {
+          const Icon = option.icon;
+          const active = option.value === mode;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              disabled={disabled || active}
+              onClick={() => onSetMode(option.value)}
+              className={[
+                "inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors",
+                active ? "bg-brand text-brand-foreground" : "text-muted-foreground hover:text-foreground disabled:opacity-50",
+              ].join(" ")}
+            >
+              <Icon size={13} aria-hidden />
+              {option.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

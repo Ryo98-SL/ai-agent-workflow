@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react";
-import { AlertTriangle } from "lucide-react";
-import { parseVariableReference } from "@ai-agent-workflow/workflow-domain";
+import { AlertTriangle, MessageSquareText } from "lucide-react";
+import { USER_INPUT_LABEL, USER_INPUT_NAMESPACE, parseVariableReference } from "@ai-agent-workflow/workflow-domain";
 import { useResolveNode, useVariableAvailability } from "./WorkflowGraphContext";
 import { workflowNodeIcons } from "./workflowNodes/workflowNodeVisuals";
 
@@ -38,6 +38,25 @@ export function VariableTag({
   const base =
     "inline-flex max-w-full items-center gap-1 rounded border px-1 py-0.5 align-middle leading-none";
   const ring = selected ? "ring-2 ring-ring ring-offset-1 ring-offset-background" : "";
+
+  // Ambient `userInput` namespace (Chat Mode): no producing node, so render a
+  // dedicated chat identity rather than resolving against the graph.
+  if (parsed.ok && parsed.nodeId === USER_INPUT_NAMESPACE) {
+    return (
+      <span
+        className={[base, ring, "border-border bg-muted", className ?? ""].join(" ")}
+        title={`${USER_INPUT_LABEL} / ${parsed.path.join(".")}`}
+      >
+        <span className="flex size-3.5 shrink-0 items-center justify-center rounded-sm bg-foreground/10 text-foreground/70">
+          <MessageSquareText className="size-2.5" aria-hidden />
+        </span>
+        <span className="max-w-[7rem] truncate text-[11px] font-medium text-muted-foreground">{USER_INPUT_LABEL}</span>
+        <span className="shrink-0 text-muted-foreground/50">/</span>
+        <span className="shrink-0 font-mono text-[10px] font-semibold text-blue-500">{"{x}"}</span>
+        <span className="truncate text-[11px] font-medium text-foreground">{parsed.path.join(".")}</span>
+      </span>
+    );
+  }
 
   // Malformed or unresolved (node not in graph): amber error pill.
   if (!parsed.ok || !node) {

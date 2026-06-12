@@ -8,7 +8,10 @@ import {
 } from "@ai-agent-workflow/api-contracts";
 import {
   IFELSE_ELSE_HANDLE_ID,
+  USER_INPUT_NAMESPACE,
   evaluateIfElseNode,
+  isChatWorkflow,
+  resolveMemorySettings,
   type WorkflowFile,
   type WorkflowNode,
   type WorkflowNodeType,
@@ -18,7 +21,7 @@ import { RuntimeValidationError, normalizeRuntimeError } from "./errors";
 import { logger } from "../logger";
 import type { EmbeddingAdapter } from "../knowledge/embeddings";
 import type { KnowledgeRepository } from "../knowledge/repository";
-import { callChatCompletion } from "./models";
+import { callChatCompletion, summarizeMessages } from "./models";
 import { materializeStartValues } from "./startValues";
 import { resolvePrompt } from "./prompts";
 import type { ChatMessage, EmailSender, RuntimeExecutionResult, RuntimeExecutorOptions, RuntimeInterrupt, RuntimeNodeResult, RuntimeStreamEvent } from "./types";
@@ -27,6 +30,10 @@ import { validateWorkflow } from "./validation";
 type RuntimeGraphState = {
   values: WorkflowRuntimeState;
   messages: ChatMessage[];
+  /** Running summary of compressed older turns (summary-buffer memory). */
+  summary: string;
+  /** How many leading `messages` are already folded into `summary`. */
+  summarizedCount: number;
 };
 
 const RuntimeStateAnnotation = Annotation.Root({
@@ -35,10 +42,22 @@ const RuntimeStateAnnotation = Annotation.Root({
     default: () => ({}),
   }),
   // Conversation memory. Appended to across turns; persisted by the checkpointer
-  // when a run reuses a stable conversation thread id.
+  // when a run reuses a stable conversation thread id. Append-only — compression
+  // never rewrites this log; it advances `summarizedCount` instead.
   messages: Annotation<ChatMessage[]>({
     reducer: (left, right) => [...left, ...right],
     default: () => [],
+  }),
+  // Summary-buffer compression state (last-write-wins). `summary` holds the folded
+  // older turns; `summarizedCount` is the count of leading `messages` it covers, so
+  // the live history is `summary` + `messages.slice(summarizedCount)`.
+  summary: Annotation<string>({
+    reducer: (left, right) => right ?? left,
+    default: () => "",
+  }),
+  summarizedCount: Annotation<number>({
+    reducer: (left, right) => right ?? left,
+    default: () => 0,
   }),
 });
 
@@ -46,6 +65,8 @@ type RuntimeNodeBuildContext = {
   embeddings?: EmbeddingAdapter;
   fetchImpl: typeof fetch;
   input: RunInput;
+  /** Chat Mode: this turn's user message (the `{{userInput.query}}` value). */
+  query?: string;
   knowledge?: KnowledgeRepository;
   userId: string | null;
   workflow: WorkflowFile;
@@ -59,6 +80,8 @@ type RuntimeNodeOutput = {
   logMetadata?: Record<string, unknown>;
   /** Conversation turns to append to the shared memory channel. */
   appendMessages?: ChatMessage[];
+  /** Summary-buffer update when this node compressed the memory buffer. */
+  memoryUpdate?: { summary: string; summarizedCount: number };
 };
 
 type RuntimeNodeBuilder = (
@@ -115,6 +138,7 @@ export async function executeWorkflowRuntime(
       embeddings: options.embeddings,
       fetchImpl,
       input,
+      query: options.query,
       knowledge: options.knowledge,
       userId: options.userId ?? null,
       workflow,
@@ -152,6 +176,9 @@ export async function executeWorkflowRuntime(
           return {
             values: { [node.id]: result.stateValue },
             ...(result.appendMessages && result.appendMessages.length > 0 ? { messages: result.appendMessages } : {}),
+            ...(result.memoryUpdate
+              ? { summary: result.memoryUpdate.summary, summarizedCount: result.memoryUpdate.summarizedCount }
+              : {}),
           };
         } catch (error) {
           // A Human Input node pausing via interrupt() is not a failure: let the
@@ -240,11 +267,14 @@ export async function executeWorkflowRuntime(
     }
 
     const compiled = graph.compile({ checkpointer });
-    let finalGraphState: RuntimeGraphState = { values: {}, messages: [] };
+    let finalGraphState: RuntimeGraphState = { values: {}, messages: [], summary: "", summarizedCount: 0 };
 
-    // Fresh runs start from empty state; resumes re-enter the paused thread with
-    // the reviewer's answer, which `interrupt()` returns inside the node.
-    const streamInput = options.resume ? new Command({ resume: options.resume.value }) : { values: {} };
+    // Fresh runs start from empty state (plus the ambient `userInput` namespace so
+    // `{{userInput.query}}` resolves for every node); resumes re-enter the paused
+    // thread with the reviewer's answer, which `interrupt()` returns inside the node.
+    const initialValues: WorkflowRuntimeState =
+      options.query !== undefined ? { [USER_INPUT_NAMESPACE]: { query: options.query } } : {};
+    const streamInput = options.resume ? new Command({ resume: options.resume.value }) : { values: initialValues };
 
     const streamEventsIterable = compiled.streamEvents(
       streamInput,
@@ -432,6 +462,16 @@ function buildStartNode(node: WorkflowNode, _state: RuntimeGraphState, context: 
   };
 }
 
+/**
+ * Rough token estimate for the memory buffer (summary + live turns), using the
+ * common ~4-chars-per-token heuristic. Cross-provider tokenizers are avoided for
+ * the MVP; this only needs to be good enough to trigger compression consistently.
+ */
+function estimateMemoryTokens(summary: string, history: ChatMessage[]): number {
+  const chars = summary.length + history.reduce((sum, message) => sum + message.content.length, 0);
+  return Math.ceil(chars / 4);
+}
+
 async function buildLlmNode(
   node: WorkflowNode,
   state: RuntimeGraphState,
@@ -442,21 +482,49 @@ async function buildLlmNode(
   }
 
   const useMemory = node.config.memory === true;
-  const history = useMemory ? state.messages : [];
-  const output = await callChatCompletion(context.workflow, node, state.values, context.fetchImpl, history);
+
+  // Live history is the un-summarized tail; older turns live in `summary`.
+  let history = useMemory ? state.messages.slice(state.summarizedCount) : [];
+  let summary = useMemory ? state.summary : "";
+  let memoryUpdate: { summary: string; summarizedCount: number } | undefined;
+
+  // Summary-buffer compression: when the buffer's estimated size exceeds the
+  // configured budget, fold all but the last `keepTurns` turns into the summary.
+  if (useMemory) {
+    const policy = resolveMemorySettings(context.workflow).summary;
+    const keepMessages = policy.keepTurns * 2; // a turn = user + assistant
+    if (policy.enabled && history.length > keepMessages && estimateMemoryTokens(summary, history) > policy.triggerTokens) {
+      const overflow = history.slice(0, history.length - keepMessages);
+      summary = await summarizeMessages(context.workflow, node, summary, overflow, context.fetchImpl);
+      history = history.slice(history.length - keepMessages);
+      memoryUpdate = { summary, summarizedCount: state.summarizedCount + overflow.length };
+    }
+  }
+
+  const output = await callChatCompletion(context.workflow, node, state.values, context.fetchImpl, history, summary);
+  // In Chat Mode the stored user turn is the raw chat message, not the resolved
+  // (RAG-injected) prompt, so retrieval blobs don't replay into later turns.
+  const userTurn =
+    isChatWorkflow(context.workflow) && context.query !== undefined ? context.query : output.userPrompt;
   return {
     output: output.text,
     data: output,
     stateValue: output,
-    logMetadata: { outputLength: output.text.length, memory: useMemory, historyTurns: history.length },
+    logMetadata: {
+      outputLength: output.text.length,
+      memory: useMemory,
+      historyTurns: history.length,
+      compressed: Boolean(memoryUpdate),
+    },
     ...(useMemory
       ? {
           appendMessages: [
-            { role: "user", content: output.userPrompt },
+            { role: "user", content: userTurn },
             { role: "assistant", content: output.text },
           ] satisfies ChatMessage[],
         }
       : {}),
+    ...(memoryUpdate ? { memoryUpdate } : {}),
   };
 }
 

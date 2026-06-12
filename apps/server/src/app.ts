@@ -406,6 +406,8 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     runWorkflow: WorkflowFile;
     pendingRun: WorkflowRun;
     input: RunInput;
+    /** Chat Mode: this turn's user message (the `{{userInput.query}}` value). */
+    query?: string;
     userId: string | null;
     /** LangGraph thread id (= conversationId for memory, else runId). */
     threadId: string;
@@ -428,6 +430,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       runWorkflow,
       pendingRun,
       input,
+      query,
       userId,
       threadId,
       modelProvider,
@@ -456,6 +459,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
         fetch: options.fetch,
         knowledge,
         threadId,
+        query,
         creditBudget,
         userId,
         emailSender,
@@ -948,6 +952,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       runWorkflow,
       pendingRun,
       input: parsed.data.input,
+      query: parsed.data.query,
       userId,
       threadId,
       modelProvider: parsed.data.modelProvider,

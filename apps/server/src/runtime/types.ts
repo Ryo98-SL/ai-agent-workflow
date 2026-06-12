@@ -70,6 +70,12 @@ export type RuntimeExecutorOptions = {
   onStreamEvent?: (event: RuntimeStreamEvent) => void | Promise<void>;
   threadId?: string;
   userId?: string | null;
+  /**
+   * Chat Mode: the user's message for this turn. Seeded into runtime state as the
+   * `userInput` ambient namespace (`{{userInput.query}}`) and used as the stored
+   * memory "user" turn so RAG-injected prompts don't pollute conversation history.
+   */
+  query?: string;
   /** Sends emails for the Email tool node when real sending is enabled. */
   emailSender?: EmailSender;
   /**

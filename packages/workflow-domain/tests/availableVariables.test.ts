@@ -86,6 +86,28 @@ describe("getAvailableVariables", () => {
   it("returns no groups for a node with no upstream", () => {
     expect(getAvailableVariables(nodes, edges, "start1")).toEqual([]);
   });
+
+  it("prepends the ambient userInput group in Chat Mode for every node", () => {
+    // Even a node with no upstream (start1) sees the ambient namespace.
+    const groups = getAvailableVariables(nodes, edges, "start1", { chatMode: true });
+    expect(groups[0]?.nodeId).toBe("userInput");
+    expect(groups[0]?.ambient).toBe(true);
+    const query = groups[0].fields.find((f) => f.path.join(".") === "query")!;
+    const files = groups[0].fields.find((f) => f.path.join(".") === "files")!;
+    expect(query.reference).toBe("{{userInput.query}}");
+    expect(query.selectable).toBe(true);
+    expect(files.selectable).toBe(false); // Array[File] — reserved/deferred
+  });
+
+  it("omits the userInput group when not in Chat Mode", () => {
+    const groups = getAvailableVariables(nodes, edges, "llm1");
+    expect(groups.some((g) => g.nodeId === "userInput")).toBe(false);
+  });
+
+  it("resolves {{userInput.query}} only in Chat Mode", () => {
+    expect(resolveAvailableVariable(nodes, edges, "llm1", "{{userInput.query}}", { chatMode: true })?.name).toBe("query");
+    expect(resolveAvailableVariable(nodes, edges, "llm1", "{{userInput.query}}")).toBeUndefined();
+  });
 });
 
 describe("resolveAvailableVariable", () => {
