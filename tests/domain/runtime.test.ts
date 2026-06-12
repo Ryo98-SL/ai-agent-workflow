@@ -38,7 +38,10 @@ describe("runtime adapters", () => {
     const workflow = createDefaultWorkflow();
     const node = workflow.graph.nodes.find((candidate) => candidate.type === "llm") as LLMNode;
     const result = await executeLLMNode(
-      { ...node, config: { ...node.config, userPrompt: "Hello {{missing.value}}", variables: {} } },
+      {
+        ...node,
+        config: { ...node.config, messages: [{ role: "user", content: "Hello {{missing.value}}" }], variables: {} },
+      },
       { modelProvider: { provider: "deepseek", baseURL: "http://mock.test/v1", model: "mock-model" }, testVariables: {} },
     );
 

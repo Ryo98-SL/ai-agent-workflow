@@ -2,6 +2,7 @@ import { Brain } from "lucide-react";
 import { ModelCapabilityTags } from "../ModelCapabilityTags";
 import { getModelCapabilities } from "../modelCatalog";
 import { ModelProviderLogo } from "../modelProviderVisuals";
+import { VariableText } from "../VariableTag";
 import { WorkflowNodeCardShell, type WorkflowNodeProps } from "./WorkflowNodeCardShell";
 
 export function LlmWorkflowNode(props: WorkflowNodeProps) {
@@ -23,7 +24,11 @@ export function LlmWorkflowNode(props: WorkflowNodeProps) {
           <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{modelLabel}</span>
           <ModelCapabilityTags capabilities={capabilities} />
         </div>
-        {node.description && <p className="text-xs leading-4 text-muted-foreground">{node.description}</p>}
+        {node.description && (
+          <p className="text-xs leading-5 text-muted-foreground">
+            <VariableText text={node.description} />
+          </p>
+        )}
       </div>
     </WorkflowNodeCardShell>
   );

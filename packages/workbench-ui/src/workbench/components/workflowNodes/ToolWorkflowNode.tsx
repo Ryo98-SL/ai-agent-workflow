@@ -1,4 +1,5 @@
 import { Clock, Mail, Wrench } from "lucide-react";
+import { VariableText } from "../VariableTag";
 import { WorkflowNodeCardShell, type WorkflowNodeProps } from "./WorkflowNodeCardShell";
 
 export function ToolWorkflowNode(props: WorkflowNodeProps) {
@@ -9,9 +10,12 @@ export function ToolWorkflowNode(props: WorkflowNodeProps) {
       {node.type === "tool" && node.config.adapter === "emailSend" ? (
         <div className="mt-1 space-y-0.5">
           <p className="truncate text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">To:</span> {node.config.to || "—"}
+            <span className="font-medium text-foreground">To:</span>{" "}
+            {node.config.to ? <VariableText text={node.config.to} /> : "—"}
           </p>
-          <p className="truncate text-xs text-muted-foreground">{node.config.subject || "(no subject)"}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {node.config.subject ? <VariableText text={node.config.subject} /> : "(no subject)"}
+          </p>
           <span
             className={[
               "inline-block rounded px-1 text-[10px]",

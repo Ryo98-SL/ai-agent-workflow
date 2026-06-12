@@ -33,10 +33,19 @@ export async function executeLLMNode(
   const started = performance.now();
   const startedAt = new Date().toISOString();
   const variables = mergeVariableValues(node.config.variables, context.testVariables);
-  const systemResolution = node.config.systemPrompt
-    ? resolvePromptVariables(node.config.systemPrompt, variables)
+  // The legacy adapter flattens the message list into a single system/user pair.
+  const systemText = node.config.messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
+  const userText = node.config.messages
+    .filter((message) => message.role !== "system")
+    .map((message) => message.content)
+    .join("\n\n");
+  const systemResolution = systemText
+    ? resolvePromptVariables(systemText, variables)
     : ({ ok: true, text: undefined, variables: [] } as const);
-  const userResolution = resolvePromptVariables(node.config.userPrompt, variables);
+  const userResolution = resolvePromptVariables(userText, variables);
 
   if (!systemResolution.ok || !userResolution.ok) {
     const missing = [

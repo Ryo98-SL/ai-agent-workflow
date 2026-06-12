@@ -115,8 +115,9 @@ describe("workflow schema", () => {
     }
 
     const llm = workflow.graph.nodes.find((node) => node.type === "llm");
-    expect(llm?.type === "llm" && llm.config.userPrompt).toContain("{{knowledge1.context}}");
-    expect(llm?.type === "llm" && llm.config.userPrompt).toContain("{{start1.customerQuestion}}");
+    const llmPrompt = llm?.type === "llm" ? llm.config.messages.map((message) => message.content).join("\n") : "";
+    expect(llmPrompt).toContain("{{knowledge1.context}}");
+    expect(llmPrompt).toContain("{{start1.customerQuestion}}");
   });
 
   it("rejects unsupported workflow versions", () => {

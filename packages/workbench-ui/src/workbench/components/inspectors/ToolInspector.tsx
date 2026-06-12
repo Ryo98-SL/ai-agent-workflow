@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import type { ToolAdapter, ToolNode, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 import { Input } from "@workbench/components/ui/input";
-import { Textarea } from "@workbench/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workbench/components/ui/select";
 import { NodeOutputVariablesPanel } from "../NodeOutputVariablesPanel";
+import { VariableRichTextEditor } from "../richtext/VariableRichTextEditor";
 
 type ToolInspectorProps = {
   node: ToolNode;
@@ -64,13 +64,34 @@ export function ToolInspector({ node, updateNode }: ToolInspectorProps) {
       ) : (
         <>
           <Field label="To">
-            <Input value={config.to} onChange={(event) => setConfig({ ...config, to: event.target.value })} placeholder="user@example.com  ·  支持 {{nodeId.field}}" />
+            <VariableRichTextEditor
+              nodeId={node.id}
+              ariaLabel="To"
+              multiline={false}
+              value={config.to}
+              onChange={(next) => setConfig({ ...config, to: next })}
+              placeholder="user@example.com  ·  输入 / 引用变量"
+            />
           </Field>
           <Field label="Subject">
-            <Input value={config.subject} onChange={(event) => setConfig({ ...config, subject: event.target.value })} placeholder="工单已受理  ·  支持 {{nodeId.field}}" />
+            <VariableRichTextEditor
+              nodeId={node.id}
+              ariaLabel="Subject"
+              multiline={false}
+              value={config.subject}
+              onChange={(next) => setConfig({ ...config, subject: next })}
+              placeholder="工单已受理  ·  输入 / 引用变量"
+            />
           </Field>
           <Field label="Body">
-            <Textarea value={config.body} onChange={(event) => setConfig({ ...config, body: event.target.value })} rows={5} placeholder="邮件正文，支持 {{nodeId.field}} 变量" />
+            <VariableRichTextEditor
+              nodeId={node.id}
+              ariaLabel="Body"
+              value={config.body}
+              onChange={(next) => setConfig({ ...config, body: next })}
+              placeholder="邮件正文，输入 / 引用变量"
+              className="min-h-28"
+            />
           </Field>
 
           <label className="flex items-start justify-between gap-3 rounded-md border border-border bg-card p-3">

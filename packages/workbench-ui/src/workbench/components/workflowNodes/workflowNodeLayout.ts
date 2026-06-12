@@ -23,43 +23,62 @@ const workflowHandleBounds = {
 };
 
 /**
- * If/Else card geometry. Shared by `getWorkflowNodeHandles` (handle bounds) and
- * the card renderer (CSS row positions) so branch handles always line up with
- * their condition rows.
+ * If/Else card geometry. Each case block grows with its condition count, and
+ * `getIfElseRowLayout` derives the exact vertical center of every branch so the
+ * source handle lines up with its block. Shared by `getWorkflowNodeHandles`
+ * (handle bounds) and the card renderer (explicit block heights), so they never
+ * drift. All values are pixels.
  */
 export const ifElseLayout = {
-  width: 240,
-  headerHeight: 48,
-  caseHeight: 70,
-  elseHeight: 38,
+  width: 264,
+  headerHeight: 46,
+  caseLabelHeight: 20,
+  conditionHeight: 44,
+  connectorHeight: 18,
+  noConditionHeight: 22,
+  casePadTop: 8,
+  casePadBottom: 10,
+  elseHeight: 40,
 };
+
+/** Height of one case block, sized to fit its label + conditions exactly. */
+export function ifElseCaseBlockHeight(branch: IfElseNode["config"]["cases"][number]): number {
+  const count = branch.conditions.length;
+  const conditionsHeight =
+    count === 0
+      ? ifElseLayout.noConditionHeight
+      : count * ifElseLayout.conditionHeight + (count - 1) * ifElseLayout.connectorHeight;
+  return ifElseLayout.casePadTop + ifElseLayout.caseLabelHeight + conditionsHeight + ifElseLayout.casePadBottom;
+}
 
 export type IfElseRowLayout = {
   /** Source-handle id (case id, or the reserved else id). */
   id: string;
   /** Branch label shown on the card: IF / ELSE IF / ELSE. */
   label: string;
-  /** Vertical center of the row, relative to the card top. */
+  /** Block height in pixels (cases only; else uses `ifElseLayout.elseHeight`). */
+  height: number;
+  /** Vertical center of the block, relative to the card top. */
   centerY: number;
 };
 
-/** Ordered branch rows (cases then else) with their vertical centers. */
+/** Ordered branch rows (cases then else) with their block heights and centers. */
 export function getIfElseRowLayout(node: IfElseNode): IfElseRowLayout[] {
-  const rows: IfElseRowLayout[] = node.config.cases.map((branch, index) => ({
-    id: branch.id,
-    label: index === 0 ? "IF" : "ELSE IF",
-    centerY: ifElseLayout.headerHeight + index * ifElseLayout.caseHeight + ifElseLayout.caseHeight / 2,
-  }));
-  const elseCenterY =
-    ifElseLayout.headerHeight + node.config.cases.length * ifElseLayout.caseHeight + ifElseLayout.elseHeight / 2;
-  rows.push({ id: IFELSE_ELSE_HANDLE_ID, label: "ELSE", centerY: elseCenterY });
+  const rows: IfElseRowLayout[] = [];
+  let top = ifElseLayout.headerHeight;
+  node.config.cases.forEach((branch, index) => {
+    const height = ifElseCaseBlockHeight(branch);
+    rows.push({ id: branch.id, label: index === 0 ? "IF" : "ELSE IF", height, centerY: top + height / 2 });
+    top += height;
+  });
+  rows.push({ id: IFELSE_ELSE_HANDLE_ID, label: "ELSE", height: ifElseLayout.elseHeight, centerY: top + ifElseLayout.elseHeight / 2 });
   return rows;
 }
 
 export function getWorkflowNodeSize(node: WorkflowNode) {
   if (node.type === "ifElse") {
-    const caseCount = node.config.cases.length;
-    const height = ifElseLayout.headerHeight + caseCount * ifElseLayout.caseHeight + ifElseLayout.elseHeight;
+    const casesHeight = node.config.cases.reduce((sum, branch) => sum + ifElseCaseBlockHeight(branch), 0);
+    const height = ifElseLayout.headerHeight + casesHeight + ifElseLayout.elseHeight;
     return { width: ifElseLayout.width, height };
   }
 

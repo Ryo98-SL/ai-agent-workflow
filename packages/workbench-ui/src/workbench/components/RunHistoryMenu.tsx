@@ -1,4 +1,4 @@
-import { CheckCircle2, History, Loader2, Trash2, X, XCircle } from "lucide-react";
+import { CheckCircle2, History, Loader2, PauseCircle, Trash2, X, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { WorkflowRun } from "@ai-agent-workflow/api-contracts";
@@ -19,6 +19,7 @@ type RunHistoryMenuProps = {
 };
 
 function runDuration(run: WorkflowRun): string {
+  if (run.status === "waiting_human") return "Waiting";
   if (!run.startedAt || !run.completedAt) return "In progress";
   const durationMs = new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime();
   if (durationMs < 1000) return "<1s";
@@ -28,6 +29,7 @@ function runDuration(run: WorkflowRun): string {
 function StatusIcon({ status }: { status: WorkflowRun["status"] }) {
   if (status === "succeeded") return <CheckCircle2 size={15} className="text-brand" aria-hidden />;
   if (status === "failed") return <XCircle size={15} className="text-destructive" aria-hidden />;
+  if (status === "waiting_human") return <PauseCircle size={15} className="text-amber-500" aria-hidden />;
   return <Loader2 size={15} className="animate-spin text-muted-foreground" aria-hidden />;
 }
 
@@ -86,10 +88,14 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
       .then(async (runResponse) => {
         const eventsResponse = await workflowApi.listRunEvents(selectedRunId);
         if (cancelled) return;
-        setHistoryDebugState({
-          status: runResponse.run.status === "failed" ? "error" : "success",
-          result: { run: runResponse.run, events: eventsResponse.events },
-        });
+        const run = runResponse.run;
+        const result = { run, events: eventsResponse.events };
+        if (run.status === "waiting_human" && run.interrupt) {
+          // Keep the panel header consistent with the list's "Waiting" status.
+          setHistoryDebugState({ status: "waiting", waiting: { runId: run.id, interrupt: run.interrupt }, result });
+        } else {
+          setHistoryDebugState({ status: run.status === "failed" ? "error" : "success", result });
+        }
       })
       .catch((error: unknown) => {
         if (cancelled) return;

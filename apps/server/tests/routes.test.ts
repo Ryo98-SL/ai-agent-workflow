@@ -165,7 +165,14 @@ function memorySeedWorkflow() {
   const workflow = createDefaultWorkflow();
   const llm = workflow.graph.nodes.find((node) => node.type === "llm");
   if (llm?.type === "llm") {
-    llm.config = { ...llm.config, systemPrompt: "sys", userPrompt: "{{start1.topic}}", memory: true };
+    llm.config = {
+      ...llm.config,
+      messages: [
+        { role: "system", content: "sys" },
+        { role: "user", content: "{{start1.topic}}" },
+      ],
+      memory: true,
+    };
   }
   return workflow;
 }
@@ -705,7 +712,7 @@ describe("workflow API server", () => {
       ];
     }
     if (llm?.type === "llm") {
-      llm.config.userPrompt = "Explain {{start1.topic}} to {{start1.audience}}.";
+      llm.config.messages = [{ role: "user", content: "Explain {{start1.topic}} to {{start1.audience}}." }];
     }
 
     const app = createTestApp({ seedWorkflow: workflow, fetch: createModelFetch("Defaulted output.") });
@@ -811,7 +818,7 @@ describe("workflow API server", () => {
     const workflow = createDefaultWorkflow();
     const llm = workflow.graph.nodes.find((node) => node.type === "llm");
     if (llm?.type === "llm") {
-      llm.config.userPrompt = "Explain {{start1.missing}}.";
+      llm.config.messages = [{ role: "user", content: "Explain {{start1.missing}}." }];
     }
     const app = createTestApp({
       seedWorkflow: workflow,

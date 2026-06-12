@@ -69,7 +69,6 @@ describe("NodeInspector", () => {
   });
 
   it("edits Knowledge node retrieval settings and shows output variables", async () => {
-    const user = userEvent.setup();
     const workflow = createDefaultWorkflow();
     const knowledge = createNode("knowledge", { x: 360, y: 120 }, workflow.graph.nodes);
     if (knowledge.type !== "knowledge") throw new Error("Expected knowledge node.");
@@ -102,13 +101,15 @@ describe("NodeInspector", () => {
     expect(screen.getByText("result")).toBeInTheDocument();
     expect(screen.getByText("context")).toBeInTheDocument();
 
-    await user.clear(screen.getByDisplayValue("{{start1.topic}}"));
-    await user.type(screen.getByLabelText("Query Template"), "{{start1.topic}} 退款");
+    // The Query Template now renders in the rich-text variable editor.
+    expect(screen.getByLabelText("Query Template")).toBeInTheDocument();
+
     fireEvent.change(screen.getByLabelText("Top K"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("Min Score"), { target: { value: "0.5" } });
 
     expect(updateNode).toHaveBeenCalled();
     await waitFor(() => {
-      expect(updateNode.mock.calls.length).toBeGreaterThan(2);
+      expect(updateNode.mock.calls.length).toBeGreaterThan(1);
     });
   });
 

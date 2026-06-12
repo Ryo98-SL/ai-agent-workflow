@@ -58,8 +58,9 @@ describe("MVP smoke loop", () => {
     expect(screen.getByLabelText("Node label")).toHaveValue("LLM");
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "History" })).toBeInTheDocument();
-    expect(screen.getByText("start1.topic")).toBeInTheDocument();
-    expect(screen.getByText("resolvable")).toBeInTheDocument();
+    // The Dify-style prompt editor pins a SYSTEM message and exposes "Add Message".
+    expect(screen.getByText("SYSTEM")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Add Message/ })).toBeInTheDocument();
     // The run trigger is hidden while the inspector occupies the right rail.
     expect(screen.queryByRole("button", { name: "Run workflow" })).not.toBeInTheDocument();
     expect(screen.queryByText("Run Log")).not.toBeInTheDocument();
@@ -249,10 +250,16 @@ describe("MVP smoke loop", () => {
     await user.click(screen.getByRole("button", { name: "Run workflow" }));
     const livePanel = await findFloatingPanel("Run Log");
     expect(within(livePanel).getByText("Workflow run")).toBeInTheDocument();
-    expect(within(livePanel).getByText("Start Inputs")).toBeInTheDocument();
+    // Reopening onto an existing run lands on the run sub-view (live output),
+    // not the input sub-view, so it shows the live run rather than Start Inputs.
+    expect(within(livePanel).queryByText("Start Inputs")).not.toBeInTheDocument();
     await user.click(within(livePanel).getByRole("button", { name: /LLM/ }));
     expect(within(livePanel).getByText("Memory runtime output.")).toBeInTheDocument();
     expect(within(livePanel).queryByText("Live output for older header history.")).not.toBeInTheDocument();
+
+    // The back control returns to the input sub-view for a fresh run.
+    await user.click(within(livePanel).getByRole("button", { name: "Back to inputs" }));
+    expect(within(livePanel).getByText("Start Inputs")).toBeInTheDocument();
   });
 
   it("undoes and redoes connected node creation without reverting global model settings", async () => {

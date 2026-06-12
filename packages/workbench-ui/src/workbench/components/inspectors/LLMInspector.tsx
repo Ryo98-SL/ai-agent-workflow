@@ -1,15 +1,18 @@
-import { useState, type ReactNode } from "react";
-import { parsePromptVariableReferences, resolveLLMModelSettings } from "@ai-agent-workflow/workflow-domain";
+import { useState } from "react";
+import { Check, ChevronDown, Plus, Trash2 } from "lucide-react";
+import { resolveLLMModelSettings } from "@ai-agent-workflow/workflow-domain";
 import type {
   LLMModelSettings,
   LLMNode,
   ModelProvider,
+  PromptMessage,
+  PromptMessageRole,
   ProviderKeyPreference,
   WorkflowFile,
   WorkflowNode,
 } from "@ai-agent-workflow/workflow-domain";
-import { Textarea } from "@workbench/components/ui/textarea";
 import { Button } from "../Button";
+import { VariableRichTextEditor } from "../richtext/VariableRichTextEditor";
 import { ModelCapabilityTags } from "../ModelCapabilityTags";
 import { DEFAULT_MODEL_SETTINGS, ModelSettingsPanel } from "../ModelSettingsPanel";
 import { getModelCapabilities } from "../modelCatalog";
@@ -32,8 +35,6 @@ export function LLMInspector({
   onProviderKeyPreferenceChange,
   updateNode,
 }: LLMInspectorProps) {
-  const prompts = `${node.config.systemPrompt || ""}\n${node.config.userPrompt}`;
-  const variables = parsePromptVariableReferences(prompts);
   const modelSettings = modelSettingsForEditor(workflow, node);
   const hasModelOverride = Boolean(node.config.modelSettings || node.config.model);
 
@@ -60,20 +61,11 @@ export function LLMInspector({
         }
         onReset={() => updateConfig({ model: undefined, modelSettings: undefined })}
       />
-      <Field label="System prompt">
-        <Textarea
-          value={node.config.systemPrompt || ""}
-          onChange={(event) => updateConfig({ systemPrompt: event.target.value })}
-          className="min-h-24 resize-y leading-5"
-        />
-      </Field>
-      <Field label="User prompt">
-        <Textarea
-          value={node.config.userPrompt}
-          onChange={(event) => updateConfig({ userPrompt: event.target.value })}
-          className="min-h-28 resize-y leading-5"
-        />
-      </Field>
+      <PromptMessagesEditor
+        nodeId={node.id}
+        messages={node.config.messages}
+        onChange={(messages) => updateConfig({ messages })}
+      />
       <label className="flex items-start justify-between gap-3 rounded-md border border-border bg-card p-3">
         <span className="min-w-0">
           <span className="block text-sm font-medium text-foreground">Conversation memory</span>
@@ -88,33 +80,6 @@ export function LLMInspector({
           className="mt-0.5 size-4 shrink-0 accent-[hsl(var(--brand))]"
         />
       </label>
-      <section>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prompt Variables</h3>
-        {variables.length === 0 ? (
-          <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">Use {"{{start1.topic}}"} in prompts.</p>
-        ) : (
-          <div className="space-y-2">
-            {variables.map((variable) => {
-              const status = variable.ok ? referenceStatus(workflow, variable.nodeId, variable.path) : variable.error;
-              return (
-                <div key={variable.value} className="rounded-md border border-border bg-muted p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <code className="truncate text-xs font-semibold text-foreground">{variable.value}</code>
-                    <span
-                      className={[
-                        "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
-                        status === "resolvable" ? "bg-brand/15 text-brand" : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-                      ].join(" ")}
-                    >
-                      {status}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
       <NodeOutputVariablesPanel nodeType="llm" />
     </div>
   );
@@ -218,33 +183,132 @@ function sanitizeNodeModelSettings(settings: LLMModelSettings): LLMModelSettings
   };
 }
 
-function referenceStatus(workflow: WorkflowFile, nodeId: string, path: string[]): string {
-  const producer = workflow.graph.nodes.find((node) => node.id === nodeId);
-  if (!producer) {
-    return "missing producer";
-  }
+const ROLE_LABELS: Record<PromptMessageRole, string> = {
+  system: "SYSTEM",
+  user: "USER",
+  assistant: "ASSISTANT",
+};
 
-  const firstField = path[0];
-  if (producer.type === "start" && producer.config.fields.some((field) => field.name === firstField)) {
-    return "resolvable";
-  }
+/** Roles a non-first message can switch between — the pinned first message owns `system`. */
+const SELECTABLE_ROLES: PromptMessageRole[] = ["user", "assistant"];
 
-  if (producer.type === "llm" && ["text", "usage", "reasoning"].includes(firstField)) {
-    return "resolvable";
-  }
+/**
+ * Dify-style variable-length prompt editor. The first message is pinned to the
+ * `system` role (every LLM call keeps one system prompt); every later message
+ * exposes a role selector (system / user / assistant) and can be removed. New
+ * messages default to the `user` role.
+ */
+function PromptMessagesEditor({
+  nodeId,
+  messages,
+  onChange,
+}: {
+  nodeId: string;
+  messages: PromptMessage[];
+  onChange: (messages: PromptMessage[]) => void;
+}) {
+  const updateAt = (index: number, patch: Partial<PromptMessage>) =>
+    onChange(messages.map((message, i) => (i === index ? { ...message, ...patch } : message)));
+  const removeAt = (index: number) => onChange(messages.filter((_, i) => i !== index));
+  const addMessage = () => onChange([...messages, { role: "user", content: "" }]);
 
-  if (producer.type === "knowledge" && ["result", "context", "query"].includes(firstField)) {
-    return "resolvable";
-  }
-
-  return "missing field";
+  return (
+    <div className="space-y-2">
+      <div className="space-y-2">
+        {messages.map((message, index) => {
+          const pinned = index === 0;
+          return (
+            <div key={index} className="rounded-md border border-border bg-card">
+              <div className="flex items-center justify-between gap-2 px-2 pt-1.5">
+                {pinned ? (
+                  <span className="px-1 text-xs font-semibold uppercase tracking-wide text-foreground">
+                    {ROLE_LABELS.system}
+                  </span>
+                ) : (
+                  <MessageRoleSelect
+                    id={`llm-msg-role-${nodeId}-${index}`}
+                    role={message.role}
+                    onRoleChange={(role) => updateAt(index, { role })}
+                  />
+                )}
+                {!pinned && (
+                  <button
+                    type="button"
+                    onClick={() => removeAt(index)}
+                    aria-label="Remove message"
+                    className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                )}
+              </div>
+              <VariableRichTextEditor
+                nodeId={nodeId}
+                ariaLabel={`${ROLE_LABELS[message.role]} prompt`}
+                value={message.content}
+                onChange={(content) => updateAt(index, { content })}
+                placeholder={pinned ? "输入系统提示词，/ 引用上游变量" : "输入 / 引用上游变量"}
+                className="!border-0 min-h-20 !rounded-none !rounded-b-md focus-within:!ring-0"
+              />
+            </div>
+          );
+        })}
+      </div>
+      <Button variant="secondary" size="md" fullWidth className="justify-center gap-1.5" onClick={addMessage}>
+        <Plus className="size-4" />
+        Add Message
+      </Button>
+    </div>
+  );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function MessageRoleSelect({
+  id,
+  role,
+  onRoleChange,
+}: {
+  id: string;
+  role: PromptMessageRole;
+  onRoleChange: (role: PromptMessageRole) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
-      {children}
-    </label>
+    <Popover
+      id={id}
+      open={open}
+      onOpenChange={setOpen}
+      placement="bottom-start"
+      renderTrigger={({ ref, props }) => (
+        <button
+          {...props}
+          ref={ref}
+          type="button"
+          onClick={() => setOpen((current) => !current)}
+          aria-label="Change message role"
+          className="flex items-center gap-1 rounded px-1 py-0.5 text-xs font-semibold uppercase tracking-wide text-foreground transition-colors hover:bg-muted"
+        >
+          {ROLE_LABELS[role]}
+          <ChevronDown className="size-3 text-muted-foreground" />
+        </button>
+      )}
+    >
+      <div className="w-32 overflow-hidden rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg shadow-black/20">
+        {SELECTABLE_ROLES.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => {
+              onRoleChange(option);
+              setOpen(false);
+            }}
+            className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wide hover:bg-muted"
+          >
+            {ROLE_LABELS[option]}
+            {option === role && <Check className="size-3.5 text-brand" />}
+          </button>
+        ))}
+      </div>
+    </Popover>
   );
 }

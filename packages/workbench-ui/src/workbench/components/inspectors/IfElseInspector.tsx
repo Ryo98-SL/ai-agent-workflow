@@ -1,5 +1,4 @@
-import type { ReactNode } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import {
   CONDITION_OPERATORS,
   conditionOperatorLabel,
@@ -15,6 +14,7 @@ import { Input } from "@workbench/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workbench/components/ui/select";
 import { Button } from "../Button";
 import { NodeOutputVariablesPanel } from "../NodeOutputVariablesPanel";
+import { VariablePickerButton } from "../VariablePickerButton";
 
 type IfElseInspectorProps = {
   node: IfElseNode;
@@ -54,7 +54,7 @@ export function IfElseInspector({ node, updateNode }: IfElseInspectorProps) {
   return (
     <div className="space-y-4">
       {node.config.cases.map((branch, caseIndex) => (
-        <div key={branch.id} className="space-y-3 rounded-md border border-border bg-card p-3">
+        <div key={branch.id} className="space-y-3 rounded-md border border-border bg-card p-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {caseIndex === 0 ? "IF" : "ELSE IF"}
@@ -71,79 +71,93 @@ export function IfElseInspector({ node, updateNode }: IfElseInspectorProps) {
             )}
           </div>
 
-          {branch.conditions.map((condition, conditionIndex) => (
-            <div key={conditionIndex} className="space-y-2 rounded-md border border-border/70 bg-background p-2">
-              {conditionIndex > 0 && (
-                <CombinatorToggle
-                  value={branch.combinator}
-                  onChange={(combinator) => patchCase(caseIndex, { combinator })}
-                />
-              )}
-              <Field label="Variable">
-                <Input
-                  value={condition.variable}
-                  onChange={(event) => patchCondition(caseIndex, conditionIndex, { variable: event.target.value })}
-                  placeholder="{{llm1.text}}"
-                  className="font-mono text-xs"
-                />
-              </Field>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <Field label="Operator">
-                    <Select
-                      value={condition.operator}
-                      onValueChange={(value) =>
-                        patchCondition(caseIndex, conditionIndex, { operator: value as ConditionOperator })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CONDITION_OPERATORS.map((operator) => (
-                          <SelectItem key={operator} value={operator}>
-                            {conditionOperatorLabel(operator)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                </div>
-                {!isValuelessOperator(condition.operator) && (
-                  <div className="flex-1">
-                    <Field label="Value">
-                      <Input
-                        value={condition.value}
-                        onChange={(event) => patchCondition(caseIndex, conditionIndex, { value: event.target.value })}
-                        placeholder="Comparison value"
-                      />
-                    </Field>
-                  </div>
-                )}
-              </div>
-              {branch.conditions.length > 1 && (
+          <div className="flex gap-2">
+            {/* AND/OR connector spanning the condition group */}
+            {branch.conditions.length > 1 && (
+              <div className="relative flex w-7 shrink-0 justify-center">
+                <div className="absolute inset-y-4 left-1/2 w-px -translate-x-1/2 bg-border" aria-hidden />
                 <button
                   type="button"
-                  className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-destructive"
-                  onClick={() =>
-                    patchCase(caseIndex, {
-                      conditions: branch.conditions.filter((_, index) => index !== conditionIndex),
-                    })
-                  }
+                  onClick={() => patchCase(caseIndex, { combinator: branch.combinator === "and" ? "or" : "and" })}
+                  className="relative z-10 my-auto flex items-center gap-1 rounded-md border border-border bg-background px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+                  title="Toggle AND / OR"
                 >
-                  <Trash2 size={12} aria-hidden /> Remove condition
+                  {branch.combinator}
+                  <RefreshCw size={10} aria-hidden />
                 </button>
-              )}
-            </div>
-          ))}
+              </div>
+            )}
 
-          <button
-            type="button"
-            className="flex items-center gap-1 text-xs font-medium text-brand transition-colors hover:text-brand/80"
-            onClick={() => patchCase(caseIndex, { conditions: [...branch.conditions, { ...emptyCondition }] })}
-          >
-            <Plus size={12} aria-hidden /> Add condition
-          </button>
+            <div className="min-w-0 flex-1 space-y-2">
+              {branch.conditions.length === 0 ? (
+                <p className="rounded-md border border-dashed border-border px-2 py-3 text-center text-xs text-muted-foreground">
+                  No conditions yet — this branch never matches until you add one.
+                </p>
+              ) : (
+                branch.conditions.map((condition, conditionIndex) => (
+                  <div key={conditionIndex} className="space-y-1.5 rounded-md border border-border bg-background p-1.5">
+                    {/* Variable on its own full-width row so the node-variable tag
+                        is never squeezed by the operator. */}
+                    <div className="flex items-center gap-1">
+                      <VariablePickerButton
+                        nodeId={node.id}
+                        value={condition.variable}
+                        onChange={(reference) => patchCondition(caseIndex, conditionIndex, { variable: reference })}
+                      />
+                      <button
+                        type="button"
+                        aria-label="Remove condition"
+                        className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() =>
+                          patchCase(caseIndex, {
+                            conditions: branch.conditions.filter((_, index) => index !== conditionIndex),
+                          })
+                        }
+                      >
+                        <Trash2 size={14} aria-hidden />
+                      </button>
+                    </div>
+                    {/* Operator + comparison value share the next row. */}
+                    <div className="flex items-center gap-1.5">
+                      <Select
+                        value={condition.operator}
+                        onValueChange={(value) =>
+                          patchCondition(caseIndex, conditionIndex, { operator: value as ConditionOperator })
+                        }
+                      >
+                        <SelectTrigger className="w-36 shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CONDITION_OPERATORS.map((operator) => (
+                            <SelectItem key={operator} value={operator}>
+                              {conditionOperatorLabel(operator)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {!isValuelessOperator(condition.operator) && (
+                        <Input
+                          value={condition.value}
+                          onChange={(event) => patchCondition(caseIndex, conditionIndex, { value: event.target.value })}
+                          placeholder="比较值"
+                          className="min-w-0 flex-1"
+                        />
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+
+              <button
+                type="button"
+                className="flex items-center gap-1 text-xs font-medium text-brand transition-colors hover:text-brand/80"
+                onClick={() => patchCase(caseIndex, { conditions: [...branch.conditions, { ...emptyCondition }] })}
+              >
+                <Plus size={12} aria-hidden /> Add condition
+              </button>
+            </div>
+          </div>
         </div>
       ))}
 
@@ -169,40 +183,5 @@ export function IfElseInspector({ node, updateNode }: IfElseInspectorProps) {
 
       <NodeOutputVariablesPanel nodeType="ifElse" />
     </div>
-  );
-}
-
-function CombinatorToggle({
-  value,
-  onChange,
-}: {
-  value: IfElseCase["combinator"];
-  onChange: (value: IfElseCase["combinator"]) => void;
-}) {
-  return (
-    <div className="inline-flex overflow-hidden rounded-md border border-border text-xs">
-      {(["and", "or"] as const).map((option) => (
-        <button
-          key={option}
-          type="button"
-          className={[
-            "px-2 py-0.5 font-medium uppercase transition-colors",
-            value === option ? "bg-brand text-brand-foreground" : "bg-background text-muted-foreground hover:text-foreground",
-          ].join(" ")}
-          onClick={() => onChange(option)}
-        >
-          {option}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
-      {children}
-    </label>
   );
 }

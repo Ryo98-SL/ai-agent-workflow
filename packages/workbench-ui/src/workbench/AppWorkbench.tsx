@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useMemo, useState, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { toast } from "sonner";
 import { useWorkflowExecution } from "./hooks/useWorkflowExecution";
 import { useWorkflowGraphHistory } from "./hooks/useWorkflowGraphHistory";
 import { Loader2 } from "lucide-react";
 import {
+  cloneNode,
   createDefaultWorkflow,
   createKnowledgeDemoWorkflow,
   createNode,
   ifElseHandleIds,
+  type WorkflowTemplate,
   type ModelProvider,
   type ModelProviderKeys,
   type OpenAICompatibleSettings,
@@ -20,6 +23,10 @@ import {
 import type { WorkflowDto } from "@ai-agent-workflow/api-contracts";
 import type { RunInput } from "@ai-agent-workflow/api-contracts";
 import { WorkbenchLayout } from "./components/WorkbenchLayout";
+import { WorkflowGraphProvider } from "./components/WorkflowGraphContext";
+import { isWorkflowCanvasFocus, isWorkflowShortcutEditableTarget } from "./shortcutFocus";
+import { getWorkflowNodeSize } from "./components/workflowNodes";
+import { NewWorkflowDialog } from "./components/NewWorkflowDialog";
 import { Toaster } from "../components/ui/sonner";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { WorkbenchDataProvider, useWorkbenchData } from "../data/WorkbenchDataProvider";
@@ -29,7 +36,7 @@ import { useProviderKeyStore } from "../data/useProviderKeyStore";
 import { useQueryClient } from "@tanstack/react-query";
 import type { WorkflowMetaPatch } from "./components/WorkflowMetaEditor";
 import { ImportLocalDataPrompt } from "../auth/ImportLocalDataPrompt";
-import type { AddNodeOptions, AppWorkbenchProps } from "./types";
+import type { AddNodeOptions, AppWorkbenchProps, WorkflowNodeAction } from "./types";
 import { workflowDirtySnapshot } from "./workflowDirtySnapshot";
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8788";
@@ -67,6 +74,8 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
+  // Lifted so the active Debug Panel sub-route survives panel close/reopen.
+  const [debugView, setDebugView] = useState<"input" | "run">("input");
   const { canRedo, canUndo, commitGraphHistoryEntry, redo, resetHistory, undo } = useWorkflowGraphHistory({
     setWorkflow,
   });
@@ -245,8 +254,14 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
             x: anchorNode.position.x + (options?.handleType === "target" ? -260 : 260),
             y: anchorNode.position.y,
           }
-        : { x: 180 + workflow.graph.nodes.length * 32, y: 120 + workflow.graph.nodes.length * 24 };
+        : options?.position ?? { x: 180 + workflow.graph.nodes.length * 32, y: 120 + workflow.graph.nodes.length * 24 };
       const node = createNode(type, position, workflow.graph.nodes);
+      // Cursor-follow placement passes the point the node should center on, so
+      // shift the freshly created node from its top-left origin to that center.
+      if (!anchorNode && options?.position) {
+        const size = getWorkflowNodeSize(node);
+        node.position = { x: options.position.x - size.width / 2, y: options.position.y - size.height / 2 };
+      }
       const edge = anchorNode
         ? createConnectedNodeEdge(anchorNode.id, node.id, options?.handleType, options?.sourceHandleId)
         : undefined;
@@ -259,6 +274,36 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     [commitGraphHistoryEntry, workflow.graph.nodes],
   );
 
+  // Cursor-follow placement (left palette only): a node type is "armed" and a
+  // ghost follows the cursor until the user clicks the canvas to commit it.
+  const [placementNodeType, setPlacementNodeType] = useState<WorkflowNodeType | null>(null);
+
+  const beginNodePlacement = useCallback((type: WorkflowNodeType) => {
+    setPlacementNodeType(type);
+    setPaletteOpen(false);
+  }, []);
+
+  const cancelNodePlacement = useCallback(() => setPlacementNodeType(null), []);
+
+  const confirmNodePlacement = useCallback(
+    (position: { x: number; y: number }) => {
+      if (placementNodeType) {
+        addNode(placementNodeType, { position });
+        setPlacementNodeType(null);
+      }
+    },
+    [addNode, placementNodeType],
+  );
+
+  const togglePalette = useCallback(() => {
+    // While placement is armed, the "+" button cancels it instead of reopening.
+    if (placementNodeType) {
+      setPlacementNodeType(null);
+      return;
+    }
+    setPaletteOpen((current) => !current);
+  }, [placementNodeType]);
+
   const handleSelectNode = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId);
     setInspectorOpen(true);
@@ -270,15 +315,105 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     setInspectorOpen(false);
   }, []);
 
+  // Node card actions (three-dot menu + ⌘C/⌘V/⌘D shortcuts). The clipboard is a
+  // ref — copying shouldn't re-render, and it survives across selection changes.
+  // Start nodes are excluded everywhere: a workflow must always have exactly one.
+  const clipboardRef = useRef<WorkflowNode | null>(null);
+
+  const duplicateNode = useCallback(
+    (nodeId: string) => {
+      const source = workflow.graph.nodes.find((node) => node.id === nodeId);
+      if (!source || source.type === "start") {
+        return;
+      }
+      const clone = cloneNode(source, workflow.graph.nodes);
+      commitGraphHistoryEntry({ type: "addNode", node: clone, edges: [] });
+      setSelectedNodeId(clone.id);
+      setInspectorOpen(true);
+      setDebugOpen(false);
+    },
+    [commitGraphHistoryEntry, workflow.graph.nodes],
+  );
+
+  const copyNode = useCallback(
+    (nodeId: string) => {
+      const source = workflow.graph.nodes.find((node) => node.id === nodeId);
+      if (!source || source.type === "start") {
+        return;
+      }
+      clipboardRef.current = structuredClone(source);
+      toast.success(`Copied "${source.label}"`);
+    },
+    [workflow.graph.nodes],
+  );
+
+  const pasteNode = useCallback(() => {
+    const source = clipboardRef.current;
+    if (!source || source.type === "start") {
+      return;
+    }
+    const clone = cloneNode(source, workflow.graph.nodes);
+    commitGraphHistoryEntry({ type: "addNode", node: clone, edges: [] });
+    setSelectedNodeId(clone.id);
+    setInspectorOpen(true);
+    setDebugOpen(false);
+  }, [commitGraphHistoryEntry, workflow.graph.nodes]);
+
+  const deleteNode = useCallback(
+    (nodeId: string) => {
+      const node = workflow.graph.nodes.find((candidate) => candidate.id === nodeId);
+      if (!node || node.type === "start") {
+        return;
+      }
+      const edges = workflow.graph.edges.filter((edge) => edge.source === nodeId || edge.target === nodeId);
+      commitGraphHistoryEntry({ type: "removeNodes", nodes: [node], edges });
+      if (selectedNodeId === nodeId) {
+        handleCloseInspector();
+      }
+    },
+    [commitGraphHistoryEntry, handleCloseInspector, selectedNodeId, workflow.graph.edges, workflow.graph.nodes],
+  );
+
+  const handleNodeAction = useCallback(
+    (nodeId: string, action: WorkflowNodeAction) => {
+      if (action === "copy") {
+        copyNode(nodeId);
+      } else if (action === "duplicate") {
+        duplicateNode(nodeId);
+      } else if (action === "delete") {
+        deleteNode(nodeId);
+      }
+    },
+    [copyNode, deleteNode, duplicateNode],
+  );
+
+  // Loads a workflow as a fresh unsaved draft (canvas + panels reset).
+  const loadWorkflowDraft = useCallback(
+    (next: WorkflowFile) => {
+      setWorkflow(next);
+      resetSelectionPanels();
+      setDebugState({ status: "idle" });
+      setWorkflowId(undefined);
+      setSavedWorkflowSnapshot(workflowDirtySnapshot(next));
+      resetHistory();
+    },
+    [resetHistory, resetSelectionPanels],
+  );
+
+  // Blank fallback (e.g. after deleting the last workflow) — no picker.
   const handleNewWorkflow = useCallback(() => {
-    const next = createDefaultWorkflow();
-    setWorkflow(next);
-    resetSelectionPanels();
-    setDebugState({ status: "idle" });
-    setWorkflowId(undefined);
-    setSavedWorkflowSnapshot(workflowDirtySnapshot(next));
-    resetHistory();
-  }, [resetHistory, resetSelectionPanels]);
+    loadWorkflowDraft(createDefaultWorkflow());
+  }, [loadWorkflowDraft]);
+
+  const [newWorkflowDialogOpen, setNewWorkflowDialogOpen] = useState(false);
+  const openNewWorkflowDialog = useCallback(() => setNewWorkflowDialogOpen(true), []);
+  const handleSelectTemplate = useCallback(
+    (template: WorkflowTemplate) => {
+      loadWorkflowDraft(template.build());
+      setNewWorkflowDialogOpen(false);
+    },
+    [loadWorkflowDraft],
+  );
 
   const invalidateWorkflowList = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["workflows"] });
@@ -421,12 +556,40 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
       if (key === "y" && !event.shiftKey) {
         event.preventDefault();
         redo();
+        return;
+      }
+
+      // Node card actions only fire when the canvas (not a side panel like the
+      // Node Inspector) holds focus, so ⌘C/⌘V inside the inspector do a native
+      // text copy/paste instead of cloning the selected node.
+      if (!isWorkflowCanvasFocus(event.target)) {
+        return;
+      }
+
+      // Node card actions. Copy/Duplicate act on the selected node; Paste needs a
+      // filled clipboard. Each guards on its own precondition so the browser's
+      // native ⌘C/⌘V still works when no node is involved.
+      if (key === "c" && selectedNodeId) {
+        event.preventDefault();
+        copyNode(selectedNodeId);
+        return;
+      }
+
+      if (key === "v" && clipboardRef.current) {
+        event.preventDefault();
+        pasteNode();
+        return;
+      }
+
+      if (key === "d" && selectedNodeId) {
+        event.preventDefault();
+        duplicateNode(selectedNodeId);
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [redo, undo]);
+  }, [copyNode, duplicateNode, pasteNode, redo, selectedNodeId, undo]);
 
   // While the Save button is active (unsaved changes exist), warn before the tab
   // closes or navigates away so users don't forget to save. Browsers ignore any
@@ -511,6 +674,7 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
   }
 
   return (
+    <WorkflowGraphProvider nodes={workflow.graph.nodes} edges={workflow.graph.edges}>
     <WorkbenchLayout
       workflow={workflow}
       workflowId={workflowId}
@@ -523,8 +687,14 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
       settingsOpen={settingsOpen}
       inspectorOpen={inspectorOpen}
       debugOpen={debugOpen}
+      debugView={debugView}
+      onDebugViewChange={setDebugView}
       showDevModelProviders={showDevModelProviders}
       onAddNode={addNode}
+      placementNodeType={placementNodeType}
+      onBeginNodePlacement={beginNodePlacement}
+      onConfirmNodePlacement={confirmNodePlacement}
+      onCancelNodePlacement={cancelNodePlacement}
       onCloseDebug={closeDebug}
       onCloseInspector={handleCloseInspector}
       canRedo={canRedo}
@@ -543,37 +713,26 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
       switching={switching}
       onConfirmSwitch={confirmPendingSwitch}
       onCancelSwitch={cancelPendingSwitch}
-      onCreateWorkflow={handleNewWorkflow}
+      onCreateWorkflow={openNewWorkflowDialog}
       onDeleteWorkflow={deleteWorkflowById}
       onSaveWorkflowMeta={saveWorkflowMeta}
       onSaveWorkflow={() => saveWorkflow("save")}
+      onNodeAction={handleNodeAction}
       onSelectNode={handleSelectNode}
-      onTogglePalette={() => setPaletteOpen((current) => !current)}
+      onTogglePalette={togglePalette}
       onToggleSettings={() => setSettingsOpen((current) => !current)}
       onUndo={undo}
       onUpdateModelSettings={updateModelSettings}
       onUpdateProviderKeyPreference={updateProviderKeyPreference}
       onUpdateNode={updateNode}
     />
+    <NewWorkflowDialog
+      open={newWorkflowDialogOpen}
+      onOpenChange={setNewWorkflowDialogOpen}
+      onSelect={handleSelectTemplate}
+    />
+    </WorkflowGraphProvider>
   );
-}
-
-function isWorkflowShortcutEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  if (target.isContentEditable || target.closest("[contenteditable='true']")) {
-    return true;
-  }
-
-  const tagName = target.tagName.toLowerCase();
-  if (tagName === "input" || tagName === "textarea" || tagName === "select") {
-    return true;
-  }
-
-  const role = target.getAttribute("role");
-  return role === "textbox" || role === "combobox" || role === "searchbox";
 }
 
 /**

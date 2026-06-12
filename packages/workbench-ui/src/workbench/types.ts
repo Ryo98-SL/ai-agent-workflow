@@ -122,11 +122,20 @@ export type AppWorkbenchProps = {
 
 export type WorkflowNodePaletteHandleType = "target" | "source";
 
+/** Card-level actions exposed by the node's three-dot menu. */
+export type WorkflowNodeAction = "copy" | "duplicate" | "delete";
+export type WorkflowNodeActionHandler = (nodeId: string, action: WorkflowNodeAction) => void;
+
 export type AddNodeOptions = {
   sourceNodeId?: string;
   handleType?: WorkflowNodePaletteHandleType;
   /** Which source handle the connecting edge leaves from (multi-output nodes). */
   sourceHandleId?: string;
+  /**
+   * Flow-coordinate point the new node should center on. Used by cursor-follow
+   * placement from the left palette; ignored when connecting from a source node.
+   */
+  position?: { x: number; y: number };
 };
 
 export type WorkflowMutators = {

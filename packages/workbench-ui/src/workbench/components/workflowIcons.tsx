@@ -9,8 +9,10 @@ import {
   type LucideIcon,
   Mail,
   MessageSquare,
+  Plus,
   Search,
   Sparkles,
+  UserCheck,
   Workflow,
   Zap,
 } from "lucide-react";
@@ -29,6 +31,8 @@ export const WORKFLOW_ICONS: Record<string, LucideIcon> = {
   db: Database,
   mail: Mail,
   code: Code,
+  plus: Plus,
+  userCheck: UserCheck,
 };
 
 export const WORKFLOW_ICON_KEYS = Object.keys(WORKFLOW_ICONS);

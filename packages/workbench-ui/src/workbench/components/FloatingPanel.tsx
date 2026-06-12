@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Button } from "./Button";
 
 type FloatingPanelProps = {
@@ -9,9 +9,12 @@ type FloatingPanelProps = {
   onClose: () => void;
   children: ReactNode;
   className?: string;
+  style?: CSSProperties;
   headerContent?: ReactNode;
   /** Optional visual rendered to the left of the title (e.g. a node-type icon). */
   titleIcon?: ReactNode;
+  /** Optional resize handle (e.g. a draggable edge) rendered inside the panel. */
+  resizeHandle?: ReactNode;
 };
 
 export function FloatingPanel({
@@ -21,16 +24,20 @@ export function FloatingPanel({
   onClose,
   children,
   className = "",
+  style,
   headerContent,
   titleIcon,
+  resizeHandle,
 }: FloatingPanelProps) {
   return (
     <aside
+      style={style}
       className={[
         "flex flex-col overflow-hidden rounded-md border border-border bg-card text-card-foreground shadow-xl shadow-black/20",
         className,
       ].join(" ")}
     >
+      {resizeHandle}
       <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
         {headerContent ?? (
           <div className="flex min-w-0 items-center gap-2.5">

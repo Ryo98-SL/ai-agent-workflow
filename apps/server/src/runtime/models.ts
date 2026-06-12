@@ -152,17 +152,34 @@ export async function callChatCompletion(
   history: Array<{ role: "user" | "assistant"; content: string }> = [],
 ) {
   const settings = chooseModelSettings(workflow, node);
-  const systemPrompt = node.config.systemPrompt ? resolvePrompt(node.config.systemPrompt, state) : "";
-  const userPrompt = resolvePrompt(node.config.userPrompt, state);
+  // Resolve every configured prompt message, dropping ones that are blank after
+  // variable substitution (matches the prior "skip empty system prompt" behavior).
+  const resolved = node.config.messages
+    .map((message) => ({ role: message.role, content: resolvePrompt(message.content, state) }))
+    .filter((message) => message.content.trim().length > 0);
+  const toLangChainMessage = (message: { role: "system" | "user" | "assistant"; content: string }) =>
+    message.role === "system"
+      ? new SystemMessage(message.content)
+      : message.role === "assistant"
+        ? new AIMessage(message.content)
+        : new HumanMessage(message.content);
+
   const model = createChatModel(settings, node, fetchImpl);
   const historyMessages = history.map((message) =>
     message.role === "assistant" ? new AIMessage(message.content) : new HumanMessage(message.content),
   );
+  // Memory history belongs after any leading system prompts but before this
+  // turn's user/assistant messages, so prior turns frame the new request.
+  const firstNonSystem = resolved.findIndex((message) => message.role !== "system");
+  const splitAt = firstNonSystem === -1 ? resolved.length : firstNonSystem;
   const messages = [
-    ...(systemPrompt ? [new SystemMessage(systemPrompt)] : []),
+    ...resolved.slice(0, splitAt).map(toLangChainMessage),
     ...historyMessages,
-    new HumanMessage(userPrompt),
+    ...resolved.slice(splitAt).map(toLangChainMessage),
   ];
+  // The user-facing prompt for this turn (last user message), kept for memory append.
+  const userPrompt = [...resolved].reverse().find((message) => message.role === "user")?.content ?? "";
+  const hasSystemPrompt = resolved.some((message) => message.role === "system");
 
   let response: Record<string, any>;
   try {
@@ -170,7 +187,7 @@ export async function callChatCompletion(
       nodeId: node.id,
       provider: settings.provider,
       model: settings.model,
-      hasSystemPrompt: Boolean(systemPrompt),
+      hasSystemPrompt,
       userPromptLength: userPrompt.length,
     });
     response = (await model.invoke(messages)) as Record<string, any>;

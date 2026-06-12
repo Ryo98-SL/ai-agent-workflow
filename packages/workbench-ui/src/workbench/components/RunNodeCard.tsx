@@ -71,8 +71,7 @@ export function buildInspectorSections(
 
   if (workflowNode?.type === "llm") {
     sections.input = {
-      systemPrompt: workflowNode.config.systemPrompt ?? null,
-      userPrompt: workflowNode.config.userPrompt,
+      messages: workflowNode.config.messages,
     };
     const settings = resolveLLMModelSettings(workflow, workflowNode);
     if (settings) {

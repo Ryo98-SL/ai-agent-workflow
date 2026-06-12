@@ -1,4 +1,5 @@
 import { UserCheck } from "lucide-react";
+import { VariableText } from "../VariableTag";
 import { WorkflowNodeCardShell, type WorkflowNodeProps } from "./WorkflowNodeCardShell";
 
 export function HumanInputWorkflowNode(props: WorkflowNodeProps) {
@@ -7,8 +8,8 @@ export function HumanInputWorkflowNode(props: WorkflowNodeProps) {
     <WorkflowNodeCardShell {...props} Icon={UserCheck}>
       {node.type === "humanInput" ? (
         <div className="mt-1 space-y-1.5">
-          <p className="line-clamp-2 text-xs leading-4 text-muted-foreground">
-            {node.config.prompt?.trim() || "Pause for a human decision."}
+          <p className="text-xs leading-5 text-muted-foreground">
+            <VariableText text={node.config.prompt?.trim() || "Pause for a human decision."} />
           </p>
           <div className="flex flex-wrap gap-1">
             {node.config.actions.map((action) => (

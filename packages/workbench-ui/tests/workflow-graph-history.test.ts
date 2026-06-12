@@ -22,7 +22,7 @@ describe("workflow graph history", () => {
     expect(movedNode).toMatchObject({ label: "Edited LLM", description: "Inspector-owned description" });
     expect(movedNode?.type).toBe("llm");
     if (movedNode?.type === "llm") {
-      expect(movedNode.config.userPrompt).toBe("Inspector-owned prompt");
+      expect(movedNode.config.messages[0].content).toBe("Inspector-owned prompt");
       expect(movedNode.config.modelSettings?.model).toBe("gpt-5.2");
     }
   });
@@ -74,7 +74,7 @@ function withEditedLlmNode(workflow: WorkflowFile): WorkflowFile {
               description: "Inspector-owned description",
               config: {
                 ...node.config,
-                userPrompt: "Inspector-owned prompt",
+                messages: [{ role: "user", content: "Inspector-owned prompt" }],
                 modelSettings: {
                 provider: "openai",
                   baseURL: "https://api.openai.com/v1",

@@ -150,7 +150,10 @@ function knowledgeToLlmWorkflow(knowledgeBaseIds: string[]): WorkflowFile {
     queryTemplate: "{{start1.topic}}",
     retrieval: { mode: "semantic", topK: 2 },
   };
-  llm.config = { ...llm.config, userPrompt: "资料：{{knowledge1.context}}\n问题：{{start1.topic}}" };
+  llm.config = {
+    ...llm.config,
+    messages: [{ role: "user", content: "资料：{{knowledge1.context}}\n问题：{{start1.topic}}" }],
+  };
   return {
     ...workflow,
     graph: {
@@ -616,7 +619,14 @@ function memoryWorkflow(): WorkflowFile {
   if (!start || llm?.type !== "llm") {
     throw new Error("Expected start and llm nodes.");
   }
-  llm.config = { ...llm.config, systemPrompt: "sys", userPrompt: "{{start1.topic}}", memory: true };
+  llm.config = {
+    ...llm.config,
+    messages: [
+      { role: "system", content: "sys" },
+      { role: "user", content: "{{start1.topic}}" },
+    ],
+    memory: true,
+  };
   return {
     ...workflow,
     graph: { nodes: [start, llm], edges: [{ id: "edge-start-llm", source: "start1", target: "llm1" }] },

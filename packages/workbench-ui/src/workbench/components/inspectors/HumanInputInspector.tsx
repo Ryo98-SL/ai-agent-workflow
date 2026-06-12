@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { HumanInputAction, HumanInputNode, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 import { Input } from "@workbench/components/ui/input";
-import { Textarea } from "@workbench/components/ui/textarea";
 import { NodeOutputVariablesPanel } from "../NodeOutputVariablesPanel";
+import { VariableRichTextEditor } from "../richtext/VariableRichTextEditor";
 
 type HumanInputInspectorProps = {
   node: HumanInputNode;
@@ -33,11 +33,13 @@ export function HumanInputInspector({ node, updateNode }: HumanInputInspectorPro
   return (
     <div className="space-y-4">
       <Field label="Prompt">
-        <Textarea
+        <VariableRichTextEditor
+          nodeId={node.id}
+          ariaLabel="Prompt"
           value={node.config.prompt}
-          onChange={(event) => updateConfig({ prompt: event.target.value })}
-          placeholder="请审核以下内容…  支持 {{nodeId.field}} 变量"
-          rows={3}
+          onChange={(next) => updateConfig({ prompt: next })}
+          placeholder="请审核以下内容…  输入 / 引用变量"
+          className="min-h-16"
         />
       </Field>
 
@@ -112,11 +114,13 @@ export function HumanInputInspector({ node, updateNode }: HumanInputInspectorPro
               />
             </Field>
             <Field label="Default text">
-              <Textarea
+              <VariableRichTextEditor
+                nodeId={node.id}
+                ariaLabel="Default text"
                 value={node.config.defaultText ?? ""}
-                onChange={(event) => updateConfig({ defaultText: event.target.value || undefined })}
-                placeholder="预填文本，支持 {{nodeId.field}} 变量"
-                rows={2}
+                onChange={(next) => updateConfig({ defaultText: next || undefined })}
+                placeholder="预填文本，输入 / 引用变量"
+                className="min-h-12"
               />
             </Field>
           </div>

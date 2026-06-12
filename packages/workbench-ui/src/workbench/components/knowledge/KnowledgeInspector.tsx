@@ -8,10 +8,10 @@ import {
 } from "@ai-agent-workflow/workflow-domain";
 import { Input } from "@workbench/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workbench/components/ui/select";
-import { Textarea } from "@workbench/components/ui/textarea";
 import { useKnowledgeBases } from "../../../data/useKnowledgeBases";
 import { Button } from "../Button";
 import { NodeOutputVariablesPanel } from "../NodeOutputVariablesPanel";
+import { VariableRichTextEditor } from "../richtext/VariableRichTextEditor";
 
 type KnowledgeInspectorProps = {
   workflow: WorkflowFile;
@@ -60,10 +60,13 @@ export function KnowledgeInspector({ workflow, node, onOpenKnowledgeBases, updat
 
       <label className="block">
         <span className="mb-1 block text-xs font-medium text-muted-foreground">Query Template</span>
-        <Textarea
+        <VariableRichTextEditor
+          nodeId={node.id}
+          ariaLabel="Query Template"
           value={node.config.queryTemplate}
-          onChange={(event) => updateConfig({ queryTemplate: event.target.value })}
-          className="min-h-20 resize-y leading-5"
+          onChange={(next) => updateConfig({ queryTemplate: next })}
+          placeholder="输入 / 引用上游变量"
+          className="min-h-20"
         />
       </label>
 

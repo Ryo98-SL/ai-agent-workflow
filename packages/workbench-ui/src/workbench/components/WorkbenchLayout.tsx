@@ -23,11 +23,12 @@ import { ThemeMenu } from "../../theme/ThemeMenu";
 import { AuthMenu } from "../../auth/AuthMenu";
 import { RunHistoryMenu } from "./RunHistoryMenu";
 import { WorkflowSwitcher } from "./WorkflowSwitcher";
+import { useResizableWidth } from "../hooks/useResizableWidth";
 import { WorkflowSwitchBar } from "./WorkflowSwitchBar";
 import type { WorkflowMetaPatch } from "./WorkflowMetaEditor";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import type { WorkflowGraphHistoryEntry } from "../hooks/useWorkflowGraphHistory";
-import type { AddNodeOptions, DebugState, NodeExecutionState } from "../types";
+import type { AddNodeOptions, DebugState, NodeExecutionState, WorkflowNodeActionHandler } from "../types";
 
 type WorkbenchLayoutProps = {
   workflow: WorkflowFile;
@@ -41,10 +42,16 @@ type WorkbenchLayoutProps = {
   settingsOpen: boolean;
   inspectorOpen: boolean;
   debugOpen: boolean;
+  debugView: "input" | "run";
+  onDebugViewChange: (view: "input" | "run") => void;
   showDevModelProviders: boolean;
   canRedo: boolean;
   canUndo: boolean;
   onAddNode: (type: WorkflowNodeType, options?: AddNodeOptions) => void;
+  placementNodeType: WorkflowNodeType | null;
+  onBeginNodePlacement: (type: WorkflowNodeType) => void;
+  onConfirmNodePlacement: (position: { x: number; y: number }) => void;
+  onCancelNodePlacement: () => void;
   onCloseDebug: () => void;
   onCloseInspector: () => void;
   onClosePalette: () => void;
@@ -65,6 +72,7 @@ type WorkbenchLayoutProps = {
   onDeleteWorkflow: (id: string) => void;
   onSaveWorkflowMeta: (id: string, patch: WorkflowMetaPatch) => Promise<boolean>;
   onSaveWorkflow: () => void;
+  onNodeAction: WorkflowNodeActionHandler;
   onSelectNode: (nodeId: string) => void;
   onTogglePalette: () => void;
   onToggleSettings: () => void;
@@ -86,10 +94,16 @@ export function WorkbenchLayout({
   settingsOpen,
   inspectorOpen,
   debugOpen,
+  debugView,
+  onDebugViewChange,
   showDevModelProviders,
   canRedo,
   canUndo,
   onAddNode,
+  placementNodeType,
+  onBeginNodePlacement,
+  onConfirmNodePlacement,
+  onCancelNodePlacement,
   onCloseDebug,
   onCloseInspector,
   onClosePalette,
@@ -110,6 +124,7 @@ export function WorkbenchLayout({
   onDeleteWorkflow,
   onSaveWorkflowMeta,
   onSaveWorkflow,
+  onNodeAction,
   onSelectNode,
   onTogglePalette,
   onToggleSettings,
@@ -120,6 +135,13 @@ export function WorkbenchLayout({
 }: WorkbenchLayoutProps) {
   const hasStartNode = workflow.graph.nodes.some((node) => node.type === "start");
   const [knowledgeBasesOpen, setKnowledgeBasesOpen] = useState(false);
+  const inspectorResize = useResizableWidth({
+    storageKey: "workbench:inspectorWidth",
+    defaultWidth: 380,
+    min: 340,
+    max: 720,
+    edge: "left",
+  });
 
   return (
     <main className="relative h-full min-h-0 flex flex-col overflow-hidden bg-background text-foreground">
@@ -206,11 +228,16 @@ export function WorkbenchLayout({
           workflow={workflow}
           selectedNodeId={selectedNodeId}
           nodeStates={nodeStates}
+          waitingNodeId={debugState.status === "waiting" ? debugState.waiting?.interrupt.nodeId : undefined}
           canRedo={canRedo}
           canUndo={canUndo}
           onAddNode={onAddNode}
+          placementNodeType={placementNodeType}
+          onConfirmPlacement={onConfirmNodePlacement}
+          onCancelPlacement={onCancelNodePlacement}
           onClearSelection={onCloseInspector}
           onCommitGraphHistoryEntry={onCommitGraphHistoryEntry}
+          onNodeAction={onNodeAction}
           onRedo={onRedo}
           onSelectNode={onSelectNode}
           onUndo={onUndo}
@@ -252,7 +279,7 @@ export function WorkbenchLayout({
             className="h-[min(70vh,560px)] w-[300px]"
           >
             <div className="h-full">
-              <NodePalette hasStartNode={hasStartNode} onAddNode={onAddNode} />
+              <NodePalette hasStartNode={hasStartNode} onAddNode={onBeginNodePlacement} />
             </div>
           </FloatingPanel>
         </Popover>
@@ -279,7 +306,7 @@ export function WorkbenchLayout({
                 ref={ref}
                 variant="successSoft"
                 size="icon"
-                disabled={!hasStartNode || debugState.status === "running"}
+                disabled={!hasStartNode}
                 onClick={onToggleRunPanel}
                 aria-label="Run workflow"
                 title={hasStartNode ? "Run workflow" : "Add a Start node first"}
@@ -308,6 +335,8 @@ export function WorkbenchLayout({
                   onResumeRun={onResumeRun}
                   onNewConversation={onNewConversation}
                   conversationTurns={conversationTurns}
+                  view={debugView}
+                  onViewChange={onDebugViewChange}
                 />
               </div>
             </FloatingPanel>
@@ -321,7 +350,24 @@ export function WorkbenchLayout({
           headerContent={<NodeInspectorPanelTitle node={selectedNode} updateNode={onUpdateNode} />}
           closeLabel="Close node inspector"
           onClose={onCloseInspector}
-          className="absolute bottom-4 right-4 top-[58px] z-30 w-[380px]"
+          className="absolute bottom-4 right-4 top-[58px] z-30"
+          style={{ width: inspectorResize.width }}
+          resizeHandle={
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize inspector"
+              onPointerDown={inspectorResize.onPointerDown}
+              className="group absolute inset-y-0 left-0 z-10 flex w-2.5 cursor-ew-resize touch-none items-center justify-start"
+            >
+              <span
+                className={[
+                  "my-auto h-10 w-1 rounded-full transition-colors",
+                  inspectorResize.isDragging ? "bg-brand" : "bg-border group-hover:bg-brand/60",
+                ].join(" ")}
+              />
+            </div>
+          }
         >
           <div className="h-full overflow-hidden">
             <NodeInspector
@@ -333,6 +379,7 @@ export function WorkbenchLayout({
               showDevModelProviders={showDevModelProviders}
               onOpenKnowledgeBases={() => setKnowledgeBasesOpen(true)}
               onProviderKeyPreferenceChange={onUpdateProviderKeyPreference}
+              onResumeRun={onResumeRun}
               updateNode={onUpdateNode}
             />
           </div>

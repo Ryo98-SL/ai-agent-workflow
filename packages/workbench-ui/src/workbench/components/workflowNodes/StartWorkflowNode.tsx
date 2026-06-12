@@ -1,4 +1,5 @@
 import { Play } from "lucide-react";
+import { VariableText } from "../VariableTag";
 import { WorkflowNodeCardShell, type WorkflowNodeProps } from "./WorkflowNodeCardShell";
 
 export function StartWorkflowNode(props: WorkflowNodeProps) {
@@ -25,7 +26,11 @@ export function StartWorkflowNode(props: WorkflowNodeProps) {
             ))}
           </div>
         )}
-        {node.description && <p className="text-xs text-muted-foreground">{node.description}</p>}
+        {node.description && (
+          <p className="text-xs leading-5 text-muted-foreground">
+            <VariableText text={node.description} />
+          </p>
+        )}
       </div>
     </WorkflowNodeCardShell>
   );

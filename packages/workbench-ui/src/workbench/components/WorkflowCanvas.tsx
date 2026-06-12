@@ -8,15 +8,21 @@ import {
   MiniMap,
   Panel,
   ReactFlow,
+  useReactFlow,
   type Connection,
   type Edge,
   type EdgeChange,
   type NodeChange,
 } from "@xyflow/react";
-import { resolveLLMModelSettings } from "@ai-agent-workflow/workflow-domain";
+import { nodeTypeLabel, resolveLLMModelSettings } from "@ai-agent-workflow/workflow-domain";
 import type { WorkflowEdge, WorkflowFile, WorkflowNode, WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
+import {
+  workflowNodeIconBackgroundClassNames,
+  workflowNodeIconClassName,
+  workflowNodeIcons,
+} from "./workflowNodes/workflowNodeVisuals";
 import type { WorkflowGraphHistoryEntry } from "../hooks/useWorkflowGraphHistory";
-import type { AddNodeOptions, NodeExecutionState } from "../types";
+import type { AddNodeOptions, NodeExecutionState, WorkflowNodeActionHandler } from "../types";
 import { useTheme } from "../../theme/ThemeProvider";
 import { InlineNodePalettePopover, type InlineNodePaletteState } from "./InlineNodePalettePopover";
 import {
@@ -40,11 +46,18 @@ type WorkflowCanvasProps = {
   workflow: WorkflowFile;
   selectedNodeId?: string;
   nodeStates: Map<string, NodeExecutionState>;
+  /** Node the run is currently paused on (Human Input), shown with a waiting badge. */
+  waitingNodeId?: string;
   canRedo: boolean;
   canUndo: boolean;
   onAddNode: (type: WorkflowNodeType, options?: AddNodeOptions) => void;
+  /** Armed node type for cursor-follow placement, or null when inactive. */
+  placementNodeType?: WorkflowNodeType | null;
+  onConfirmPlacement?: (position: { x: number; y: number }) => void;
+  onCancelPlacement?: () => void;
   onClearSelection: () => void;
   onCommitGraphHistoryEntry: (entry: WorkflowGraphHistoryEntry) => void;
+  onNodeAction: WorkflowNodeActionHandler;
   onRedo: () => void;
   onSelectNode: (nodeId: string) => void;
   onUndo: () => void;
@@ -78,7 +91,8 @@ function toFlowNode(
   node: WorkflowNode,
   currentNode?: WorkflowFlowNode,
   onOpenNodePalette?: OpenWorkflowNodePalette,
-  executionStatus?: "running" | "succeeded" | "failed",
+  executionStatus?: "running" | "waiting" | "succeeded" | "failed",
+  onNodeAction?: WorkflowNodeActionHandler,
 ): WorkflowFlowNode {
   const nodeSize = getWorkflowNodeSize(node);
   const handles = getWorkflowNodeHandles(node);
@@ -95,17 +109,37 @@ function toFlowNode(
     initialHeight: nodeSize.height,
     ...(handles ? { handles } : { handles: undefined }),
     selected: currentNode?.selected,
-    data: { node, activeModel, activeModelProvider, onOpenNodePalette, executionStatus },
+    data: { node, activeModel, activeModelProvider, onOpenNodePalette, executionStatus, onNodeAction },
   };
+}
+
+function nodeExecutionStatus(
+  node: WorkflowNode,
+  nodeStates?: Map<string, import("../types").NodeExecutionState>,
+  waitingNodeId?: string,
+): "running" | "waiting" | "succeeded" | "failed" | undefined {
+  if (waitingNodeId && node.id === waitingNodeId) {
+    return "waiting";
+  }
+  return nodeStates?.get(node.id)?.status;
 }
 
 function toFlowNodes(
   workflow: WorkflowFile,
   onOpenNodePalette?: OpenWorkflowNodePalette,
   nodeStates?: Map<string, import("../types").NodeExecutionState>,
+  waitingNodeId?: string,
+  onNodeAction?: WorkflowNodeActionHandler,
 ): WorkflowFlowNode[] {
   return workflow.graph.nodes.map((node) => {
-    return toFlowNode(workflow, node, undefined, onOpenNodePalette, nodeStates?.get(node.id)?.status);
+    return toFlowNode(
+      workflow,
+      node,
+      undefined,
+      onOpenNodePalette,
+      nodeExecutionStatus(node, nodeStates, waitingNodeId),
+      onNodeAction,
+    );
   });
 }
 
@@ -143,11 +177,16 @@ export function WorkflowCanvas({
   workflow,
   selectedNodeId,
   nodeStates,
+  waitingNodeId,
   canRedo,
   canUndo,
   onAddNode,
+  placementNodeType,
+  onConfirmPlacement,
+  onCancelPlacement,
   onClearSelection,
   onCommitGraphHistoryEntry,
+  onNodeAction,
   onRedo,
   onSelectNode,
   onUndo,
@@ -167,7 +206,9 @@ export function WorkflowCanvas({
       anchorElement,
     });
   }, []);
-  const [nodes, setNodes] = useState(() => toFlowNodes(workflow, openInlinePalette, nodeStates));
+  const [nodes, setNodes] = useState(() =>
+    toFlowNodes(workflow, openInlinePalette, nodeStates, waitingNodeId, onNodeAction),
+  );
   const edges = useMemo(
     () => toFlowEdges(workflow.graph.edges, selectedEdgeIds, hoveredNodeId),
     [hoveredNodeId, selectedEdgeIds, workflow.graph.edges],
@@ -179,10 +220,17 @@ export function WorkflowCanvas({
     setNodes((currentNodes) => {
       const currentNodesById = new Map(currentNodes.map((node) => [node.id, node]));
       return workflow.graph.nodes.map((node) =>
-        toFlowNode(workflow, node, currentNodesById.get(node.id), openInlinePalette, nodeStates.get(node.id)?.status),
+        toFlowNode(
+          workflow,
+          node,
+          currentNodesById.get(node.id),
+          openInlinePalette,
+          nodeExecutionStatus(node, nodeStates, waitingNodeId),
+          onNodeAction,
+        ),
       );
     });
-  }, [openInlinePalette, workflow, nodeStates]);
+  }, [openInlinePalette, workflow, nodeStates, waitingNodeId, onNodeAction]);
 
   useEffect(() => {
     setNodes((currentNodes) =>
@@ -374,7 +422,73 @@ export function WorkflowCanvas({
           onAddNode={onAddNode}
           onClose={() => setInlinePalette(null)}
         />
+        {placementNodeType && onConfirmPlacement && onCancelPlacement && (
+          <NodePlacementLayer
+            nodeType={placementNodeType}
+            onConfirm={onConfirmPlacement}
+            onCancel={onCancelPlacement}
+          />
+        )}
       </ReactFlow>
+    </div>
+  );
+}
+
+/**
+ * Full-canvas capture layer for cursor-follow node placement. Rendered inside
+ * `<ReactFlow>` so it can read `screenToFlowPosition` from the flow store. While
+ * mounted it sits above the pane and swallows pointer events, which both shows a
+ * ghost preview under the cursor and suspends pan/select/drag so a single click
+ * unambiguously commits the node. `Esc` cancels.
+ */
+function NodePlacementLayer({
+  nodeType,
+  onConfirm,
+  onCancel,
+}: {
+  nodeType: WorkflowNodeType;
+  onConfirm: (position: { x: number; y: number }) => void;
+  onCancel: () => void;
+}) {
+  const { screenToFlowPosition } = useReactFlow();
+  const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
+  const Icon = workflowNodeIcons[nodeType];
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onCancel]);
+
+  return (
+    <div
+      className="absolute inset-0 z-20 cursor-crosshair"
+      onMouseMove={(event) => setPoint({ x: event.clientX, y: event.clientY })}
+      onMouseLeave={() => setPoint(null)}
+      onClick={(event) => onConfirm(screenToFlowPosition({ x: event.clientX, y: event.clientY }))}
+    >
+      {point && (
+        <div
+          className="pointer-events-none fixed z-50 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-md border border-border bg-card/95 px-3 py-2 opacity-90 shadow-lg"
+          style={{ left: point.x, top: point.y }}
+        >
+          <span
+            className={[
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+              workflowNodeIconBackgroundClassNames[nodeType],
+              workflowNodeIconClassName,
+            ].join(" ")}
+          >
+            <Icon size={16} aria-hidden />
+          </span>
+          <span className="whitespace-nowrap text-sm font-medium text-card-foreground">{nodeTypeLabel(nodeType)}</span>
+        </div>
+      )}
     </div>
   );
 }

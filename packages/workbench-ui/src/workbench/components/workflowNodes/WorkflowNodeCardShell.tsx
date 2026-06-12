@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { ModelProvider, WorkflowNode, WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
-import { AlertCircle, CheckCircle2, type LucideIcon, Plus } from "lucide-react";
-import type { WorkflowNodePaletteHandleType } from "../../types";
+import { AlertCircle, CheckCircle2, PauseCircle, type LucideIcon, Plus } from "lucide-react";
+import type { WorkflowNodeActionHandler, WorkflowNodePaletteHandleType } from "../../types";
+import { VariableText } from "../VariableTag";
+import { WorkflowNodeActionsMenu } from "../WorkflowNodeActionsMenu";
 import { getWorkflowNodeCardClassName } from "./workflowNodeLayout";
 import { workflowNodeIconBackgroundClassNames, workflowNodeIconClassName } from "./workflowNodeVisuals";
 
@@ -21,7 +23,8 @@ export type WorkflowReactNode = Node<
     activeModel?: string;
     activeModelProvider?: ModelProvider;
     onOpenNodePalette?: OpenWorkflowNodePalette;
-    executionStatus?: "running" | "succeeded" | "failed";
+    onNodeAction?: WorkflowNodeActionHandler;
+    executionStatus?: "running" | "waiting" | "succeeded" | "failed";
   },
   WorkflowNodeType
 >;
@@ -44,12 +47,24 @@ export function WorkflowNodeCardShell({ children, noSourceHandle, noTargetHandle
   return (
     <div
       className={[
+        "group/card",
         getWorkflowNodeCardClassName(node.type),
         selected ? "border-brand ring-2 ring-brand/20" : "border-border",
         executionStatus === "running" ? "ring-2 ring-brand animate-pulse" : "",
+        executionStatus === "waiting" ? "ring-2 ring-amber-500" : "",
       ].join(" ")}
       title={node.label}
     >
+      {node.type !== "start" && data.onNodeAction && (
+        <WorkflowNodeActionsMenu node={node} selected={selected} onNodeAction={data.onNodeAction} />
+      )}
+      {executionStatus === "waiting" && (
+        <PauseCircle
+          size={15}
+          className="absolute -right-1.5 -top-1.5 rounded-full bg-card text-amber-500"
+          aria-label="Awaiting human input"
+        />
+      )}
       {executionStatus === "succeeded" && (
         <CheckCircle2 size={14} className="absolute -right-1.5 -top-1.5 text-brand bg-card rounded-full" aria-hidden />
       )}
@@ -77,7 +92,11 @@ export function WorkflowNodeCardShell({ children, noSourceHandle, noTargetHandle
       </div>
 
       {children ?? (
-        node.description && <p className="mt-1 text-xs leading-4 text-muted-foreground">{node.description}</p>
+        node.description && (
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            <VariableText text={node.description} />
+          </p>
+        )
       )}
       {!noSourceHandle && (
         <Handle type="source" position={Position.Right} className={handleClassName}>

@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import type { ResumeRunRequest } from "@ai-agent-workflow/api-contracts";
 import type { ModelProvider, ProviderKeyPreference, WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 import type { DebugState, NodeExecutionState } from "../types";
 import { KnowledgeInspector } from "./knowledge/KnowledgeInspector";
 import { HumanInputInspector } from "./inspectors/HumanInputInspector";
+import { HumanReviewForm } from "./HumanReviewForm";
 import { IfElseInspector } from "./inspectors/IfElseInspector";
 import { LLMInspector } from "./inspectors/LLMInspector";
 import { StartInspector } from "./inspectors/StartInspector";
@@ -20,6 +22,7 @@ type NodeInspectorProps = {
   showDevModelProviders?: boolean;
   onOpenKnowledgeBases?: () => void;
   onProviderKeyPreferenceChange?: (provider: ModelProvider, preference: ProviderKeyPreference) => void;
+  onResumeRun?: (runId: string, request: ResumeRunRequest) => void;
   updateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
 };
 
@@ -54,9 +57,14 @@ export function NodeInspector({
   showDevModelProviders = false,
   onOpenKnowledgeBases,
   onProviderKeyPreferenceChange,
+  onResumeRun,
   updateNode,
 }: NodeInspectorProps) {
   const [activeTab, setActiveTab] = useState<InspectorTab>("settings");
+
+  // True when the run is paused on this exact node, awaiting human review.
+  const waiting = debugState.status === "waiting" ? debugState.waiting : undefined;
+  const isWaitingOnThisNode = Boolean(waiting && selectedNode && waiting.interrupt.nodeId === selectedNode.id);
 
   useEffect(() => {
     setActiveTab("settings");
@@ -67,6 +75,13 @@ export function NodeInspector({
       setActiveTab("history");
     }
   }, [debugState.status, selectedNode?.id]);
+
+  // Surface the review form on the History tab when paused on this node.
+  useEffect(() => {
+    if (isWaitingOnThisNode) {
+      setActiveTab("history");
+    }
+  }, [isWaitingOnThisNode, selectedNode?.id]);
 
   if (!selectedNode) {
     return (
@@ -101,7 +116,12 @@ export function NodeInspector({
           Settings
         </InspectorTabButton>
         <InspectorTabButton active={activeTab === "history"} onClick={() => setActiveTab("history")}>
-          History
+          <span className="flex items-center gap-1.5">
+            History
+            {isWaitingOnThisNode && (
+              <span className="size-2 rounded-full bg-amber-500" aria-label="Awaiting your review" />
+            )}
+          </span>
         </InspectorTabButton>
       </div>
 
@@ -134,13 +154,18 @@ export function NodeInspector({
             <UnsupportedInspector node={selectedNode} updateNode={updateNode} />
           )
         ) : (
-          <NodeRunList
-            workflow={workflow}
-            workflowId={workflowId}
-            node={selectedNode}
-            debugState={debugState}
-            nodeStates={nodeStates}
-          />
+          <div className="space-y-4">
+            {isWaitingOnThisNode && waiting && onResumeRun && (
+              <HumanReviewForm runId={waiting.runId} interrupt={waiting.interrupt} onResumeRun={onResumeRun} />
+            )}
+            <NodeRunList
+              workflow={workflow}
+              workflowId={workflowId}
+              node={selectedNode}
+              debugState={debugState}
+              nodeStates={nodeStates}
+            />
+          </div>
         )}
       </div>
     </section>
@@ -154,7 +179,7 @@ function InspectorTabButton({
   onClick,
 }: {
   active: boolean;
-  children: string;
+  children: ReactNode;
   disabled?: boolean;
   onClick: () => void;
 }) {

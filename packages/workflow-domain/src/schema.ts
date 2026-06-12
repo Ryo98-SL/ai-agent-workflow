@@ -149,23 +149,67 @@ export const ProviderKeyPrefsSchema = z.record(z.string(), ProviderKeyPreference
 
 export const LLMModelSettingsSchema = OpenAICompatibleSettingsSchema;
 
+/** Roles a prompt message can take, mirroring Dify's LLM node. */
+export const PROMPT_MESSAGE_ROLES = ["system", "user", "assistant"] as const;
+export const PromptMessageRoleSchema = z.enum(PROMPT_MESSAGE_ROLES);
+export type PromptMessageRole = z.infer<typeof PromptMessageRoleSchema>;
+
+export const PromptMessageSchema = z.object({
+  role: PromptMessageRoleSchema,
+  content: z.string().default(""),
+});
+export type PromptMessage = z.infer<typeof PromptMessageSchema>;
+
+/** Default prompt for a fresh LLM node: one (empty) system message + one user message. */
+export const DEFAULT_LLM_MESSAGES: PromptMessage[] = [
+  { role: "system", content: "" },
+  { role: "user", content: "Write a short response for {{topic}}." },
+];
+
+/**
+ * Migrate legacy `{ systemPrompt, userPrompt }` LLM configs into the unified
+ * `messages` array on parse, so workflows saved before the variable-length
+ * prompt list keep loading. The first message stays `system` (even if empty),
+ * matching Dify's "always one system prompt" invariant.
+ */
+function migrateLLMConfig(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") {
+    return raw;
+  }
+  const record = raw as Record<string, unknown>;
+  if (Array.isArray(record.messages)) {
+    return raw;
+  }
+  if (!("systemPrompt" in record) && !("userPrompt" in record)) {
+    return raw;
+  }
+  const { systemPrompt, userPrompt, ...rest } = record;
+  const messages: PromptMessage[] = [
+    { role: "system", content: typeof systemPrompt === "string" ? systemPrompt : "" },
+    { role: "user", content: typeof userPrompt === "string" ? userPrompt : "" },
+  ];
+  return { ...rest, messages };
+}
+
 const LLMNodeSchema = BaseNodeSchema.extend({
   type: z.literal("llm"),
-  config: z.object({
-    systemPrompt: z.string().optional(),
-    userPrompt: z.string().default("Write a short response for {{topic}}."),
-    variables: z.record(z.string()).default({ topic: "workflow debugging" }),
-    model: z.string().optional(),
-    modelSettings: LLMModelSettingsSchema.optional(),
-    temperature: z.number().min(0).max(2).default(0.7),
-    maxTokens: z.number().int().positive().max(32000).default(800),
-    /**
-     * When true, the node reads prior conversation turns from the run's memory
-     * channel and appends this turn (user + assistant) — enabling multi-turn
-     * chat when runs share a conversation thread.
-     */
-    memory: z.boolean().default(false),
-  }),
+  config: z.preprocess(
+    migrateLLMConfig,
+    z.object({
+      messages: z.array(PromptMessageSchema).min(1).default(DEFAULT_LLM_MESSAGES),
+      variables: z.record(z.string()).default({ topic: "workflow debugging" }),
+      model: z.string().optional(),
+      modelSettings: LLMModelSettingsSchema.optional(),
+      temperature: z.number().min(0).max(2).default(0.7),
+      maxTokens: z.number().int().positive().max(32000).default(800),
+      /**
+       * When true, the node reads prior conversation turns from the run's memory
+       * channel and appends this turn (user + assistant) — enabling multi-turn
+       * chat when runs share a conversation thread.
+       */
+      memory: z.boolean().default(false),
+    }),
+  ),
 });
 
 /** Operators with no right-hand `value` (they test the left operand alone). */
@@ -569,8 +613,10 @@ export function createDefaultWorkflow(): WorkflowFile {
           description: "Generate a response from the configured model.",
           position: { x: 360, y: 110 },
           config: {
-            systemPrompt: "You are a chat bot",
-            userPrompt: "Tell me a joke about {{start1.topic}}",
+            messages: [
+              { role: "system", content: "You are a chat bot" },
+              { role: "user", content: "Tell me a joke about {{start1.topic}}" },
+            ],
             variables: {},
             temperature: 0.7,
             maxTokens: 800,
@@ -649,10 +695,18 @@ export function createKnowledgeDemoWorkflow(): WorkflowFile {
           description: "依据检索到的资料回答客户问题。",
           position: { x: 640, y: 140 },
           config: {
-            systemPrompt:
-              "你是云舵的智能客服助手。只能依据提供的知识库资料回答用户问题；如果资料中没有相关信息，请明确告知无法确认，并建议用户联系人工客服。回答要简洁、准确、有礼貌。",
-            userPrompt:
-              "知识库资料：\n{{knowledge1.context}}\n\n用户问题：{{start1.customerQuestion}}\n\n请基于以上资料用中文回答用户问题。",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "你是云舵的智能客服助手。只能依据提供的知识库资料回答用户问题；如果资料中没有相关信息，请明确告知无法确认，并建议用户联系人工客服。回答要简洁、准确、有礼貌。",
+              },
+              {
+                role: "user",
+                content:
+                  "知识库资料：\n{{knowledge1.context}}\n\n用户问题：{{start1.customerQuestion}}\n\n请基于以上资料用中文回答用户问题。",
+              },
+            ],
             variables: {},
             temperature: 0.3,
             maxTokens: 800,
@@ -663,6 +717,159 @@ export function createKnowledgeDemoWorkflow(): WorkflowFile {
       edges: [
         { id: "edge-start-knowledge", source: "start1", target: "knowledge1" },
         { id: "edge-knowledge-llm", source: "knowledge1", target: "llm1" },
+      ],
+    },
+    settings: {
+      modelProvider: {
+        provider: "deepseek",
+        baseURL: "https://api.deepseek.com",
+        model: "deepseek-v4-flash",
+      },
+      modelProviderKeys: {},
+      providerKeyPrefs: {},
+    },
+  };
+}
+
+/**
+ * Customer-support bot with human review. Extends the RAG demo with a
+ * deterministic branch and a human-in-the-loop step:
+ *
+ * - Start collects `customerQuestion`.
+ * - Knowledge retrieves from the seeded example KB.
+ * - LLM drafts a grounded reply (conversation memory on).
+ * - If/Else routes refund/complaint questions to human review; everything else
+ *   is auto-replied. The condition is a deterministic keyword match.
+ * - Human Input shows the draft for a reviewer to approve / reject / edit.
+ *
+ * Runs on AI credits (deepseek), so signed-in users with a grant can run the
+ * whole flow — including the human-review pause/resume.
+ */
+export function createSupportBotWithReviewWorkflow(): WorkflowFile {
+  const now = new Date().toISOString();
+  return {
+    version: "1",
+    metadata: {
+      name: "客服机器人（含人工复核）",
+      description: "退款/投诉类问题自动转人工复核，其余自动回复；基于示例知识库，带对话记忆。",
+      icon: "userCheck",
+      createdAt: now,
+      updatedAt: now,
+    },
+    graph: {
+      nodes: [
+        {
+          id: "start1",
+          type: "start",
+          label: "Start",
+          description: "收集客户问题。",
+          position: { x: 80, y: 200 },
+          config: {
+            fields: [
+              {
+                name: "customerQuestion",
+                label: "客户问题",
+                required: true,
+                defaultValue: "我想申请退款，请问退款政策是怎样的？",
+              },
+            ],
+          },
+        },
+        {
+          id: "knowledge1",
+          type: "knowledge",
+          label: "Knowledge",
+          description: "在「云舵客服知识库」中检索相关资料。",
+          position: { x: 340, y: 190 },
+          config: {
+            knowledgeBaseIds: [EXAMPLE_KNOWLEDGE_BASE_ID],
+            queryTemplate: "{{start1.customerQuestion}}",
+            retrieval: { mode: "semantic", topK: 5 },
+          },
+        },
+        {
+          id: "llm1",
+          type: "llm",
+          label: "LLM",
+          description: "依据检索资料草拟回复（开启对话记忆）。",
+          position: { x: 600, y: 190 },
+          config: {
+            messages: [
+              {
+                role: "system",
+                content:
+                  "你是云舵的智能客服助手。只能依据提供的知识库资料回答用户问题；如果资料中没有相关信息，请明确告知无法确认。回答要简洁、准确、有礼貌。",
+              },
+              {
+                role: "user",
+                content:
+                  "知识库资料：\n{{knowledge1.context}}\n\n用户问题：{{start1.customerQuestion}}\n\n请基于以上资料用中文草拟一条回复。",
+              },
+            ],
+            variables: {},
+            temperature: 0.3,
+            maxTokens: 800,
+            memory: true,
+          },
+        },
+        {
+          id: "ifElse1",
+          type: "ifElse",
+          label: "需要人工复核？",
+          description: "退款/投诉类问题转人工，其余自动回复。",
+          position: { x: 880, y: 190 },
+          config: {
+            cases: [
+              {
+                id: "needsReview",
+                combinator: "or",
+                conditions: [
+                  { variable: "{{start1.customerQuestion}}", operator: "contains", value: "退款" },
+                  { variable: "{{start1.customerQuestion}}", operator: "contains", value: "投诉" },
+                ],
+              },
+            ],
+          },
+        },
+        {
+          id: "humanInput1",
+          type: "humanInput",
+          label: "人工复核",
+          description: "审核员复核草拟回复，可通过、驳回或改写。",
+          position: { x: 1180, y: 90 },
+          config: {
+            prompt:
+              "请复核以下草拟回复（客户问题：{{start1.customerQuestion}}）：\n\n{{llm1.text}}",
+            actions: [
+              { id: "approve", label: "通过", value: "approved" },
+              { id: "reject", label: "驳回", value: "rejected" },
+            ],
+            allowTextInput: true,
+            inputLabel: "修改后的回复",
+          },
+        },
+        {
+          id: "endReview",
+          type: "end",
+          label: "人工已确认",
+          position: { x: 1460, y: 90 },
+          config: {},
+        },
+        {
+          id: "endAuto",
+          type: "end",
+          label: "自动回复已发送",
+          position: { x: 1180, y: 320 },
+          config: {},
+        },
+      ],
+      edges: [
+        { id: "edge-start-knowledge", source: "start1", target: "knowledge1" },
+        { id: "edge-knowledge-llm", source: "knowledge1", target: "llm1" },
+        { id: "edge-llm-ifelse", source: "llm1", target: "ifElse1" },
+        { id: "edge-ifelse-review", source: "ifElse1", target: "humanInput1", sourceHandle: "needsReview" },
+        { id: "edge-ifelse-auto", source: "ifElse1", target: "endAuto", sourceHandle: "else" },
+        { id: "edge-review-end", source: "humanInput1", target: "endReview" },
       ],
     },
     settings: {
@@ -702,8 +909,10 @@ export function createNode(
       ...base,
       type,
       config: {
-        systemPrompt: "You are a precise workflow debugging assistant.",
-        userPrompt: "Explain {{start1.topic}} in one concise paragraph.",
+        messages: [
+          { role: "system", content: "You are a precise workflow debugging assistant." },
+          { role: "user", content: "Explain {{start1.topic}} in one concise paragraph." },
+        ],
         variables: {},
         temperature: 0.7,
         maxTokens: 800,
@@ -772,6 +981,24 @@ export function createNode(
     type,
     config: {},
   } as WorkflowNode;
+}
+
+/**
+ * Deep-clones an existing node for Duplicate/Paste: fresh readable id, a copy of
+ * its config (so the clone is fully independent), and a position offset so it
+ * doesn't sit exactly on top of the original. Carries no edges.
+ */
+export function cloneNode(
+  node: WorkflowNode,
+  existingNodes: Pick<WorkflowNode, "id">[] = [],
+  offset: { x: number; y: number } = { x: 40, y: 40 },
+): WorkflowNode {
+  const cloned = structuredClone(node) as WorkflowNode;
+  return {
+    ...cloned,
+    id: createReadableNodeId(node.type, existingNodes),
+    position: { x: node.position.x + offset.x, y: node.position.y + offset.y },
+  };
 }
 
 export function nodeTypeLabel(type: WorkflowNodeType): string {
