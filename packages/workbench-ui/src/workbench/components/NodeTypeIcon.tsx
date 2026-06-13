@@ -1,3 +1,4 @@
+import type { LucideIcon } from "lucide-react";
 import type { WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
 import { workflowNodeIconBackgroundClassNames, workflowNodeIcons } from "./workflowNodes/workflowNodeVisuals";
 
@@ -8,15 +9,20 @@ type NodeTypeIconProps = {
   /** Inner lucide icon size in pixels. */
   iconSize?: number;
   className?: string;
+  /**
+   * Overrides the type-keyed icon. Used for Tool nodes, whose identity is per-tool
+   * (resolved from the bound descriptor) rather than per node type.
+   */
+  icon?: LucideIcon;
 };
 
 /**
  * Colored square badge with the lucide icon for a workflow node type. Shared by
  * the debug run cards and the node inspector header so node identity reads the
- * same everywhere.
+ * same everywhere. Pass `icon` to override (e.g. a Tool node's per-tool icon).
  */
-export function NodeTypeIcon({ type, size = 20, iconSize = 12, className = "" }: NodeTypeIconProps) {
-  const Icon = workflowNodeIcons[type] ?? workflowNodeIcons.code;
+export function NodeTypeIcon({ type, size = 20, iconSize = 12, className = "", icon }: NodeTypeIconProps) {
+  const Icon = icon ?? workflowNodeIcons[type] ?? workflowNodeIcons.code;
 
   return (
     <span

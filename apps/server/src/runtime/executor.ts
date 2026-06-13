@@ -12,6 +12,8 @@ import {
   evaluateIfElseNode,
   isChatWorkflow,
   resolveMemorySettings,
+  resolveToolDescriptor,
+  type JsonValue,
   type WorkflowFile,
   type WorkflowNode,
   type WorkflowNodeType,
@@ -24,6 +26,7 @@ import type { KnowledgeRepository } from "../knowledge/repository";
 import { callChatCompletion, summarizeMessages } from "./models";
 import { materializeStartValues } from "./startValues";
 import { resolvePrompt } from "./prompts";
+import { resolveToolRuntime } from "./tools/registry";
 import type { ChatMessage, EmailSender, RuntimeExecutionResult, RuntimeExecutorOptions, RuntimeInterrupt, RuntimeNodeResult, RuntimeStreamEvent } from "./types";
 import { validateWorkflow } from "./validation";
 
@@ -616,59 +619,33 @@ async function buildToolNode(
     throw new RuntimeValidationError(`Node "${node.id}" cannot run with the Tool node builder.`);
   }
 
-  if (node.config.adapter === "currentTime") {
-    const timeZone = node.config.timezone || "UTC";
-    let formatted: string;
-    try {
-      formatted = new Intl.DateTimeFormat("en-CA", {
-        timeZone,
-        dateStyle: "medium",
-        timeStyle: "medium",
-      }).format(new Date());
-    } catch {
-      throw new RuntimeValidationError(`Tool node "${node.id}" has an invalid timezone "${timeZone}".`);
-    }
-    const data = { timezone: timeZone, iso: new Date().toISOString(), formatted };
-    return {
-      output: formatted,
-      data: { text: formatted, data },
-      stateValue: { text: formatted, data },
-      logMetadata: { adapter: "currentTime", timezone: timeZone },
-    };
-  }
-
-  // emailSend adapter
-  const to = resolvePrompt(node.config.to, state.values).trim();
-  const subject = resolvePrompt(node.config.subject, state.values);
-  const body = resolvePrompt(node.config.body, state.values);
-  if (!to) {
-    throw new RuntimeValidationError(`Email tool node "${node.id}" resolved an empty recipient.`);
-  }
-
-  // Dry-run (default): compose and output only — nothing is sent, no cost.
-  if (!node.config.send) {
-    const email = { to, subject, body, sent: false, dryRun: true as const };
-    return {
-      output: `Email composed (dry-run) → ${to}`,
-      data: { text: `Email composed (dry-run) → ${to}`, data: email },
-      stateValue: { text: `Email composed (dry-run) → ${to}`, data: email },
-      logMetadata: { adapter: "emailSend", dryRun: true, to },
-    };
-  }
-
-  // Real send: requires a server-configured sender (env-gated Resend).
-  if (!context.emailSender) {
+  const descriptor = resolveToolDescriptor(node.config);
+  if (!descriptor) {
     throw new RuntimeValidationError(
-      "Email sending is not configured on the server. Disable “Send for real” to compose a dry-run instead.",
+      `Tool node "${node.id}" is bound to an unknown tool "${node.config.provider}:${node.config.providerId}:${node.config.toolName}".`,
     );
   }
-  const result = await context.emailSender({ to, subject, body });
-  const email = { to, subject, body, sent: true as const, dryRun: false as const, id: result.id };
+  const runtime = resolveToolRuntime(node.config.provider, node.config.providerId, node.config.toolName);
+  if (!runtime) {
+    throw new RuntimeValidationError(`Tool "${descriptor.label}" has no server runtime configured.`);
+  }
+
+  // Resolve each declared param against runtime state; variable-bearing string
+  // params get their `{{nodeId.path}}` references substituted, others pass through.
+  const resolvedParams: Record<string, JsonValue> = {};
+  for (const param of descriptor.params) {
+    const raw = param.name in node.config.params ? node.config.params[param.name] : (param.default ?? null);
+    resolvedParams[param.name] =
+      param.supportsVariables && typeof raw === "string" ? resolvePrompt(raw, state.values) : raw;
+  }
+
+  const result = await runtime.execute(resolvedParams, { emailSender: context.emailSender });
+  const value = { text: result.output, data: result.data };
   return {
-    output: `Email sent → ${to}`,
-    data: { text: `Email sent → ${to}`, data: email },
-    stateValue: { text: `Email sent → ${to}`, data: email },
-    logMetadata: { adapter: "emailSend", dryRun: false, to },
+    output: result.output,
+    data: value,
+    stateValue: value,
+    logMetadata: { tool: descriptor.toolName, ...result.logMetadata },
   };
 }
 

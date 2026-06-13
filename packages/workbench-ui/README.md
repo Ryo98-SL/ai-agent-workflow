@@ -7,6 +7,8 @@ settings, inspection, and run output live in floating panels.
 Principles:
 
 - Keep workflow persistence and runs behind the injected API.
+- Route anonymous workflow CRUD through IndexedDB while delegating execution,
+  Knowledge Bases, account, and credits to the injected server API.
 - Keep popovers mounted under `body` so canvas containers cannot clip them.
 - Keep node handle behavior direction-aware: source creates outgoing edges,
   target creates incoming edges.
@@ -42,6 +44,14 @@ Principles:
   lists the anonymous Chinese example KB, manages authenticated private KBs and
   text documents, and the Knowledge node inspector selects one reusable KB for
   semantic retrieval.
+- Keep Chat Mode separate from one-shot workflow runs: Start fields are collected
+  once per conversation, each message is sent as `query`, and Human Input pauses
+  render the same resume form in chat, inspector history, and debug surfaces.
+- Keep variable authoring structured: prompt-like fields use Lexical variable
+  chips, `/` insertion, and upstream Available Variables from workflow-domain.
+- Keep Tool nodes descriptor-driven: the Tool Browser selects a registry entry
+  and the inspector renders params from the tool descriptor instead of hard-coded
+  per-tool forms.
 
 ```tsx
 import { AppWorkbench } from "@ai-agent-workflow/workbench-ui";
@@ -52,12 +62,13 @@ import "@ai-agent-workflow/workbench-ui/styles.css";
 ```
 
 Consumers provide a workflow API compatible with
-`@ai-agent-workflow/workflow-client`. DeepSeek, OpenAI, and Anthropic are
-available by default with local logo assets; pass `showDevModelProviders` to
-expose development providers such as Ollama. Provider API keys are edited per
-provider, and LLM nodes can override provider, model, base URL, temperature,
-and max tokens. The node inspector and read-only run history reuse the run
-output renderer from the debug panel so selected nodes and historical runs show
-the same card details as the workflow run log. LLM and Knowledge inspectors show
-their output variable shapes so downstream prompt references can be authored
+`@ai-agent-workflow/workflow-client` and pass the API base URL so Better Auth can
+share the same origin. DeepSeek, OpenAI, and Anthropic are available by default
+with local logo assets; pass `showDevModelProviders` to expose development
+providers such as Ollama. Provider API keys are edited per provider, and LLM
+nodes can override provider, model, base URL, temperature, and max tokens. The
+node inspector and read-only run history reuse the run output renderer from the
+debug panel so selected nodes and historical runs show the same card details as
+the workflow run log. LLM, Knowledge, Tool, Human Input, and Template authoring
+surfaces show output variables so downstream prompt references can be authored
 from the same panel.

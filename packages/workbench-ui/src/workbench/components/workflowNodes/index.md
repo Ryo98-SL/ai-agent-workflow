@@ -14,6 +14,11 @@ ReactFlow node components for persisted workflow node types.
   workflow defaults, then renders the node description when present.
 - `KnowledgeWorkflowNode.tsx` previews the selected KB label, query template,
   and top-K retrieval setting supplied by the Knowledge node config.
+- `ToolWorkflowNode.tsx` previews the bound tool descriptor and primary params
+  with variable chips where applicable.
+- `IfElseWorkflowNode.tsx` previews case/else branch handles and conditions.
+- `HumanInputWorkflowNode.tsx` previews the reviewer prompt and waiting state.
+- `TemplateWorkflowNode.tsx` previews the template text.
 - Other node files bind schema node types to icons and shared shell behavior.
 - `workflowNodeLayout.ts` centralizes ReactFlow node dimensions and handle
   bounds, including dynamic Start/LLM sizing and Start/End handle availability.
@@ -26,5 +31,5 @@ ReactFlow node components for persisted workflow node types.
 Persisted node `type` values map directly to ReactFlow `nodeTypes`. Handle Plus
 buttons stop drag/connect gestures before opening the inline palette. Source
 handles create outgoing edges; target handles create incoming edges. Start has
-no target handle, End has no source handle, and target-handle palettes disable
-End.
+no target handle, End has no source handle, If/Else exposes one source handle
+per case plus `else`, and target-handle palettes disable End.

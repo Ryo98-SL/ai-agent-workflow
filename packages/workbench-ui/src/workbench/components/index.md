@@ -21,8 +21,16 @@ Focused React components for the server-backed workbench shell.
 - `modelProviderVisuals.tsx` maps provider names to bundled logo assets and
   normalizes their mixed source dimensions in the model UI.
 - `WorkbenchLayout.tsx` owns the canvas-first shell and panel placement.
+- `ChatPanel.tsx` owns Chat Mode transcript, once-per-conversation Start input
+  gate, memory summary controls, and in-chat Human Input resume forms.
+- `NewWorkflowDialog.tsx` renders the starter-template picker from
+  workflow-domain `WORKFLOW_TEMPLATES`.
 - `knowledge/` owns Knowledge Base management and Knowledge node inspector UI;
   see `knowledge/index.md`.
+- `tools/` owns the Tool Browser and descriptor-driven Tool param form; see
+  `tools/index.md`.
+- `richtext/` owns variable-chip editing for prompt-like fields; see
+  `richtext/index.md`.
 - `RunHistoryMenu.tsx` owns the header run-history drawer. It uses a backdrop
   to prevent accidental canvas interaction, portals the drawer to `document.body`
   so canvas stacking contexts cannot cover it, renders an inset rounded panel
@@ -74,7 +82,8 @@ Focused React components for the server-backed workbench shell.
   `NodeRunList.tsx` for the active node. LLM and Knowledge settings render
   output variable shapes for downstream prompt authoring. Workflow runs force
   History active and disable Settings until the run leaves the running state.
-- `NodePalette.tsx` lists creatable schema nodes and prevents duplicate Start.
+- `NodePalette.tsx` lists creatable schema nodes, prevents duplicate Start, and
+  drills into `ToolBrowser` before adding a Tool node.
 - `ModelSelectorField.tsx` renders the provider/model picker. Each provider group
   header is collapsible (session-only, not persisted) and hosts a
   `ProviderApiKeyControl` for that provider.
@@ -107,6 +116,11 @@ Focused React components for the server-backed workbench shell.
 - `ProjectFileActions.tsx` contains file controls.
 - `NodeOutputVariablesPanel.tsx` renders shared field/type descriptions for
   model-output node types.
+- `VariablePicker.tsx`, `VariablePickerButton.tsx`, `VariableTag.tsx`, and
+  `VariableText` render available-variable selection/status and read-only chip
+  presentation.
+- `HumanReviewForm.tsx` and `HumanReviewPrompt.tsx` render Human Input pause
+  forms used by the debug panel, chat panel, and selected-node inspector.
 - `Button.tsx`, `inspectors/`, `knowledge/`, and `workflowNodes/` contain
   focused controls, forms, and node renderers.
 
@@ -124,4 +138,6 @@ avoid showing raw run IDs, and keep confirm rows the same height as normal rows.
 All user-visible workbench dates should come from `formatWorkbenchDate`, never
 from `Intl.DateTimeFormat(undefined, ...)`. Edge selection is local, but
 edge/node deletion must persist graph changes through structure history. All
-anchored popovers should use the shared body-level popover path.
+anchored popovers should use the shared body-level popover path. Prompt-like
+fields should keep the canonical `{{nodeId.path}}` string as state, even when a
+Lexical editor renders variable chips.

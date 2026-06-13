@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { Brain, Braces, Database, Flag, GitBranch, Play, TextCursorInput, UserCheck, Wrench, type LucideIcon } from "lucide-react";
 import type { WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
+import type { ToolIdentity } from "../types";
 import { Button } from "./Button";
+import { ToolBrowser } from "./tools/ToolBrowser";
 import { workflowNodeIconBackgroundClassNames, workflowNodeIconClassName } from "./workflowNodes/workflowNodeVisuals";
 
 type PaletteItem = {
@@ -16,7 +19,7 @@ const items: PaletteItem[] = [
   { type: "end", label: "End", description: "Graph exit marker", group: "Basic", icon: Flag },
   { type: "llm", label: "LLM", description: "Executable chat debug node", group: "AI", icon: Brain },
   { type: "knowledge", label: "Knowledge", description: "Schema placeholder", group: "AI", icon: Database },
-  { type: "tool", label: "Tool", description: "Current time · Send email", group: "Tools", icon: Wrench },
+  { type: "tool", label: "Tool", description: "浏览工具 · Current time · Send email", group: "Tools", icon: Wrench },
   { type: "code", label: "Code", description: "Future runtime", group: "Tools", icon: Braces },
   { type: "ifElse", label: "If/Else", description: "Branch on conditions", group: "Logic", icon: GitBranch },
   { type: "humanInput", label: "Human Input", description: "Pause for human review", group: "Logic", icon: UserCheck },
@@ -30,10 +33,29 @@ export function NodePalette({
 }: {
   disabledTypes?: WorkflowNodeType[];
   hasStartNode: boolean;
-  onAddNode: (type: WorkflowNodeType) => void;
+  onAddNode: (type: WorkflowNodeType, tool?: ToolIdentity) => void;
 }) {
   const groups = [...new Set(items.map((item) => item.group))];
   const disabledTypeSet = new Set(disabledTypes);
+  // Picking "Tool" drills into the Tool Browser to choose a specific tool, which
+  // is what actually binds and inserts the node.
+  const [browsingTools, setBrowsingTools] = useState(false);
+
+  if (browsingTools) {
+    return (
+      <ToolBrowser
+        onBack={() => setBrowsingTools(false)}
+        onSelect={(descriptor) => {
+          onAddNode("tool", {
+            provider: descriptor.provider,
+            providerId: descriptor.providerId,
+            toolName: descriptor.toolName,
+          });
+          setBrowsingTools(false);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -53,7 +75,7 @@ export function NodePalette({
                       size="unstyled"
                       fullWidth
                       disabled={disabled}
-                      onClick={() => onAddNode(item.type)}
+                      onClick={() => (item.type === "tool" ? setBrowsingTools(true) : onAddNode(item.type))}
                       title={disabled ? disabledPaletteItemTitle(item.type, hasStartNode) : item.label}
                     >
                       <span

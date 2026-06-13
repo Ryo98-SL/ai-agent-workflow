@@ -8,29 +8,43 @@ or runtime execution adapters.
 
 Core responsibilities:
 
-- `src/index.ts` exports the public component and API boundary types.
+- `src/index.ts` exports the public component, data-provider hooks, account
+  hooks, provider-key store hook, and API boundary types.
 - `src/workbench/AppWorkbench.tsx` owns workflow state, panel visibility,
-  initial server loading, persistence calls, graph undo/redo ownership, and
-  workflow-level run calls.
+  initial source loading, local/remote API switching, persistence calls, graph
+  undo/redo ownership, workflow-level run calls, Chat Mode sends, provider-key
+  preparation, New Workflow template loading, and unsaved switch handling.
 - `src/workbench/workflowDirtySnapshot.ts` owns the canonical content snapshot
   used for Save button dirty state.
 - `src/workbench/components` owns the canvas-first shell, popovers, inspectors,
-  model settings, Knowledge Base management, node palette, run panel, and
-  ReactFlow adapters.
+  model settings, Knowledge Base management, Tool Browser, variable rich-text
+  editor, node palette, Chat Panel, run panel, and ReactFlow adapters.
+- `src/components/ui` holds checked-in shadcn/ui primitives used by the
+  workbench and dialogs.
 - `src/data/useKnowledgeBases.ts` exposes React Query hooks for KB metadata and
   document mutations through the injected workbench API. Anonymous workflow
   storage stays local, but KB reads/mutations always delegate to the server
   boundary.
+- `src/data/localWorkflowStore.ts` backs anonymous workflow CRUD with IndexedDB,
+  migrates legacy localStorage records, and sends inline workflows to the server
+  for execution. `anonymousRunStore.ts` tracks anonymous run ids for
+  session-scoped history while server memory still holds those runs.
+- `src/auth/` owns the Better Auth menu and local-data import prompt shown when
+  an anonymous user signs in.
+- `src/theme/` owns the light/dark/system theme provider and menu.
 - `src/workbench/assets` stores bundled DeepSeek, OpenAI, Anthropic, and
   Ollama provider logos so model UI never depends on external image URLs at
   runtime.
 - `src/styles.css` exposes Tailwind/base styles for consuming apps.
 - `tests/core-loop.test.tsx` covers the end-to-end UI loop with a mocked API.
+  Additional tests cover node inspector behavior, shortcut focus rules,
+  workflow dirty snapshots, and graph history.
 
 Design constraints:
 
 - The layout waits for the server workflow before mounting the canvas, avoiding
-  a placeholder graph flash.
+  a placeholder graph flash. It waits for session resolution before selecting
+  the server-backed or anonymous IndexedDB workflow source.
 - Popovers use the shared Floating UI wrapper and mount under `body`; the
   header run history uses a backdrop-protected right drawer because it combines
   historical debug output and a selectable/deletable run list.
@@ -92,6 +106,26 @@ Design constraints:
   MVP. Knowledge node settings select one KB while persisting the array-shaped
   `knowledgeBaseIds` config, edit the query template, tune semantic retrieval
   limits, and render output variables.
+- Chat Mode uses `workflow.settings.mode === "chat"`. `useWorkflowExecution`
+  keeps a stable conversation id, sends user text as the `query` run field, and
+  derives assistant replies from the reached End node or the last LLM node. Start
+  fields are gated once per conversation; "New conversation" resets transcript
+  and memory thread. Summary-buffer settings live in workflow settings and are
+  edited from the Chat Panel.
+- Human Input nodes pause runs with a normalized interrupt. `resumeRun` keeps
+  completed node state visible, posts the selected action/text, and subscribes
+  to a fresh SSE leg on the same run.
+- The New Workflow dialog reads `WORKFLOW_TEMPLATES` from workflow-domain. Each
+  template builds a valid unsaved `WorkflowFile`; the UI previews requirements,
+  tags, and flow steps before loading the draft.
+- Variable-bearing fields use `VariableRichTextEditor`, backed by Lexical. The
+  canonical stored value remains the plain template string with
+  `{{nodeId.path}}` placeholders; chips are editor presentation only.
+- Tool nodes are descriptor-driven. The palette drills into `ToolBrowser`, the
+  inspector can rebind a tool, and `ToolParamForm` renders controls from
+  workflow-domain param specs.
+- The right inspector panel width is user-resizable and persisted in
+  localStorage by `useResizableWidth`.
 
 ## Test Strategy
 
@@ -99,5 +133,6 @@ Component tests render the full workbench with a memory workflow API. They
 should cover user-visible behavior and API calls without browser fetch, Electron
 preload APIs, or local runtime adapters. The test setup includes small DOM
 polyfills for ReactFlow sizing and a minimal EventSource mock for stream-based
-run rendering. Shared run output components should be exercised through the
-debug panel or node inspector paths rather than duplicated in separate fixtures.
+run rendering. Shared run output, Human Input resume, and node-output details
+should be exercised through the debug panel, Chat Panel, or node inspector paths
+rather than duplicated in separate fixtures.

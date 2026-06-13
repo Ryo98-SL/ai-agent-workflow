@@ -15,7 +15,9 @@ export async function executeCurrentTimeTool(
   void _context;
   const started = performance.now();
   const startedAt = new Date().toISOString();
-  const timezone = (node.config.adapter === "currentTime" ? node.config.timezone : undefined) || "UTC";
+  // Legacy/dead adapter (see ADR 0003): read the timezone from the generic tool
+  // params shape so this unused module still compiles. Full removal is deferred.
+  const timezone = (typeof node.config.params.timezone === "string" ? node.config.params.timezone : undefined) || "UTC";
 
   try {
     const now = new Date();

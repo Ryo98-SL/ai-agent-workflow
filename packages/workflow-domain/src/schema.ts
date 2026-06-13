@@ -55,31 +55,84 @@ const StartNodeSchema = BaseNodeSchema.extend({
     }),
 });
 
-const CurrentTimeToolConfigSchema = z.object({
-  adapter: z.literal("currentTime"),
-  timezone: z.string().default("UTC"),
-});
+/**
+ * Tool providers (sources). `builtin` ships in-repo; `mcp` / `custom` / `workflow`
+ * are reserved for dynamically-discovered or user-defined tools and are not
+ * populated yet (see ADR 0003 / CONTEXT.md — Tool Node, Tool Registry).
+ */
+export const TOOL_PROVIDERS = ["builtin", "mcp", "custom", "workflow"] as const;
+export const ToolProviderSchema = z.enum(TOOL_PROVIDERS);
+export type ToolProvider = z.infer<typeof ToolProviderSchema>;
 
-const EmailSendToolConfigSchema = z.object({
-  adapter: z.literal("emailSend"),
-  /** Recipient(s); supports `{{nodeId.path}}` variables. */
-  to: z.string().default(""),
-  subject: z.string().default(""),
-  /** Body template; supports `{{nodeId.path}}` variables. */
-  body: z.string().default(""),
-  /**
-   * When false (default) the node only composes the email and outputs it
-   * (dry-run) — nothing is sent, so the demo incurs no cost. Real sending
-   * (true) requires a server-side provider and is authed-only.
-   */
-  send: z.boolean().default(false),
-});
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(JsonValueSchema), z.record(JsonValueSchema)]),
+);
+
+/** Default config for a fresh/unbound Tool node — bound to the Current Time builtin. */
+const DEFAULT_TOOL_CONFIG = {
+  provider: "builtin",
+  providerId: "builtin",
+  toolName: "currentTime",
+  params: { timezone: "UTC" },
+} as const;
+
+const defaultToolConfig = () => ({ ...DEFAULT_TOOL_CONFIG, params: { ...DEFAULT_TOOL_CONFIG.params } });
+
+/**
+ * Migrate legacy `{ adapter, … }` Tool configs (per-adapter typed fields) into the
+ * generic `{ provider, providerId, toolName, params }` shape (ADR 0003), so tool
+ * nodes saved before the registry refactor keep loading. Built-in adapters move
+ * their typed fields into `params`; an unknown adapter falls back to Current Time.
+ */
+function migrateToolConfig(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") {
+    return raw;
+  }
+  const record = raw as Record<string, unknown>;
+  // Already the new shape, or nothing legacy to migrate.
+  if ("provider" in record || !("adapter" in record)) {
+    return raw;
+  }
+  if (record.adapter === "emailSend") {
+    return {
+      provider: "builtin",
+      providerId: "builtin",
+      toolName: "emailSend",
+      params: {
+        to: typeof record.to === "string" ? record.to : "",
+        subject: typeof record.subject === "string" ? record.subject : "",
+        body: typeof record.body === "string" ? record.body : "",
+        send: typeof record.send === "boolean" ? record.send : false,
+      },
+    };
+  }
+  if (record.adapter === "currentTime") {
+    return {
+      provider: "builtin",
+      providerId: "builtin",
+      toolName: "currentTime",
+      params: { timezone: typeof record.timezone === "string" ? record.timezone : "UTC" },
+    };
+  }
+  // Unknown legacy adapter → a valid bound default (a Tool node is never unbound).
+  return defaultToolConfig();
+}
 
 const ToolNodeSchema = BaseNodeSchema.extend({
   type: z.literal("tool"),
-  config: z
-    .discriminatedUnion("adapter", [CurrentTimeToolConfigSchema, EmailSendToolConfigSchema])
-    .default({ adapter: "currentTime", timezone: "UTC" }),
+  config: z.preprocess(
+    migrateToolConfig,
+    z
+      .object({
+        provider: ToolProviderSchema,
+        providerId: z.string().min(1),
+        toolName: z.string().min(1),
+        /** Configured tool inputs; variable-bearing strings stay `{{nodeId.path}}`. */
+        params: z.record(JsonValueSchema).default({}),
+      })
+      .default(defaultToolConfig),
+  ),
 });
 
 const KnowledgeRetrievalConfigSchema = z
@@ -453,9 +506,8 @@ export type StartNode = Extract<WorkflowNode, { type: "start" }>;
 export type LLMNode = Extract<WorkflowNode, { type: "llm" }>;
 export type KnowledgeNode = Extract<WorkflowNode, { type: "knowledge" }>;
 export type ToolNode = Extract<WorkflowNode, { type: "tool" }>;
+/** Generic tool config: `{ provider, providerId, toolName, params }` (ADR 0003). */
 export type ToolNodeConfig = ToolNode["config"];
-export type ToolAdapter = ToolNodeConfig["adapter"];
-export type EmailSendToolConfig = Extract<ToolNodeConfig, { adapter: "emailSend" }>;
 export type IfElseNode = Extract<WorkflowNode, { type: "ifElse" }>;
 export type IfElseCase = IfElseNode["config"]["cases"][number];
 export type ConditionRow = IfElseCase["conditions"][number];
@@ -1011,7 +1063,7 @@ export function createNode(
       ...base,
       label: "Current Time",
       type,
-      config: { adapter: "currentTime", timezone: "UTC" },
+      config: { provider: "builtin", providerId: "builtin", toolName: "currentTime", params: { timezone: "UTC" } },
     };
   }
 

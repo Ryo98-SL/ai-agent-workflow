@@ -110,6 +110,31 @@ describe("getAvailableVariables", () => {
   });
 });
 
+describe("tool node variables", () => {
+  const toolNode: WorkflowNode = {
+    id: "tool1",
+    type: "tool",
+    label: "Send Email",
+    position: { x: 1, y: 1 },
+    config: { provider: "builtin", providerId: "builtin", toolName: "emailSend", params: {} },
+  };
+  const toolNodes: WorkflowNode[] = [start, toolNode, llm];
+  const toolEdges: WorkflowEdge[] = [
+    { id: "te1", source: "start1", target: "tool1" },
+    { id: "te2", source: "tool1", target: "llm1" },
+  ];
+
+  it("surfaces the bound tool descriptor's output fields", () => {
+    const groups = getAvailableVariables(toolNodes, toolEdges, "llm1");
+    const toolGroup = groups.find((g) => g.nodeId === "tool1")!;
+    const dataHeader = toolGroup.fields.find((f) => f.path.join(".") === "data")!;
+    const sent = toolGroup.fields.find((f) => f.path.join(".") === "data.sent")!;
+    expect(dataHeader.selectable).toBe(false); // object header
+    expect(sent.selectable).toBe(true);
+    expect(sent.reference).toBe("{{tool1.data.sent}}");
+  });
+});
+
 describe("resolveAvailableVariable", () => {
   it("resolves a reachable selectable field", () => {
     expect(resolveAvailableVariable(nodes, edges, "llm1", "{{start1.topic}}")?.name).toBe("topic");

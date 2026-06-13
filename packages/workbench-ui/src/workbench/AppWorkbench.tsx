@@ -9,6 +9,7 @@ import {
   createKnowledgeDemoWorkflow,
   createNode,
   ifElseHandleIds,
+  resolveToolDescriptor,
   type WorkflowTemplate,
   type MemorySummarySettings,
   type ModelProvider,
@@ -38,10 +39,34 @@ import { useProviderKeyStore } from "../data/useProviderKeyStore";
 import { useQueryClient } from "@tanstack/react-query";
 import type { WorkflowMetaPatch } from "./components/WorkflowMetaEditor";
 import { ImportLocalDataPrompt } from "../auth/ImportLocalDataPrompt";
-import type { AddNodeOptions, AppWorkbenchProps, WorkflowNodeAction } from "./types";
+import type { AddNodeOptions, AppWorkbenchProps, ToolIdentity, WorkflowNodeAction } from "./types";
 import { workflowDirtySnapshot } from "./workflowDirtySnapshot";
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8788";
+
+/**
+ * Binds a freshly-created Tool node to the tool chosen in the Tool Browser
+ * (config from the descriptor's defaults). Non-tool nodes / no-binding pass through.
+ */
+function bindToolNode(node: WorkflowNode, tool?: ToolIdentity): WorkflowNode {
+  if (node.type !== "tool" || !tool) {
+    return node;
+  }
+  const descriptor = resolveToolDescriptor(tool);
+  if (!descriptor) {
+    return node;
+  }
+  return {
+    ...node,
+    label: descriptor.label,
+    config: {
+      provider: descriptor.provider,
+      providerId: descriptor.providerId,
+      toolName: descriptor.toolName,
+      params: structuredClone(descriptor.defaultParams),
+    },
+  };
+}
 
 export function AppWorkbench({ apiBaseUrl, ...props }: AppWorkbenchProps) {
   return (
@@ -287,7 +312,7 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
           return;
         }
 
-        const node = createNode(type, { x: 0, y: 0 }, workflow.graph.nodes);
+        const node = bindToolNode(createNode(type, { x: 0, y: 0 }, workflow.graph.nodes), options?.tool);
         const size = getWorkflowNodeSize(node);
         node.position = {
           x: (sourceNode.position.x + targetNode.position.x) / 2 - size.width / 2,
@@ -320,7 +345,7 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
             y: anchorNode.position.y,
           }
         : options?.position ?? { x: 180 + workflow.graph.nodes.length * 32, y: 120 + workflow.graph.nodes.length * 24 };
-      const node = createNode(type, position, workflow.graph.nodes);
+      const node = bindToolNode(createNode(type, position, workflow.graph.nodes), options?.tool);
       // Cursor-follow placement passes the point the node should center on, so
       // shift the freshly created node from its top-left origin to that center.
       if (!anchorNode && options?.position) {
@@ -342,28 +367,36 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
   // Cursor-follow placement (left palette only): a node type is "armed" and a
   // ghost follows the cursor until the user clicks the canvas to commit it.
   const [placementNodeType, setPlacementNodeType] = useState<WorkflowNodeType | null>(null);
+  // Tool binding carried alongside an armed cursor-follow placement (left palette).
+  const [placementTool, setPlacementTool] = useState<ToolIdentity | null>(null);
 
-  const beginNodePlacement = useCallback((type: WorkflowNodeType) => {
+  const beginNodePlacement = useCallback((type: WorkflowNodeType, tool?: ToolIdentity) => {
     setPlacementNodeType(type);
+    setPlacementTool(tool ?? null);
     setPaletteOpen(false);
   }, []);
 
-  const cancelNodePlacement = useCallback(() => setPlacementNodeType(null), []);
+  const cancelNodePlacement = useCallback(() => {
+    setPlacementNodeType(null);
+    setPlacementTool(null);
+  }, []);
 
   const confirmNodePlacement = useCallback(
     (position: { x: number; y: number }) => {
       if (placementNodeType) {
-        addNode(placementNodeType, { position });
+        addNode(placementNodeType, { position, tool: placementTool ?? undefined });
         setPlacementNodeType(null);
+        setPlacementTool(null);
       }
     },
-    [addNode, placementNodeType],
+    [addNode, placementNodeType, placementTool],
   );
 
   const togglePalette = useCallback(() => {
     // While placement is armed, the "+" button cancels it instead of reopening.
     if (placementNodeType) {
       setPlacementNodeType(null);
+      setPlacementTool(null);
       return;
     }
     setPaletteOpen((current) => !current);

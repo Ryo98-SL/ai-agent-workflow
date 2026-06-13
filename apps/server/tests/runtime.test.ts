@@ -596,17 +596,43 @@ function emailWorkflow(send: boolean): WorkflowFile {
   }
   tool.id = "email1";
   tool.config = {
-    adapter: "emailSend",
-    to: "user@example.com",
-    subject: "Re: {{start1.topic}}",
-    body: "Hi about {{start1.topic}}",
-    send,
+    provider: "builtin",
+    providerId: "builtin",
+    toolName: "emailSend",
+    params: {
+      to: "user@example.com",
+      subject: "Re: {{start1.topic}}",
+      body: "Hi about {{start1.topic}}",
+      send,
+    },
   };
   return {
     ...workflow,
     graph: {
       nodes: [start, tool],
       edges: [{ id: "edge-start-email", source: "start1", target: "email1" }],
+    },
+  };
+}
+
+/** Start → Current Time tool with the given bound config. */
+function currentTimeWorkflow(config: { toolName: string; params: Record<string, unknown> }): WorkflowFile {
+  const workflow = createDefaultWorkflow();
+  const start = workflow.graph.nodes.find((node) => node.type === "start");
+  if (!start) {
+    throw new Error("Expected start node.");
+  }
+  const tool = createNode("tool", { x: 300, y: 120 }, workflow.graph.nodes);
+  if (tool.type !== "tool") {
+    throw new Error("Expected tool node.");
+  }
+  tool.id = "time1";
+  tool.config = { provider: "builtin", providerId: "builtin", ...config } as typeof tool.config;
+  return {
+    ...workflow,
+    graph: {
+      nodes: [start, tool],
+      edges: [{ id: "edge-start-time", source: "start1", target: "time1" }],
     },
   };
 }
@@ -704,6 +730,43 @@ describe("Email tool", () => {
 
   it("fails real send when no email sender is configured", async () => {
     const execution = await executeWorkflowRuntime(emailWorkflow(true), { topic: "x" }, {});
+    expect(execution.ok).toBe(false);
+  });
+});
+
+describe("Current Time tool", () => {
+  it("formats the current time in the configured timezone", async () => {
+    const execution = await executeWorkflowRuntime(
+      currentTimeWorkflow({ toolName: "currentTime", params: { timezone: "Asia/Shanghai" } }),
+      { topic: "x" },
+      {},
+    );
+
+    expect(execution.ok).toBe(true);
+    if (!execution.ok) {
+      return;
+    }
+    const data = execution.state.time1.data as { timezone: string; iso: string; formatted: string };
+    expect(data.timezone).toBe("Asia/Shanghai");
+    expect(typeof data.formatted).toBe("string");
+    expect(data.formatted.length).toBeGreaterThan(0);
+  });
+
+  it("fails on an invalid timezone", async () => {
+    const execution = await executeWorkflowRuntime(
+      currentTimeWorkflow({ toolName: "currentTime", params: { timezone: "Not/AZone" } }),
+      { topic: "x" },
+      {},
+    );
+    expect(execution.ok).toBe(false);
+  });
+
+  it("fails when bound to an unknown tool", async () => {
+    const execution = await executeWorkflowRuntime(
+      currentTimeWorkflow({ toolName: "doesNotExist", params: {} }),
+      { topic: "x" },
+      {},
+    );
     expect(execution.ok).toBe(false);
   });
 });

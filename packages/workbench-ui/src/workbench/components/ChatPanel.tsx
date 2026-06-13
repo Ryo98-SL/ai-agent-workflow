@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, Loader2, MessageSquareText, Send, Settings2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Loader2,
+  MessageSquareText,
+  Send,
+  Settings2,
+  UserCheck,
+} from "lucide-react";
 import type { ResumeRunRequest } from "@ai-agent-workflow/api-contracts";
 import {
   resolveMemorySettings,
@@ -55,14 +65,20 @@ export function ChatPanel({
     [startFields],
   );
   const [baseValues, setBaseValues] = useState<Record<string, string>>(initialValues);
-  // Once a conversation has begun the Start form is locked; "New conversation" resets.
-  const [started, setStarted] = useState(!needsSetup);
+  // The Start form is only gated for a fresh, empty conversation. An in-progress
+  // one is already past the gate — including after the panel remounts (e.g.
+  // toggling back from the Workflow tab), so the "开始对话" button never reappears
+  // mid-conversation. "New conversation" empties the transcript and re-gates.
+  const hasConversation = transcript.length > 0 || conversationTurns > 0;
+  const [started, setStarted] = useState(!needsSetup || hasConversation);
   useEffect(() => {
-    if (transcript.length === 0 && conversationTurns === 0) {
+    if (hasConversation) {
+      setStarted(true);
+    } else {
       setStarted(!needsSetup);
       setBaseValues(initialValues);
     }
-  }, [transcript.length, conversationTurns, needsSetup, initialValues]);
+  }, [hasConversation, needsSetup, initialValues]);
 
   const [draft, setDraft] = useState("");
   const [showSettings, setShowSettings] = useState(false);
@@ -71,9 +87,27 @@ export function ChatPanel({
   const isWaiting = debugState.status === "waiting";
   const busy = isRunning || isWaiting;
 
-  // Keep the transcript pinned to the latest message as it streams.
-  const liveAnswer = deriveChatAnswer(nodeStates);
+  // The human-review dock floats over the transcript bottom (it never steals
+  // height from the conversation) and can collapse to a thin bar. Each new
+  // interrupt opens expanded.
+  const [reviewCollapsed, setReviewCollapsed] = useState(false);
   useEffect(() => {
+    if (isWaiting) setReviewCollapsed(false);
+  }, [isWaiting]);
+
+  // Keep the transcript pinned to the latest message as it streams — but only
+  // while the user is already at the bottom. Once they scroll up to read earlier
+  // output we stop auto-scrolling so streaming output can't yank them back down;
+  // returning to the bottom (or sending a message) re-arms the stick.
+  const liveAnswer = deriveChatAnswer(nodeStates);
+  const stickToBottomRef = useRef(true);
+  const handleTranscriptScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+  };
+  useEffect(() => {
+    if (!stickToBottomRef.current) return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [transcript, liveAnswer]);
 
@@ -83,6 +117,7 @@ export function ChatPanel({
     const query = draft.trim();
     if (!query || busy || !started) return;
     setDraft("");
+    stickToBottomRef.current = true;
     onSendMessage(query, baseValues);
   };
 
@@ -132,33 +167,74 @@ export function ChatPanel({
         <MemorySummaryEditor summary={summary} onChange={onMemorySummaryChange} />
       )}
 
-      {/* Transcript */}
-      <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-        {transcript.length === 0 && (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-            <MessageSquareText size={28} className="opacity-40" aria-hidden />
-            <p className="text-sm">
-              {needsSetup && !started ? "填写下方初始输入后开始对话。" : "发送一条消息，开始与工作流对话。"}
-            </p>
+      {/* Transcript + floating human-review dock (the dock overlays the bottom
+          of the scroll area instead of consuming its height). */}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={scrollRef}
+          onScroll={handleTranscriptScroll}
+          className={[
+            "h-full space-y-4 overflow-y-auto px-4 pt-4",
+            // Leave room below the last bubble so the collapsed review bar
+            // (~3rem incl. its margin) can't cover content when scrolled to bottom.
+            isWaiting ? "pb-16" : "pb-4",
+          ].join(" ")}
+        >
+          {transcript.length === 0 && (
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+              <MessageSquareText size={28} className="opacity-40" aria-hidden />
+              <p className="text-sm">
+                {needsSetup && !started ? "填写下方初始输入后开始对话。" : "发送一条消息，开始与工作流对话。"}
+              </p>
+            </div>
+          )}
+
+          {transcript.map((turn, index) => {
+            const isLive = index === lastIndex;
+            const answer = isLive && turn.status !== "success" ? liveAnswer : turn.answer;
+            return (
+              <ChatTurnView
+                key={turn.id}
+                workflow={workflow}
+                turn={turn}
+                answer={answer}
+                isLive={isLive}
+                debugState={debugState}
+                liveNodeStates={nodeStates}
+              />
+            );
+          })}
+        </div>
+
+        {/* Floating, collapsible human-in-the-loop review. Wrapper is
+            pointer-events-none so the transcript stays scrollable around it. */}
+        {!readOnly && isWaiting && debugState.waiting && onResumeRun && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-3">
+            {reviewCollapsed ? (
+              <button
+                type="button"
+                onClick={() => setReviewCollapsed(false)}
+                className="pointer-events-auto flex w-full items-center gap-2 rounded-lg border border-brand/40 bg-background/95 px-3 py-2.5 text-sm font-medium text-foreground shadow-lg backdrop-blur transition-colors hover:bg-brand/5"
+              >
+                <UserCheck size={15} className="shrink-0 text-brand" aria-hidden />
+                <span className="flex-1 truncate text-left">等待你的复核</span>
+                <ChevronUp size={16} className="shrink-0 text-muted-foreground" aria-hidden />
+              </button>
+            ) : (
+              // Opaque wrapper so the floating card covers the transcript
+              // behind it; the prompt's own bg-brand/5 sits on top for tint.
+              <div className="pointer-events-auto rounded-lg bg-background shadow-lg">
+                <HumanReviewForm
+                  runId={debugState.waiting.runId}
+                  interrupt={debugState.waiting.interrupt}
+                  onResumeRun={onResumeRun}
+                  onCollapse={() => setReviewCollapsed(true)}
+                  className="max-h-[22rem] overflow-y-auto"
+                />
+              </div>
+            )}
           </div>
         )}
-
-        {transcript.map((turn, index) => {
-          const isLive = index === lastIndex;
-          const answer = isLive && turn.status !== "success" ? liveAnswer : turn.answer;
-          return (
-            <ChatTurnView
-              key={turn.id}
-              workflow={workflow}
-              turn={turn}
-              answer={answer}
-              isLive={isLive}
-              debugState={debugState}
-              liveNodeStates={nodeStates}
-              onResumeRun={readOnly ? undefined : onResumeRun}
-            />
-          );
-        })}
       </div>
 
       {/* Start-form gate (once per conversation) */}
@@ -221,7 +297,6 @@ function ChatTurnView({
   isLive,
   debugState,
   liveNodeStates,
-  onResumeRun,
 }: {
   workflow: WorkflowFile;
   turn: ChatTurn;
@@ -229,7 +304,6 @@ function ChatTurnView({
   isLive: boolean;
   debugState: DebugState;
   liveNodeStates: Map<string, NodeExecutionState>;
-  onResumeRun?: (runId: string, request: ResumeRunRequest) => void;
 }) {
   const [showTrace, setShowTrace] = useState(false);
   const thinking = turn.status === "running" && answer.trim().length === 0;
@@ -246,15 +320,6 @@ function ChatTurnView({
           {turn.query}
         </div>
       </div>
-
-      {/* Waiting on a Human Input node: inline review form */}
-      {isLive && turn.status === "waiting" && debugState.waiting && onResumeRun && (
-        <HumanReviewForm
-          runId={debugState.waiting.runId}
-          interrupt={debugState.waiting.interrupt}
-          onResumeRun={onResumeRun}
-        />
-      )}
 
       {/* Assistant message */}
       <div className="flex justify-start">

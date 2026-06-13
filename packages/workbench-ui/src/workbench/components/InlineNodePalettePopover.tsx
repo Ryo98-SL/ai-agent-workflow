@@ -72,7 +72,7 @@ export function InlineNodePalettePopover({ hasStartNode, palette, onAddNode, onC
           <NodePalette
             disabledTypes={disabledTypes}
             hasStartNode={hasStartNode}
-            onAddNode={(type) => {
+            onAddNode={(type, tool) => {
               if (!palette) {
                 return;
               }
@@ -84,12 +84,14 @@ export function InlineNodePalettePopover({ hasStartNode, palette, onAddNode, onC
                     sourceHandleId: palette.sourceHandleId,
                     targetNodeId: palette.targetNodeId,
                   },
+                  tool,
                 });
               } else {
                 onAddNode(type, {
                   sourceNodeId: palette.sourceNodeId,
                   handleType: palette.handleType,
                   sourceHandleId: palette.sourceHandleId,
+                  tool,
                 });
               }
               onClose();

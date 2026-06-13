@@ -14,5 +14,9 @@
 ## Behavior
 
 Route modules validate request bodies with `@ai-agent-workflow/api-contracts`
-schemas and return normalized API errors. Knowledge routes allow anonymous reads
-of the seeded example KB, while all KB mutations require an authenticated owner.
+schemas and return normalized API errors. Account and credit routes require a
+resolved Better Auth user. Knowledge routes allow anonymous reads of the seeded
+example KB, while all KB mutations require an authenticated owner.
+
+Provider keys and platform credit keys are encrypted server-side; routes only
+return labels, provider ids, and masked `last4` metadata.

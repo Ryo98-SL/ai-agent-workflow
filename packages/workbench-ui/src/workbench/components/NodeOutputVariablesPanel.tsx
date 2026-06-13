@@ -1,11 +1,17 @@
-import { workflowNodeOutputFields, type WorkflowNodeOutputField, type WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
+import {
+  nodeOutputFields,
+  workflowNodeOutputFields,
+  type WorkflowNode,
+  type WorkflowNodeOutputField,
+  type WorkflowNodeType,
+} from "@ai-agent-workflow/workflow-domain";
 
-type NodeOutputVariablesPanelProps = {
-  nodeType: WorkflowNodeType;
-};
+// Pass `node` for per-node resolution (Tool nodes resolve outputs from their bound
+// descriptor); `nodeType` stays for inspectors keyed only by type.
+type NodeOutputVariablesPanelProps = { node: WorkflowNode } | { nodeType: WorkflowNodeType };
 
-export function NodeOutputVariablesPanel({ nodeType }: NodeOutputVariablesPanelProps) {
-  const fields = workflowNodeOutputFields(nodeType);
+export function NodeOutputVariablesPanel(props: NodeOutputVariablesPanelProps) {
+  const fields = "node" in props ? nodeOutputFields(props.node) : workflowNodeOutputFields(props.nodeType);
   if (fields.length === 0) {
     return null;
   }

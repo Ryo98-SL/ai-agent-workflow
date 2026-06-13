@@ -20,10 +20,14 @@ import type {
 import type {
   ModelProviderKeys,
   OpenAICompatibleSettings,
+  ToolProvider,
   WorkflowFile,
   WorkflowNode,
   WorkflowNodeType,
 } from "@ai-agent-workflow/workflow-domain";
+
+/** Identity triple a Tool node binds to when added/rebound via the Tool Browser. */
+export type ToolIdentity = { provider: ToolProvider; providerId: string; toolName: string };
 
 type NodeExecutionStateBase = {
   nodeId: string;
@@ -171,6 +175,11 @@ export type AddNodeOptions = {
     sourceHandleId?: string;
     targetNodeId: string;
   };
+  /**
+   * Tool Browser binding: when `type === "tool"`, bind the created node to this
+   * tool (config from the descriptor's defaults). Absent → the currentTime default.
+   */
+  tool?: ToolIdentity;
 };
 
 export type WorkflowMutators = {

@@ -1,16 +1,18 @@
 # Workflow Domain
 
-Shared workflow schema, workflow file helpers, readable node factories, and
-namespaced prompt variable utilities for AI Agent Workflow apps and services.
-Every persisted workflow node carries a user-editable `description` alongside
-its label and type-specific config.
+Shared workflow schema, workflow file helpers, readable node factories, tool
+registry metadata, available-variable helpers, condition evaluation, starter
+workflow templates, and namespaced prompt variable utilities for AI Agent
+Workflow apps and services. Every persisted workflow node carries a
+user-editable `description` alongside its label and type-specific config.
 
-Knowledge nodes now have a strong RAG config with `knowledgeBaseIds`,
+Knowledge nodes have a strong RAG config with `knowledgeBaseIds`,
 `queryTemplate`, and semantic retrieval defaults. The package also exposes
-output-variable metadata helpers so UI/runtime consumers can describe LLM and
-Knowledge node outputs consistently, plus `createKnowledgeDemoWorkflow` — a
-ready-to-run Chinese customer-support RAG demo (Start → Knowledge → LLM) over the
-seeded example KB (`EXAMPLE_KNOWLEDGE_BASE_ID`).
+output-variable metadata helpers so UI/runtime consumers can describe LLM,
+Knowledge, Tool, and Human Input outputs consistently. Starter templates include
+a blank workflow, a ready-to-run Chinese customer-support RAG demo
+(Start -> Knowledge -> LLM), and a support bot with If/Else plus Human Input
+review over the seeded example KB (`EXAMPLE_KNOWLEDGE_BASE_ID`).
 
 Model settings are provider-aware. Persisted workflow settings support
 `deepseek`, `openai`, `anthropic`, and `ollama`, defaulting to DeepSeek
@@ -19,6 +21,12 @@ provider API keys in a `modelProviderKeys` keyring. Workflow defaults and LLM
 node `modelSettings` overrides both support provider, base URL, model,
 temperature, and max tokens; node overrides no longer need inline API keys for
 new UI flows.
+
+Workflow settings also include `mode` (`workflow` or `chat`), provider-key
+preferences for AI credits vs stored API keys, and optional conversation-memory
+summary settings. Tool nodes bind to a shared
+`provider/providerId/toolName` identity; built-in descriptors currently cover
+Current Time and Send Email.
 
 ## Commands
 

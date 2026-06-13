@@ -1,61 +1,50 @@
-import { useState } from "react";
-import { UserCheck } from "lucide-react";
 import type { ResumeRunRequest, RunInterrupt } from "@ai-agent-workflow/api-contracts";
-import { Textarea } from "@workbench/components/ui/textarea";
-import { Button } from "./Button";
+import { HumanReviewPrompt, type ReviewPromptOption } from "./HumanReviewPrompt";
 
 type HumanReviewFormProps = {
   runId: string;
   interrupt: RunInterrupt;
   submitting?: boolean;
+  /** When provided, a collapse button is shown (used by the floating chat dock). */
+  onCollapse?: () => void;
+  /** Extra classes for the root (e.g. max-height + overflow when docked). */
+  className?: string;
   onResumeRun: (runId: string, request: ResumeRunRequest) => void;
 };
 
-/** The reviewer-facing form shown while a run is paused on a Human Input node. */
-export function HumanReviewForm({ runId, interrupt, submitting = false, onResumeRun }: HumanReviewFormProps) {
-  const [text, setText] = useState(interrupt.defaultText ?? "");
+/**
+ * The reviewer-facing form shown while a run is paused on a Human Input node.
+ * Maps the interrupt's preset actions + optional free-text reply onto the shared
+ * {@link HumanReviewPrompt} template and wires each choice back to resume.
+ */
+export function HumanReviewForm({
+  runId,
+  interrupt,
+  submitting = false,
+  onCollapse,
+  className,
+  onResumeRun,
+}: HumanReviewFormProps) {
+  const options: ReviewPromptOption[] = interrupt.actions.map((action) => ({
+    id: action.id,
+    label: action.label,
+  }));
 
   return (
-    <section className="space-y-3 rounded-md border border-brand/40 bg-brand/5 p-4">
-      <div className="flex items-center gap-2">
-        <UserCheck size={15} className="text-brand" aria-hidden />
-        <h3 className="text-sm font-semibold text-foreground">Awaiting your review</h3>
-      </div>
-
-      {interrupt.prompt && (
-        <p className="whitespace-pre-wrap text-sm leading-5 text-foreground">{interrupt.prompt}</p>
-      )}
-
-      {interrupt.actions.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {interrupt.actions.map((action) => (
-            <Button
-              key={action.id}
-              variant="secondary"
-              size="md"
-              disabled={submitting}
-              onClick={() => onResumeRun(runId, { action_id: action.id, action_value: action.value })}
-            >
-              {action.label}
-            </Button>
-          ))}
-        </div>
-      )}
-
-      {interrupt.allowTextInput && (
-        <div className="space-y-2">
-          <span className="block text-xs font-medium text-muted-foreground">{interrupt.inputLabel || "回复内容"}</span>
-          <Textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} disabled={submitting} />
-          <Button
-            variant="success"
-            size="md"
-            disabled={submitting || text.trim() === ""}
-            onClick={() => onResumeRun(runId, { action_id: "__input__", action_value: text })}
-          >
-            Submit reply
-          </Button>
-        </div>
-      )}
-    </section>
+    <HumanReviewPrompt
+      description={interrupt.prompt}
+      options={options}
+      allowOther={interrupt.allowTextInput}
+      otherInputLabel={interrupt.inputLabel || "回复内容"}
+      otherDefault={interrupt.defaultText ?? ""}
+      disabled={submitting}
+      onCollapse={onCollapse}
+      className={className}
+      onSelect={(optionId) => {
+        const action = interrupt.actions.find((item) => item.id === optionId);
+        onResumeRun(runId, { action_id: optionId, action_value: action?.value ?? "" });
+      }}
+      onSubmitOther={(text) => onResumeRun(runId, { action_id: "__input__", action_value: text })}
+    />
   );
 }

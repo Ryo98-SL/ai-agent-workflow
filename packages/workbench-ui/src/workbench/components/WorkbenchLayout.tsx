@@ -30,7 +30,7 @@ import { WorkflowSwitchBar } from "./WorkflowSwitchBar";
 import type { WorkflowMetaPatch } from "./WorkflowMetaEditor";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import type { WorkflowGraphHistoryEntry } from "../hooks/useWorkflowGraphHistory";
-import type { AddNodeOptions, ChatTurn, DebugState, NodeExecutionState, WorkflowNodeActionHandler } from "../types";
+import type { AddNodeOptions, ChatTurn, DebugState, NodeExecutionState, ToolIdentity, WorkflowNodeActionHandler } from "../types";
 
 type WorkbenchLayoutProps = {
   workflow: WorkflowFile;
@@ -51,7 +51,7 @@ type WorkbenchLayoutProps = {
   canUndo: boolean;
   onAddNode: (type: WorkflowNodeType, options?: AddNodeOptions) => void;
   placementNodeType: WorkflowNodeType | null;
-  onBeginNodePlacement: (type: WorkflowNodeType) => void;
+  onBeginNodePlacement: (type: WorkflowNodeType, tool?: ToolIdentity) => void;
   onConfirmNodePlacement: (position: { x: number; y: number }) => void;
   onCancelNodePlacement: () => void;
   onCloseDebug: () => void;

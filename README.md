@@ -70,8 +70,12 @@ KBs and add pasted text or `.txt`/`.md` files.
 
 ## Known Limits
 
-- Production graph execution beyond the supported Start, Knowledge, and LLM
-  subset is deferred.
+- Production graph execution beyond the supported Start, Knowledge, LLM, and
+  Tool subset is deferred.
+- Tools are registry-based (one `tool` node bound to a chosen tool; see
+  `docs/adr/0003-generic-tool-node-and-tool-registry.md`). Built-in tools are
+  Current Time and Send Email; MCP, Custom (API), and Workflow-as-tool are
+  reserved in the schema/Tool Browser but not implemented.
 - Anonymous Knowledge runs are limited to the seeded read-only example KB;
   anonymous uploads are not supported.
 - Knowledge ingestion is pasted text and `.txt`/`.md` files only; PDF/DOCX,

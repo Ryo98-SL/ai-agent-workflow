@@ -2,12 +2,12 @@ import {
   USER_INPUT_FIELDS,
   USER_INPUT_LABEL,
   USER_INPUT_NAMESPACE,
-  workflowNodeOutputFields,
   type WorkflowEdge,
   type WorkflowNode,
   type WorkflowNodeOutputField,
   type WorkflowNodeType,
 } from "./schema";
+import { nodeOutputFields } from "./toolRegistry";
 
 /**
  * A single field a node may reference, flattened to a runtime-resolvable path.
@@ -236,7 +236,7 @@ function fieldsForNode(node: WorkflowNode): AvailableVariableField[] {
     });
   };
 
-  for (const field of workflowNodeOutputFields(node.type)) {
+  for (const field of nodeOutputFields(node)) {
     walk(field, []);
   }
   return result;

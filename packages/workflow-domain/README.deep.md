@@ -19,6 +19,15 @@ Electron, server, or runtime execution dependencies.
   well-known example KB id (`EXAMPLE_KNOWLEDGE_BASE_ID`, re-exported by the server
   seed so storage and fixtures never drift), and `createKnowledgeDemoWorkflow`,
   the anonymous Chinese customer-support RAG demo wiring Start → Knowledge → LLM.
+- `src/toolRegistry.ts` defines declarative Tool descriptors, parameter specs,
+  output fields, and lookup helpers. Built-in descriptors currently cover
+  Current Time and Send Email; MCP/custom/workflow providers are schema-reserved.
+- `src/conditions.ts` evaluates If/Else condition rows against runtime state and
+  exports shared operator labels.
+- `src/availableVariables.ts` computes upstream Available Variables for a
+  consumer node, including Chat Mode's ambient `userInput` namespace.
+- `src/workflowTemplates.ts` defines the starter workflow registry used by the
+  New Workflow picker.
 - `src/promptVariables.ts` defines namespaced prompt placeholder parsing,
   runtime-state resolution, and legacy variable value merging.
 - `src/index.ts` exports the stable public API used by app, runtime, and tests.
@@ -32,6 +41,7 @@ share the same entrypoint.
 
 ## Test Strategy
 
-Package tests run in a Node Vitest environment. The root app test suite also
-imports the package through the workspace dependency to verify integration with
-runtime and workbench code.
+Package tests run in a Node Vitest environment. They cover schema parsing,
+workflow templates, prompt variables, available variables, conditions, and tool
+registry behavior. The root app test suite also imports the package through the
+workspace dependency to verify integration with legacy runtime code.

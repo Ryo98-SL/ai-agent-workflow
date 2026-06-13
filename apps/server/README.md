@@ -1,12 +1,12 @@
 # Workflow API Server
 
-Minimal Hono server for workflow persistence and synchronous workflow runs
-compiled and streamed through LangGraph JS.
+Hono API server for workflow persistence, account resources, Knowledge Base
+management, and LangGraph-backed workflow execution.
 
 Runtime execution code lives in `src/runtime/`, split by graph execution,
-validation, Start input materialization, prompt resolution, and model calls.
-Knowledge Base storage, text chunking, platform-managed embeddings, and the
-in-process indexing runner live in `src/knowledge/`.
+validation, Start input materialization, prompt resolution, model calls, and
+tool runtimes. Knowledge Base storage, text chunking, platform-managed
+embeddings, and the in-process indexing runner live in `src/knowledge/`.
 
 ```bash
 pnpm --filter @ai-agent-workflow/server dev
@@ -16,18 +16,19 @@ The local server listens on `http://127.0.0.1:8788` by default. Set `PORT` to
 override the port.
 
 Workflow runs require provider-aware model settings on the workflow when an LLM
-node executes. The runtime currently executes Start, LLM, and Knowledge nodes;
-other known workflow node types are saved through placeholder builders so their
-state is visible to downstream runtime code until full implementations land.
-The server uses workflow defaults, provider keyring values, and optional
-node-level model settings to choose the provider, model, base URL, resolved API
-key, temperature, and max tokens for each LLM node. Run requests can still
-provide transient model settings/keyring values for execution.
+node executes. The runtime executes Start, LLM, Knowledge, Tool, If/Else,
+Human Input, Template, and End behavior; Code remains a visible placeholder.
+The server uses workflow defaults, stored provider keys, provider-key
+preferences, AI credit settings, and optional node-level model settings to
+choose the provider, model, base URL, resolved API key, temperature, and max
+tokens for each LLM node. Run requests can still provide transient model
+settings/keyring values for execution.
 
-LangGraph execution uses a shared in-memory checkpointer and runs through
-`.stream()` with updates, messages, and values enabled. `executeWorkflowRuntime`
-collects normalized stream events and can call an `onStreamEvent` callback,
-which is the backend hook for future live progress delivery to the workbench.
+LangGraph execution streams Server-Sent Events through `/api/runs/:id/stream`.
+`executeWorkflowRuntime` collects normalized stream events and can pause on
+Human Input nodes; clients resume the same run with `/api/runs/:id/resume`.
+Runs can share a `conversationId` so Chat Mode turns reuse LangGraph thread
+memory.
 
 Route handling and runtime execution emit structured JSON logs through the
 shared `src/logger.ts` module. Log metadata is limited to safe identifiers and
@@ -54,3 +55,7 @@ emit `result`, `context`, and `query` for downstream nodes. If neither
 `EMBEDDING_API_KEY` nor `CREDITS_OPENAI_API_KEY` is configured, the background
 KB indexer is disabled so local dev can start without marking queued documents
 as failed.
+
+Tool nodes bind to the shared workflow-domain Tool Registry. Built-in server
+runtimes currently cover Current Time and Send Email. Email defaults to dry-run;
+real sending requires `RESEND_API_KEY` and `EMAIL_FROM`.

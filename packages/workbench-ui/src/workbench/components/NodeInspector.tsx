@@ -1,7 +1,14 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { ResumeRunRequest } from "@ai-agent-workflow/api-contracts";
-import type { ModelProvider, ProviderKeyPreference, WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import {
+  resolveToolDescriptor,
+  type ModelProvider,
+  type ProviderKeyPreference,
+  type WorkflowFile,
+  type WorkflowNode,
+} from "@ai-agent-workflow/workflow-domain";
 import type { DebugState, NodeExecutionState } from "../types";
+import { resolveToolIcon } from "./workflowNodes/workflowNodeVisuals";
 import { KnowledgeInspector } from "./knowledge/KnowledgeInspector";
 import { EndInspector } from "./inspectors/EndInspector";
 import { HumanInputInspector } from "./inspectors/HumanInputInspector";
@@ -35,9 +42,11 @@ type NodeInspectorPanelTitleProps = {
 type InspectorTab = "settings" | "history";
 
 export function NodeInspectorPanelTitle({ node, updateNode }: NodeInspectorPanelTitleProps) {
+  // Tool nodes show their bound tool's icon, not the generic wrench.
+  const toolIcon = node.type === "tool" ? resolveToolIcon(resolveToolDescriptor(node.config)?.icon) : undefined;
   return (
     <div className="flex min-w-0 flex-1 items-center gap-3">
-      <NodeTypeIcon type={node.type} size={32} iconSize={18} className="rounded-md" />
+      <NodeTypeIcon type={node.type} size={32} iconSize={18} className="rounded-md" icon={toolIcon} />
       <input
         aria-label="Node label"
         value={node.label}

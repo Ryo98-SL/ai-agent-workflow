@@ -1,31 +1,52 @@
-import { Clock, Mail, Wrench } from "lucide-react";
+import { resolveToolDescriptor, type ToolDescriptor, type ToolNode } from "@ai-agent-workflow/workflow-domain";
 import { VariableText } from "../VariableTag";
 import { WorkflowNodeCardShell, type WorkflowNodeProps } from "./WorkflowNodeCardShell";
+import { resolveToolIcon } from "./workflowNodeVisuals";
 
 export function ToolWorkflowNode(props: WorkflowNodeProps) {
   const node = props.data.node;
-  const Icon = node.type === "tool" && node.config.adapter === "emailSend" ? Mail : node.type === "tool" && node.config.adapter === "currentTime" ? Clock : Wrench;
+  const descriptor = node.type === "tool" ? resolveToolDescriptor(node.config) : undefined;
+  const Icon = resolveToolIcon(descriptor?.icon);
   return (
     <WorkflowNodeCardShell {...props} Icon={Icon}>
-      {node.type === "tool" && node.config.adapter === "emailSend" ? (
-        <div className="mt-1 space-y-0.5">
-          <p className="truncate text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">To:</span>{" "}
-            {node.config.to ? <VariableText text={node.config.to} /> : "—"}
+      {node.type === "tool" && descriptor ? <ToolCardSummary node={node} descriptor={descriptor} /> : undefined}
+    </WorkflowNodeCardShell>
+  );
+}
+
+/**
+ * Generic, descriptor-driven card body: `primary` string params render as a line
+ * (variables shown as chips), and boolean params render as a status chip. No
+ * per-tool hard-coding, so MCP/custom tools get a summary for free.
+ */
+function ToolCardSummary({ node, descriptor }: { node: ToolNode; descriptor: ToolDescriptor }) {
+  const primaries = descriptor.params.filter((param) => param.primary);
+  const booleans = descriptor.params.filter((param) => param.type === "boolean");
+
+  return (
+    <div className="mt-1 space-y-0.5">
+      {primaries.map((param) => {
+        const value = node.config.params[param.name];
+        return (
+          <p key={param.name} className="truncate text-xs text-muted-foreground">
+            {typeof value === "string" && value ? <VariableText text={value} /> : `（${param.label}）`}
           </p>
-          <p className="truncate text-xs text-muted-foreground">
-            {node.config.subject ? <VariableText text={node.config.subject} /> : "(no subject)"}
-          </p>
+        );
+      })}
+      {booleans.map((param) => {
+        const on = node.config.params[param.name] === true;
+        return (
           <span
+            key={param.name}
             className={[
               "inline-block rounded px-1 text-[10px]",
-              node.config.send ? "bg-amber-500/15 text-amber-700 dark:text-amber-300" : "bg-muted text-muted-foreground",
+              on ? "bg-amber-500/15 text-amber-700 dark:text-amber-300" : "bg-muted text-muted-foreground",
             ].join(" ")}
           >
-            {node.config.send ? "sends for real" : "dry-run"}
+            {on ? param.label : `${param.label}: off`}
           </span>
-        </div>
-      ) : undefined}
-    </WorkflowNodeCardShell>
+        );
+      })}
+    </div>
   );
 }

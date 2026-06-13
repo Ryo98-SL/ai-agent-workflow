@@ -78,3 +78,33 @@ A's source handle. For a multi-output node (e.g. **If/Else**) only the input is
 wired (`A → N`); none of N's outputs auto-connect, so B is left dangling for the
 user to rewire. Start/End are never offered as the inserted node.
 _Avoid_: split edge, edge drop, insert between
+
+### Tools
+
+**Tool Node**:
+The single workflow node type (`type: "tool"`) that invokes one configured tool
+through the runtime boundary. There is **one** node type for *all* tools — Current
+Time, Send Email, and future MCP/custom tools — not a distinct node type per tool.
+Which specific tool a given Tool Node runs is recorded in its `config` and chosen
+from the **Tool Registry**, so the model stays open to dynamically-discovered
+tools (MCP) that can never be static node types. Mirrors Dify's single *Tool* node
+(differentiated by provider, not by node type).
+_Avoid_: tool type, currentTime node, email node, adapter node
+
+**Tool Registry**:
+The catalog of selectable tools that the Tool Browser lists and that each **Tool
+Node** binds to. Each entry supplies a tool's identity (id, label, icon,
+category) and the pieces the rest of the app dispatches on — its config defaults,
+inspector form, runtime behavior, and output variables. Built-in tools are static
+entries; MCP/custom tools are additional entries (eventually populated
+dynamically). The registry is what makes one node type behave like many distinct,
+independently-pickable nodes.
+_Avoid_: tool catalog, adapter registry, plugin list
+
+**Tool Browser**:
+The Dify-style searchable picker (tabs: All / Plugin / Custom / Workflow / MCP)
+that lists **Tool Registry** entries so the user can choose *which* tool to add.
+Picking a tool inserts a **Tool Node** already bound to that tool. Distinct from
+the general **Node Palette**, which picks a node *type*; the Tool Browser drills
+into the one Tool type to pick a specific tool.
+_Avoid_: tool picker, tool palette, marketplace

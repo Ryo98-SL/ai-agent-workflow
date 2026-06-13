@@ -1,9 +1,11 @@
 import {
   Braces,
   Brain,
+  Clock,
   Database,
   Flag,
   GitBranch,
+  Mail,
   Play,
   TextCursorInput,
   UserCheck,
@@ -37,3 +39,19 @@ export const workflowNodeIcons = {
 } satisfies Record<WorkflowNodeType, LucideIcon>;
 
 export const workflowNodeIconClassName = "text-white";
+
+/**
+ * lucide components for a Tool Descriptor's `icon` key (ADR 0003). All tools share
+ * the `tool` node type, so per-tool identity is resolved from the descriptor's icon
+ * key rather than the type-keyed `workflowNodeIcons` table. Unknown keys fall back
+ * to the generic wrench.
+ */
+export const toolIcons: Record<string, LucideIcon> = {
+  clock: Clock,
+  mail: Mail,
+  wrench: Wrench,
+};
+
+export function resolveToolIcon(key?: string): LucideIcon {
+  return (key && toolIcons[key]) || Wrench;
+}

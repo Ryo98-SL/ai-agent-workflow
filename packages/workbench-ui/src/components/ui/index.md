@@ -2,11 +2,12 @@
 
 ## Purpose
 
-shadcn/ui primitives owned as source (new-york style, zinc base color). These are
-the foundation for the UI refactor away from hand-rolled, ad-hoc styled controls.
-Components are themed entirely through the CSS-variable tokens declared in
-`src/styles.css` and surfaced as Tailwind utilities by the shared
-`tailwind.shadcn-preset.ts`.
+shadcn/ui primitives owned as source (new-york style, zinc base color). These
+are checked into the package so workbench surfaces can share consistent
+Tailwind/token styling without reaching into app code.
+
+Components are themed through CSS-variable tokens declared in `src/styles.css`
+and consumed with Tailwind utilities.
 
 ## Key Files
 
@@ -19,8 +20,11 @@ Components are themed entirely through the CSS-variable tokens declared in
   `CardContent`/`CardFooter` content containers.
 - `input.tsx` — `Input` themed text field.
 - `label.tsx` — `Label` built on `@radix-ui/react-label`.
+- `select.tsx` — `Select` built on `@radix-ui/react-select`.
 - `separator.tsx` — `Separator` built on `@radix-ui/react-separator`.
 - `badge.tsx` — `Badge` + `badgeVariants` status indicator.
+- `textarea.tsx` — `Textarea` themed multiline field.
+- `sonner.tsx` — `Toaster` wrapper for product-level toasts.
 - `dialog.tsx` — `Dialog` modal built on `@radix-ui/react-dialog` (`DialogContent`/
   `DialogHeader`/`DialogTitle`/`DialogDescription`/`DialogFooter`/`DialogClose`).
   Used for focused flows like adding a labeled API key. The shared dialog keeps
@@ -36,4 +40,5 @@ Components are themed entirely through the CSS-variable tokens declared in
   `@workbench/*` alias. Hand-place canonical source only when the registry is
   unreachable.
 - Style only through theme tokens (`bg-primary`, `bg-card`, `text-foreground`,
-  `border-border`, …). Do not reintroduce ad-hoc hex/slate/emerald values.
+  `border-border`, and similar). Do not reintroduce ad-hoc hex/slate/emerald
+  values.
