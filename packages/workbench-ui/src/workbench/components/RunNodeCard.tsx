@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, ChevronRight, Loader2 } from "lucide-react";
-import type { RunInput } from "@ai-agent-workflow/api-contracts";
+import { AlertCircle, CheckCircle2, ChevronRight, Loader2, UserCheck } from "lucide-react";
+import type { ResumeRunRequest, RunInput, RunInterrupt } from "@ai-agent-workflow/api-contracts";
 import {
   resolveLLMModelSettings,
   type WorkflowFile,
   type WorkflowNode,
 } from "@ai-agent-workflow/workflow-domain";
 import type { DebugState, NodeExecutionState } from "../types";
+import { HumanReviewForm } from "./HumanReviewForm";
 import { JsonViewer } from "./JsonViewer";
 import { NodeTypeIcon } from "./NodeTypeIcon";
 import { RunErrorBox } from "./RunOutputPrimitives";
@@ -39,6 +40,53 @@ export function RunNodeCardList({
           />
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * A node card standing in for the paused `humanInput` node, which never lands in
+ * `nodeResults` (the executor pauses via `interrupt()` before pushing a result).
+ * Mirrors {@link RunNodeCard}'s header (icon + label + status) and hosts the
+ * reviewer form in its body so the HITL prompt reads as belonging to that node
+ * rather than floating at the top of the panel. Used on both the live run and in
+ * Run History (where the resume is wired to refetch the run).
+ */
+export function RunWaitingNodeCard({
+  label,
+  node,
+  runId,
+  interrupt,
+  submitting = false,
+  resumeError,
+  onResumeRun,
+}: {
+  label: string;
+  node?: WorkflowNode;
+  runId: string;
+  interrupt: RunInterrupt;
+  submitting?: boolean;
+  resumeError?: string;
+  onResumeRun: (runId: string, request: ResumeRunRequest) => void;
+}) {
+  return (
+    <div
+      className="overflow-hidden rounded-md border border-border bg-card"
+      style={{ animation: "nodeCardFadeIn 150ms ease-out" }}
+    >
+      <style>{`@keyframes nodeCardFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      <div className="flex w-full items-center gap-2 px-3 py-2.5">
+        <NodeTypeIcon type={node?.type ?? "humanInput"} size={20} iconSize={11} />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{label}</span>
+        <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+          <UserCheck size={13} aria-hidden />
+          等待复核
+        </span>
+      </div>
+      <div className="space-y-2 border-t border-border p-3">
+        <HumanReviewForm runId={runId} interrupt={interrupt} submitting={submitting} onResumeRun={onResumeRun} />
+        {resumeError && <RunErrorBox message={resumeError} />}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { AlertTriangle, CheckCircle2, Loader2, UserCheck } from "lucide-react";
+import type { ResumeRunRequest } from "@ai-agent-workflow/api-contracts";
 import type { WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 import type { DebugState, NodeExecutionState } from "../types";
-import { RunNodeCardList } from "./RunNodeCard";
+import { RunNodeCardList, RunWaitingNodeCard } from "./RunNodeCard";
 import { RunEmptyState, RunErrorBox } from "./RunOutputPrimitives";
 import { createNodeExecutionStateFromRunResult } from "./runHistoryState";
 
@@ -10,13 +11,37 @@ type RunOutputProps = {
   debugState: DebugState;
   nodeStates: Map<string, NodeExecutionState>;
   nodeId?: string;
+  /**
+   * When provided alongside a `waiting` run, the paused Human Input node gets a
+   * synthesized card (after the completed ones) hosting the reviewer form.
+   * Opt-in: callers that render their own HITL UI (e.g. ChatPanel's trace) omit
+   * this so the card is not duplicated.
+   */
+  onResumeRun?: (runId: string, request: ResumeRunRequest) => void;
+  resumeSubmitting?: boolean;
+  resumeError?: string;
 };
 
-export function RunOutput({ workflow, debugState, nodeStates, nodeId }: RunOutputProps) {
+export function RunOutput({
+  workflow,
+  debugState,
+  nodeStates,
+  nodeId,
+  onResumeRun,
+  resumeSubmitting,
+  resumeError,
+}: RunOutputProps) {
   const resolvedNodeStates = nodeStates.size > 0 ? nodeStates : nodeStatesFromRun(workflow, debugState);
   const hasWorkflowRun = resolvedNodeStates.size > 0 || Boolean(debugState.result);
   const visibleNodeStates = nodeId ? filterNodeStates(resolvedNodeStates, nodeId) : resolvedNodeStates;
   const hasVisibleNodeRun = visibleNodeStates.size > 0;
+  // The paused Human Input node renders as its own card (full view only); the
+  // per-node filtered view drives its own HITL UI from the node inspector.
+  const waiting =
+    !nodeId && debugState.status === "waiting" && debugState.waiting && onResumeRun ? debugState.waiting : undefined;
+  const waitingNode = waiting
+    ? workflow.graph.nodes.find((node) => node.id === waiting.interrupt.nodeId)
+    : undefined;
 
   if (debugState.status === "idle" && !hasWorkflowRun) {
     return <RunEmptyState title="Ready to run" detail="Run the workflow to inspect server output and events." />;
@@ -47,10 +72,21 @@ export function RunOutput({ workflow, debugState, nodeStates, nodeId }: RunOutpu
         />
       ) : hasVisibleNodeRun ? (
         <RunNodeCardList workflow={workflow} nodeStates={visibleNodeStates} debugState={debugState} />
-      ) : (
+      ) : !waiting ? (
         <RunEmptyState
           title={nodeId ? "No node output" : "No run output"}
           detail={nodeId ? "The latest run has no recorded output for this node." : "Run the workflow to inspect node output."}
+        />
+      ) : null}
+      {waiting && onResumeRun && (
+        <RunWaitingNodeCard
+          label={waitingNode?.label ?? waiting.interrupt.nodeId}
+          node={waitingNode}
+          runId={waiting.runId}
+          interrupt={waiting.interrupt}
+          submitting={resumeSubmitting}
+          resumeError={resumeError}
+          onResumeRun={onResumeRun}
         />
       )}
     </div>

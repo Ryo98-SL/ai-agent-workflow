@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RunSseEventSchema, type CreateRunRequest, type ResumeRunRequest } from "@ai-agent-workflow/api-contracts";
 import type { ChatTurn, DebugState, NodeExecutionState, WorkbenchWorkflowApi } from "../types";
+import { reduceRunNodeStreamEvent } from "../runStreamReducer";
 
 function newConversationId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `conv-${Date.now()}-${Math.random()}`;
@@ -74,60 +75,13 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
         if (!parsed.success) return;
         const sseEvent = parsed.data;
 
-        if (sseEvent.type === "node.started") {
-          const { nodeId, nodeType } = sseEvent;
-          setNodeStates((prev) => {
-            const next = new Map(prev);
-            const base = { nodeId, status: "running" as const, startedAt: Date.now() };
-            if (nodeType === "llm") {
-              next.set(nodeId, { ...base, nodeType: "llm", streamingText: "" });
-            } else {
-              next.set(nodeId, { ...base, nodeType });
-            }
-            return next;
-          });
-        } else if (sseEvent.type === "node.stream") {
-          const { nodeId, delta } = sseEvent;
-          setNodeStates((prev) => {
-            const existing = prev.get(nodeId);
-            if (!existing || existing.nodeType !== "llm") return prev;
-            const next = new Map(prev);
-            next.set(nodeId, { ...existing, streamingText: existing.streamingText + delta });
-            return next;
-          });
-        } else if (sseEvent.type === "node.completed") {
-          const { nodeId, output, data, durationMs, inputTokens, outputTokens } = sseEvent;
-          const completedAt = Date.now();
-          setNodeStates((prev) => {
-            const existing = prev.get(nodeId);
-            if (!existing) return prev;
-            const next = new Map(prev);
-            if (existing.nodeType === "llm") {
-              next.set(nodeId, {
-                ...existing,
-                status: "succeeded",
-                completedAt,
-                durationMs,
-                output,
-                data,
-                inputTokens,
-                outputTokens,
-              });
-            } else {
-              next.set(nodeId, { ...existing, status: "succeeded", completedAt, durationMs, output, data });
-            }
-            return next;
-          });
-        } else if (sseEvent.type === "node.failed") {
-          const { nodeId, error, durationMs } = sseEvent;
-          const completedAt = Date.now();
-          setNodeStates((prev) => {
-            const existing = prev.get(nodeId);
-            if (!existing) return prev;
-            const next = new Map(prev);
-            next.set(nodeId, { ...existing, status: "failed", completedAt, durationMs, error });
-            return next;
-          });
+        if (
+          sseEvent.type === "node.started" ||
+          sseEvent.type === "node.stream" ||
+          sseEvent.type === "node.completed" ||
+          sseEvent.type === "node.failed"
+        ) {
+          setNodeStates((prev) => reduceRunNodeStreamEvent(prev, sseEvent));
         } else if (sseEvent.type === "run.waiting") {
           // Paused on a Human Input node: close this leg and surface the form.
           finishedRef.current = true;

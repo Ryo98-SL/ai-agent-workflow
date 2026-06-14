@@ -1,15 +1,23 @@
 import { CheckCircle2, History, Loader2, PauseCircle, Trash2, X, XCircle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { WorkflowRun } from "@ai-agent-workflow/api-contracts";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  RunSseEventSchema,
+  type RunEvent,
+  type ResumeRunRequest,
+  type WorkflowRun,
+} from "@ai-agent-workflow/api-contracts";
 import type { WorkflowFile } from "@ai-agent-workflow/workflow-domain";
 import { useSession } from "../../data/useAccount";
 import { useActiveWorkflowApi } from "../../data/useActiveWorkflowApi";
 import { useDeleteWorkflowRun, useWorkflowRuns } from "../../data/useWorkflows";
 import type { DebugState, NodeExecutionState } from "../types";
 import { formatWorkbenchDate } from "../dateFormat";
+import { reduceRunNodeStreamEvent } from "../runStreamReducer";
 import { Button } from "./Button";
 import { DebugPanel } from "./DebugPanel";
+import { createNodeExecutionStateFromRunResult } from "./runHistoryState";
 
 type RunHistoryMenuProps = {
   workflow: WorkflowFile;
@@ -35,21 +43,63 @@ function StatusIcon({ status }: { status: WorkflowRun["status"] }) {
 
 const EMPTY_HISTORY_STATE: DebugState = { status: "idle" };
 
+/**
+ * Derives node-execution states for a run's already-finished nodes. Seeds the
+ * resume stream so the legs that ran before the pause stay rendered while the
+ * post-interrupt nodes stream in (LangGraph resumes from the checkpoint, so prior
+ * nodes never re-emit events). The paused node and the nodes after it arrive via
+ * the stream's `node.started`/`node.completed` events.
+ */
+function nodeStatesFromRun(workflow: WorkflowFile, run: WorkflowRun, events: RunEvent[]): Map<string, NodeExecutionState> {
+  const nodesById = new Map(workflow.graph.nodes.map((node) => [node.id, node] as const));
+  const states = new Map<string, NodeExecutionState>();
+  for (const result of run.output?.nodeResults ?? []) {
+    const node = nodesById.get(result.nodeId);
+    if (!node) continue;
+    states.set(result.nodeId, createNodeExecutionStateFromRunResult({ events, node, nodeResult: result, run }));
+  }
+  return states;
+}
+
 export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }: RunHistoryMenuProps) {
   const [open, setOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [historyDebugState, setHistoryDebugState] = useState<DebugState>(EMPTY_HISTORY_STATE);
   const [confirmingRunId, setConfirmingRunId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [resumeSubmitting, setResumeSubmitting] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  // Live node states while a resumed run streams; null when not resuming (the
+  // panel then derives cards from the fetched run result instead).
+  const [resumeNodeStates, setResumeNodeStates] = useState<Map<string, NodeExecutionState> | null>(null);
+  const resumeStreamRef = useRef<EventSource | null>(null);
   const { data: session } = useSession();
   const workflowApi = useActiveWorkflowApi();
+  const queryClient = useQueryClient();
   const isAuthed = Boolean(session?.user);
   const { data, isLoading } = useWorkflowRuns(open ? workflowId : undefined);
   const deleteRun = useDeleteWorkflowRun(workflowId);
   const runs = useMemo(() => data?.runs ?? [], [data?.runs]);
   const selectedRun = useMemo(() => runs.find((run) => run.id === selectedRunId), [runs, selectedRunId]);
   const displayedDebugState = selectedRunId ? historyDebugState : debugState;
-  const displayedNodeStates = selectedRunId ? new Map<string, NodeExecutionState>() : nodeStates;
+  // While a resumed run streams, drive the cards from its live node states;
+  // otherwise the panel derives them from the fetched run result.
+  const displayedNodeStates = selectedRunId
+    ? resumeNodeStates ?? new Map<string, NodeExecutionState>()
+    : nodeStates;
+
+  // Tears down any in-flight resume stream and clears its live node states.
+  const closeResumeStream = useCallback(() => {
+    if (resumeStreamRef.current) {
+      resumeStreamRef.current.close();
+      resumeStreamRef.current = null;
+    }
+    setResumeNodeStates(null);
+    setResumeSubmitting(false);
+  }, []);
+
+  // Close the stream when the component unmounts.
+  useEffect(() => closeResumeStream, [closeResumeStream]);
 
   useEffect(() => {
     if (!open) {
@@ -57,13 +107,15 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
       setHistoryDebugState(EMPTY_HISTORY_STATE);
       setConfirmingRunId(null);
       setDeleteError(null);
+      setResumeError(null);
+      closeResumeStream();
       return;
     }
 
     if (!selectedRunId && runs.length > 0) {
       setSelectedRunId(runs[0].id);
     }
-  }, [open, runs, selectedRunId]);
+  }, [open, runs, selectedRunId, closeResumeStream]);
 
   useEffect(() => {
     if (!open) return;
@@ -83,6 +135,9 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
 
     let cancelled = false;
     setHistoryDebugState({ status: "loading" });
+    setResumeError(null);
+    // Switching runs abandons any resume stream tied to the previous selection.
+    closeResumeStream();
     workflowApi
       .getRun(selectedRunId)
       .then(async (runResponse) => {
@@ -108,9 +163,106 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
     return () => {
       cancelled = true;
     };
-  }, [open, selectedRunId, workflowApi]);
+  }, [open, selectedRunId, workflowApi, closeResumeStream]);
 
   const closeDrawer = () => setOpen(false);
+
+  // Once a resumed leg ends (completed/failed, or paused again on another Human
+  // Input node), re-fetch the canonical run + events so every node card and the
+  // runs-list status reflect the final state, then drop the live stream states.
+  const refreshAfterResume = useCallback(
+    (runId: string) => {
+      Promise.all([workflowApi.getRun(runId), workflowApi.listRunEvents(runId)])
+        .then(([runResponse, eventsResponse]) => {
+          const run = runResponse.run;
+          const result = { run, events: eventsResponse.events };
+          if (run.status === "waiting_human" && run.interrupt) {
+            setHistoryDebugState({ status: "waiting", waiting: { runId: run.id, interrupt: run.interrupt }, result });
+          } else {
+            setHistoryDebugState({ status: run.status === "failed" ? "error" : "success", result });
+          }
+          setResumeNodeStates(null);
+          setResumeSubmitting(false);
+          if (workflowId) {
+            void queryClient.invalidateQueries({ queryKey: ["workflow-runs", workflowId] });
+          }
+        })
+        .catch((error: unknown) => {
+          setResumeNodeStates(null);
+          setResumeSubmitting(false);
+          setResumeError(error instanceof Error ? error.message : "Run refresh failed.");
+        });
+    },
+    [queryClient, workflowApi, workflowId],
+  );
+
+  // Subscribe to the resumed run's SSE stream (same pipeline as a live run): node
+  // events update the live cards; a run-level event ends the leg and triggers a
+  // canonical refresh. Prior nodes are seeded by the caller.
+  const subscribeResumeStream = useCallback(
+    (runId: string) => {
+      const source = new EventSource(workflowApi.runStreamUrl(runId));
+      resumeStreamRef.current = source;
+
+      source.onmessage = (msgEvent) => {
+        const parsed = RunSseEventSchema.safeParse(JSON.parse(String(msgEvent.data)));
+        if (!parsed.success) return;
+        const sseEvent = parsed.data;
+
+        if (
+          sseEvent.type === "node.started" ||
+          sseEvent.type === "node.stream" ||
+          sseEvent.type === "node.completed" ||
+          sseEvent.type === "node.failed"
+        ) {
+          setResumeNodeStates((prev) => reduceRunNodeStreamEvent(prev ?? new Map(), sseEvent));
+        } else if (sseEvent.type === "run.completed" || sseEvent.type === "run.waiting") {
+          source.close();
+          resumeStreamRef.current = null;
+          refreshAfterResume(runId);
+        }
+      };
+
+      source.onerror = () => {
+        // The stream closes cleanly after a run-level event; only a drop while the
+        // ref is still ours is a genuine failure.
+        if (resumeStreamRef.current !== source) return;
+        source.close();
+        resumeStreamRef.current = null;
+        setResumeNodeStates(null);
+        setResumeSubmitting(false);
+        setResumeError("连接中断，请重试。");
+      };
+    },
+    [refreshAfterResume, workflowApi],
+  );
+
+  // Resume a paused (waiting_human) run straight from history. The HTTP response
+  // returns immediately with the run set to "running" while the continuation runs
+  // asynchronously, so we seed the prior nodes, switch to a running view, and
+  // stream the rest in rather than capturing the stale snapshot.
+  const resumeHistoryRun = useCallback(
+    (runId: string, request: ResumeRunRequest) => {
+      closeResumeStream();
+      setResumeSubmitting(true);
+      setResumeError(null);
+      workflowApi
+        .resumeRun(runId, request)
+        .then(({ run }) => {
+          // The resumed run still carries the pre-pause nodeResults; seed them so
+          // the finished legs stay visible while the rest streams in.
+          setResumeNodeStates(nodeStatesFromRun(workflow, run, []));
+          setHistoryDebugState({ status: "running", result: { run, events: [] } });
+          subscribeResumeStream(runId);
+        })
+        .catch((error: unknown) => {
+          // Keep the waiting state so the form stays available to retry.
+          setResumeSubmitting(false);
+          setResumeError(error instanceof Error ? error.message : "Resume failed.");
+        });
+    },
+    [closeResumeStream, subscribeResumeStream, workflow, workflowApi],
+  );
 
   const confirmDeleteRun = async (runId: string) => {
     setDeleteError(null);
@@ -169,6 +321,9 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
                 debugState={displayedDebugState}
                 nodeStates={displayedNodeStates}
                 onRun={() => undefined}
+                onResumeRun={resumeHistoryRun}
+                resumeSubmitting={resumeSubmitting}
+                resumeError={resumeError ?? undefined}
                 readOnly
               />
             </section>

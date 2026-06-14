@@ -11,7 +11,6 @@ import type { ChatTurn, DebugState, NodeExecutionState } from "../types";
 import { Input } from "@workbench/components/ui/input";
 import { Button } from "./Button";
 import { ChatPanel } from "./ChatPanel";
-import { HumanReviewForm } from "./HumanReviewForm";
 import { RunOutput } from "./RunOutput";
 
 type DebugPanelProps = {
@@ -20,6 +19,9 @@ type DebugPanelProps = {
   nodeStates: Map<string, NodeExecutionState>;
   onRun: (input: RunInput) => void;
   onResumeRun?: (runId: string, request: ResumeRunRequest) => void;
+  /** History-only: disables the HITL form while a resume is in flight + surfaces its error. */
+  resumeSubmitting?: boolean;
+  resumeError?: string;
   onNewConversation?: () => void;
   conversationTurns?: number;
   readOnly?: boolean;
@@ -43,6 +45,8 @@ export function DebugPanel({
   nodeStates,
   onRun,
   onResumeRun,
+  resumeSubmitting,
+  resumeError,
   onNewConversation,
   conversationTurns = 0,
   readOnly = false,
@@ -146,14 +150,14 @@ export function DebugPanel({
           </div>
         )}
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-          {!readOnly && debugState.status === "waiting" && debugState.waiting && onResumeRun && (
-            <HumanReviewForm
-              runId={debugState.waiting.runId}
-              interrupt={debugState.waiting.interrupt}
-              onResumeRun={onResumeRun}
-            />
-          )}
-          <RunOutput workflow={workflow} debugState={debugState} nodeStates={nodeStates} />
+          <RunOutput
+            workflow={workflow}
+            debugState={debugState}
+            nodeStates={nodeStates}
+            onResumeRun={onResumeRun}
+            resumeSubmitting={resumeSubmitting}
+            resumeError={resumeError}
+          />
         </div>
       </div>
     );
