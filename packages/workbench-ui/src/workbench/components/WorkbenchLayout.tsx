@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Database, Loader2, Play, Plus, Settings } from "lucide-react";
+import { Database, Loader2, Play, Plus, Server, Settings } from "lucide-react";
 import type {
   MemorySummarySettings,
   ModelProvider,
@@ -18,6 +18,7 @@ import { FloatingPanel } from "./FloatingPanel";
 import { ModelSettingsPanel } from "./ModelSettingsPanel";
 import { NodeInspector, NodeInspectorPanelTitle } from "./NodeInspector";
 import { KnowledgeBasesDialog } from "./knowledge/KnowledgeBasesDialog";
+import { McpServersDialog } from "./mcp/McpServersDialog";
 import { NodePalette } from "./NodePalette";
 import { Popover } from "./Popover";
 import { ProjectFileActions } from "./ProjectFileActions";
@@ -145,6 +146,7 @@ export function WorkbenchLayout({
 }: WorkbenchLayoutProps) {
   const hasStartNode = workflow.graph.nodes.some((node) => node.type === "start");
   const [knowledgeBasesOpen, setKnowledgeBasesOpen] = useState(false);
+  const [mcpServersOpen, setMcpServersOpen] = useState(false);
   const inspectorResize = useResizableWidth({
     storageKey: "workbench:inspectorWidth",
     defaultWidth: 380,
@@ -227,10 +229,21 @@ export function WorkbenchLayout({
                 <Database size={15} aria-hidden />
                 Knowledge Bases
               </Button>
+              <Button
+                variant="secondary"
+                size="md"
+                fullWidth
+                className={`!border-none !rounded-none !shadow-none`}
+                onClick={() => setMcpServersOpen(true)}
+              >
+                <Server size={15} aria-hidden />
+                MCP Servers
+              </Button>
             </div>
           </FloatingPanel>
         </Popover>
         <KnowledgeBasesDialog open={knowledgeBasesOpen} onOpenChange={setKnowledgeBasesOpen} />
+        <McpServersDialog open={mcpServersOpen} onOpenChange={setMcpServersOpen} />
       </header>
 
       <section className=" flex-1 relative h-full ">
@@ -392,6 +405,7 @@ export function WorkbenchLayout({
               nodeStates={nodeStates}
               showDevModelProviders={showDevModelProviders}
               onOpenKnowledgeBases={() => setKnowledgeBasesOpen(true)}
+              onOpenMcpServers={() => setMcpServersOpen(true)}
               onProviderKeyPreferenceChange={onUpdateProviderKeyPreference}
               onResumeRun={onResumeRun}
               updateNode={onUpdateNode}

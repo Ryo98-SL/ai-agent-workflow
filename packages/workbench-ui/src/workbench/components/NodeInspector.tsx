@@ -10,6 +10,7 @@ import {
 import type { DebugState, NodeExecutionState } from "../types";
 import { resolveToolIcon } from "./workflowNodes/workflowNodeVisuals";
 import { KnowledgeInspector } from "./knowledge/KnowledgeInspector";
+import { AgentInspector } from "./inspectors/AgentInspector";
 import { EndInspector } from "./inspectors/EndInspector";
 import { HumanInputInspector } from "./inspectors/HumanInputInspector";
 import { HumanReviewForm } from "./HumanReviewForm";
@@ -29,6 +30,7 @@ type NodeInspectorProps = {
   nodeStates: Map<string, NodeExecutionState>;
   showDevModelProviders?: boolean;
   onOpenKnowledgeBases?: () => void;
+  onOpenMcpServers?: () => void;
   onProviderKeyPreferenceChange?: (provider: ModelProvider, preference: ProviderKeyPreference) => void;
   onResumeRun?: (runId: string, request: ResumeRunRequest) => void;
   updateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
@@ -66,6 +68,7 @@ export function NodeInspector({
   nodeStates,
   showDevModelProviders = false,
   onOpenKnowledgeBases,
+  onOpenMcpServers,
   onProviderKeyPreferenceChange,
   onResumeRun,
   updateNode,
@@ -154,8 +157,17 @@ export function NodeInspector({
               onOpenKnowledgeBases={onOpenKnowledgeBases}
               updateNode={updateNode}
             />
+          ) : selectedNode.type === "agent" ? (
+            <AgentInspector
+              workflow={workflow}
+              node={selectedNode}
+              showDevModelProviders={showDevModelProviders}
+              onProviderKeyPreferenceChange={onProviderKeyPreferenceChange}
+              onOpenMcpServers={onOpenMcpServers}
+              updateNode={updateNode}
+            />
           ) : selectedNode.type === "tool" ? (
-            <ToolInspector node={selectedNode} updateNode={updateNode} />
+            <ToolInspector node={selectedNode} updateNode={updateNode} onOpenMcpServers={onOpenMcpServers} />
           ) : selectedNode.type === "ifElse" ? (
             <IfElseInspector node={selectedNode} updateNode={updateNode} />
           ) : selectedNode.type === "humanInput" ? (

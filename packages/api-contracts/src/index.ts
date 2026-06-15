@@ -2,7 +2,12 @@ import {
   ModelProviderKeysSchema,
   NODE_TYPES,
   OpenAICompatibleSettingsSchema,
+  ToolProviderSchema,
   WorkflowFileSchema,
+  type JsonValue,
+  type ToolDescriptor,
+  type ToolParamSpec,
+  type WorkflowNodeOutputField,
 } from "@ai-agent-workflow/workflow-domain";
 import { z } from "zod";
 
@@ -25,6 +30,9 @@ export const API_ROUTE_TEMPLATES = {
   knowledgeBaseFileDocuments: "/api/knowledge-bases/:id/documents/file",
   knowledgeDocument: "/api/knowledge-documents/:id",
   knowledgeDocumentReindex: "/api/knowledge-documents/:id/reindex",
+  mcpServers: "/api/mcp-servers",
+  mcpServer: "/api/mcp-servers/:id",
+  mcpServerRefresh: "/api/mcp-servers/:id/refresh",
   credits: "/api/credits",
   creditsApply: "/api/credits/apply",
 } as const;
@@ -50,6 +58,9 @@ export const apiPaths = {
   knowledgeBaseFileDocuments: (id: string) => `/api/knowledge-bases/${encodePathSegment(id)}/documents/file`,
   knowledgeDocument: (id: string) => `/api/knowledge-documents/${encodePathSegment(id)}`,
   knowledgeDocumentReindex: (id: string) => `/api/knowledge-documents/${encodePathSegment(id)}/reindex`,
+  mcpServers: () => API_ROUTE_TEMPLATES.mcpServers,
+  mcpServer: (id: string) => `/api/mcp-servers/${encodePathSegment(id)}`,
+  mcpServerRefresh: (id: string) => `/api/mcp-servers/${encodePathSegment(id)}/refresh`,
   credits: () => API_ROUTE_TEMPLATES.credits,
   creditsApply: () => API_ROUTE_TEMPLATES.creditsApply,
 } as const;
@@ -279,6 +290,17 @@ export const RunSseEventSchema = z.discriminatedUnion("type", [
     durationMs: z.number(),
   }),
   z.object({
+    // Agent tool-call progress (ADR 0005). Emitted by the bounded function-calling
+    // loop and re-attributed to the parent agent `nodeId`. `phase` is "start"
+    // (with `tool`) or "end" (optionally with a short `result` preview).
+    type: z.literal("agent.tool"),
+    runId: z.string(),
+    nodeId: z.string(),
+    tool: z.string().optional(),
+    phase: z.enum(["start", "end"]),
+    result: z.string().optional(),
+  }),
+  z.object({
     type: z.literal("run.completed"),
     runId: z.string(),
     status: z.enum(["succeeded", "failed"]),
@@ -455,6 +477,119 @@ export const ReindexKnowledgeDocumentResponseSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// MCP servers (account-level Tool Registry provider, ADR 0004). Per-user HTTP
+// MCP servers whose discovered tools are snapshotted into cached
+// `ToolDescriptor`s. Header secrets are encrypted server-side and never
+// returned — responses carry header NAMES only. Anonymous users cannot register.
+// ---------------------------------------------------------------------------
+
+const ToolJsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(ToolJsonValueSchema), z.record(ToolJsonValueSchema)]),
+);
+
+/** Mirrors `workflow-domain`'s `ToolParamSpec` so cached descriptors validate. */
+export const ToolParamSpecSchema: z.ZodType<ToolParamSpec> = z.object({
+  name: z.string().min(1),
+  label: z.string(),
+  type: z.enum(["string", "text", "boolean", "number", "select"]),
+  required: z.boolean().optional(),
+  default: ToolJsonValueSchema.optional(),
+  supportsVariables: z.boolean().optional(),
+  options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
+  placeholder: z.string().optional(),
+  help: z.string().optional(),
+  primary: z.boolean().optional(),
+});
+
+/** Mirrors `workflow-domain`'s recursive `WorkflowNodeOutputField`. */
+export const ToolOutputFieldSchema: z.ZodType<WorkflowNodeOutputField> = z.lazy(() =>
+  z.object({
+    name: z.string(),
+    type: z.string(),
+    description: z.string(),
+    children: z.array(ToolOutputFieldSchema).optional(),
+  }),
+);
+
+/** Mirrors `workflow-domain`'s `ToolDescriptor` (the cached MCP snapshot entry). */
+export const ToolDescriptorSchema: z.ZodType<ToolDescriptor> = z.object({
+  provider: ToolProviderSchema,
+  providerId: z.string().min(1),
+  toolName: z.string().min(1),
+  label: z.string(),
+  icon: z.string(),
+  category: ToolProviderSchema,
+  description: z.string().optional(),
+  params: z.array(ToolParamSpecSchema),
+  defaultParams: z.record(ToolJsonValueSchema),
+  outputFields: z.array(ToolOutputFieldSchema),
+});
+
+/** Server identifier: unique per user, lowercase/digits/underscore/hyphen, ≤24. */
+export const McpServerIdentifierSchema = z
+  .string()
+  .min(1)
+  .max(24)
+  .regex(/^[a-z0-9_-]+$/, "Use lowercase letters, digits, underscore, or hyphen (≤24 chars).");
+
+/** One auth header on create/update. The value is a secret (encrypted at rest). */
+export const McpServerHeaderInputSchema = z.object({
+  name: z.string().min(1).max(128),
+  value: z.string().min(1),
+});
+
+export const McpServerDtoSchema = z.object({
+  id: z.string().min(1),
+  identifier: z.string().min(1),
+  name: z.string().min(1),
+  icon: z.string().nullable().optional(),
+  url: z.string(),
+  /** Names of the configured auth headers — never their values. */
+  headerNames: z.array(z.string()),
+  /** Built-in/platform-provided servers are read-only (no edit/delete/refresh). */
+  readOnly: z.boolean(),
+  toolCount: z.number().int().nonnegative(),
+  /** Cached snapshot descriptors (the Tool Browser merges these client-side). */
+  tools: z.array(ToolDescriptorSchema),
+  lastConnectedAt: z.string().datetime().nullable(),
+  lastError: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const ListMcpServersResponseSchema = z.object({
+  servers: z.array(McpServerDtoSchema),
+});
+
+export const CreateMcpServerRequestSchema = z.object({
+  identifier: McpServerIdentifierSchema,
+  name: z.string().min(1),
+  icon: z.string().optional(),
+  url: z.string().url(),
+  headers: z.array(McpServerHeaderInputSchema).default([]),
+});
+
+export const CreateMcpServerResponseSchema = z.object({
+  server: McpServerDtoSchema,
+});
+
+export const UpdateMcpServerRequestSchema = z.object({
+  name: z.string().min(1).optional(),
+  icon: z.string().optional(),
+  url: z.string().url().optional(),
+  /** When present, replaces ALL headers. Omit to leave headers unchanged. */
+  headers: z.array(McpServerHeaderInputSchema).optional(),
+});
+
+export const UpdateMcpServerResponseSchema = z.object({
+  server: McpServerDtoSchema,
+});
+
+export const RefreshMcpServerResponseSchema = z.object({
+  server: McpServerDtoSchema,
+});
+
+// ---------------------------------------------------------------------------
 // Provider API keys (user-private, server-encrypted). Plaintext is never
 // returned to the client — only a masked representation.
 // ---------------------------------------------------------------------------
@@ -551,6 +686,14 @@ export type CreateTextKnowledgeDocumentRequest = z.input<typeof CreateTextKnowle
 export type CreateFileKnowledgeDocumentRequest = z.input<typeof CreateFileKnowledgeDocumentRequestSchema>;
 export type CreateKnowledgeDocumentResponse = z.infer<typeof CreateKnowledgeDocumentResponseSchema>;
 export type ReindexKnowledgeDocumentResponse = z.infer<typeof ReindexKnowledgeDocumentResponseSchema>;
+export type McpServerHeaderInput = z.infer<typeof McpServerHeaderInputSchema>;
+export type McpServerDto = z.infer<typeof McpServerDtoSchema>;
+export type ListMcpServersResponse = z.infer<typeof ListMcpServersResponseSchema>;
+export type CreateMcpServerRequest = z.input<typeof CreateMcpServerRequestSchema>;
+export type CreateMcpServerResponse = z.infer<typeof CreateMcpServerResponseSchema>;
+export type UpdateMcpServerRequest = z.input<typeof UpdateMcpServerRequestSchema>;
+export type UpdateMcpServerResponse = z.infer<typeof UpdateMcpServerResponseSchema>;
+export type RefreshMcpServerResponse = z.infer<typeof RefreshMcpServerResponseSchema>;
 
 export type ApiIssue = z.infer<typeof ApiIssueSchema>;
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>;

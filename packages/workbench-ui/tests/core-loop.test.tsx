@@ -785,6 +785,11 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
       }
       throw new Error(`Knowledge document ${id} was not found.`);
     }),
+    listMcpServers: vi.fn(async () => ({ servers: [] })),
+    createMcpServer: vi.fn(),
+    updateMcpServer: vi.fn(),
+    refreshMcpServer: vi.fn(),
+    deleteMcpServer: vi.fn(),
     listProviderKeys: vi.fn(async () => ({ keys: [] })),
     createProviderKey: vi.fn(async (request) => ({
       key: {

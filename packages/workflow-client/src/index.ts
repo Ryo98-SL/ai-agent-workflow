@@ -16,10 +16,14 @@ import {
   ListWorkflowRunsResponseSchema,
   ListWorkflowsResponseSchema,
   CreateProviderKeyResponseSchema,
+  CreateMcpServerResponseSchema,
   CreditStatusResponseSchema,
+  ListMcpServersResponseSchema,
   ReindexKnowledgeDocumentResponseSchema,
+  RefreshMcpServerResponseSchema,
   ResumeRunResponseSchema,
   UpdateKnowledgeBaseResponseSchema,
+  UpdateMcpServerResponseSchema,
   UpdateWorkflowResponseSchema,
   apiPaths,
   type ApiErrorResponse,
@@ -48,10 +52,16 @@ import {
   type ListWorkflowsResponse,
   type CreateProviderKeyRequest,
   type CreateProviderKeyResponse,
+  type CreateMcpServerRequest,
+  type CreateMcpServerResponse,
   type CreditStatusResponse,
+  type ListMcpServersResponse,
   type ReindexKnowledgeDocumentResponse,
+  type RefreshMcpServerResponse,
   type UpdateKnowledgeBaseRequest,
   type UpdateKnowledgeBaseResponse,
+  type UpdateMcpServerRequest,
+  type UpdateMcpServerResponse,
   type UpdateWorkflowRequest,
   type UpdateWorkflowResponse,
 } from "@ai-agent-workflow/api-contracts";
@@ -117,6 +127,11 @@ export type WorkflowClient = {
   ) => Promise<CreateKnowledgeDocumentResponse>;
   deleteKnowledgeDocument: (id: string) => Promise<void>;
   reindexKnowledgeDocument: (id: string) => Promise<ReindexKnowledgeDocumentResponse>;
+  listMcpServers: () => Promise<ListMcpServersResponse>;
+  createMcpServer: (request: CreateMcpServerRequest) => Promise<CreateMcpServerResponse>;
+  updateMcpServer: (id: string, request: UpdateMcpServerRequest) => Promise<UpdateMcpServerResponse>;
+  refreshMcpServer: (id: string) => Promise<RefreshMcpServerResponse>;
+  deleteMcpServer: (id: string) => Promise<void>;
   listProviderKeys: () => Promise<ListProviderKeysResponse>;
   createProviderKey: (request: CreateProviderKeyRequest) => Promise<CreateProviderKeyResponse>;
   deleteProviderKey: (id: string) => Promise<void>;
@@ -350,6 +365,36 @@ export function createWorkflowClient(options: WorkflowClientOptions): WorkflowCl
         method: "POST",
         path: apiPaths.knowledgeDocumentReindex(id),
         responseSchema: ReindexKnowledgeDocumentResponseSchema,
+      }),
+    listMcpServers: () =>
+      request({
+        path: apiPaths.mcpServers(),
+        responseSchema: ListMcpServersResponseSchema,
+      }),
+    createMcpServer: (body) =>
+      request({
+        method: "POST",
+        path: apiPaths.mcpServers(),
+        body,
+        responseSchema: CreateMcpServerResponseSchema,
+      }),
+    updateMcpServer: (id, body) =>
+      request({
+        method: "PATCH",
+        path: apiPaths.mcpServer(id),
+        body,
+        responseSchema: UpdateMcpServerResponseSchema,
+      }),
+    refreshMcpServer: (id) =>
+      request({
+        method: "POST",
+        path: apiPaths.mcpServerRefresh(id),
+        responseSchema: RefreshMcpServerResponseSchema,
+      }),
+    deleteMcpServer: (id) =>
+      request<void>({
+        method: "DELETE",
+        path: apiPaths.mcpServer(id),
       }),
     listProviderKeys: () =>
       request({

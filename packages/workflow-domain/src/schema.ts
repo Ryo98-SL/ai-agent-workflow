@@ -5,6 +5,7 @@ export const NODE_TYPES = [
   "llm",
   "knowledge",
   "tool",
+  "agent",
   "code",
   "ifElse",
   "humanInput",
@@ -152,7 +153,7 @@ const KnowledgeNodeSchema = BaseNodeSchema.extend({
   }),
 });
 
-const BasicConfigNodeSchema = <Type extends Exclude<WorkflowNodeType, "start" | "llm" | "knowledge" | "tool">>(
+const BasicConfigNodeSchema = <Type extends Exclude<WorkflowNodeType, "start" | "llm" | "knowledge" | "tool" | "agent">>(
   type: Type,
 ) =>
   BaseNodeSchema.extend({
@@ -297,6 +298,57 @@ const LLMNodeSchema = BaseNodeSchema.extend({
       memory: z.boolean().default(false),
     }),
   ),
+});
+
+/**
+ * Agentic strategies an Agent node can run (see ADR 0005). `functionCalling`
+ * drives the model's native tool-calling loop and is the implemented path;
+ * `react` (text Thought/Action/Observation parsing) is reserved — selectable but
+ * the runtime throws "not implemented yet".
+ */
+export const AGENT_STRATEGIES = ["functionCalling", "react"] as const;
+export const AgentStrategySchema = z.enum(AGENT_STRATEGIES);
+export type AgentStrategy = z.infer<typeof AgentStrategySchema>;
+
+/**
+ * One inline tool an Agent node may call — the same identity triple a Tool node
+ * binds to (ADR 0003): `{ provider, providerId, toolName }` plus `params`. The
+ * `params` hold **author-fixed** values; every input the author leaves unset is
+ * exposed to the model as a callable argument (ADR 0005).
+ */
+export const AgentToolBindingSchema = z.object({
+  provider: ToolProviderSchema,
+  providerId: z.string().min(1),
+  toolName: z.string().min(1),
+  /** Author-fixed inputs; variable-bearing strings stay `{{nodeId.path}}`. */
+  params: z.record(JsonValueSchema).default({}),
+});
+export type AgentToolBinding = z.infer<typeof AgentToolBindingSchema>;
+
+/**
+ * Agent node (ADR 0005): a model-driven, bounded tool-calling loop over an inline
+ * Agent Tool List. `instruction` is the system message and `query` the user
+ * message (both variable-bearing); `query` defaults to the Chat Mode ambient
+ * `{{userInput.query}}`. `maxIterations` caps the LangGraph loop; `memory` reuses
+ * the shared conversation channel; `model`/`modelSettings` reuse the LLM node's
+ * resolution.
+ */
+const AgentNodeSchema = BaseNodeSchema.extend({
+  type: z.literal("agent"),
+  config: z
+    .object({
+      strategy: AgentStrategySchema.default("functionCalling"),
+      instruction: z.string().default(""),
+      query: z.string().min(1).default("{{userInput.query}}"),
+      tools: z.array(AgentToolBindingSchema).default([]),
+      maxIterations: z.number().int().min(1).max(50).default(5),
+      memory: z.boolean().default(false),
+      model: z.string().optional(),
+      modelSettings: LLMModelSettingsSchema.optional(),
+      temperature: z.number().min(0).max(2).default(0.7),
+      maxTokens: z.number().int().positive().max(32000).default(800),
+    })
+    .default({}),
 });
 
 /** Operators with no right-hand `value` (they test the left operand alone). */
@@ -454,6 +506,7 @@ export const WorkflowNodeSchema = z.discriminatedUnion("type", [
   LLMNodeSchema,
   KnowledgeNodeSchema,
   ToolNodeSchema,
+  AgentNodeSchema,
   BasicConfigNodeSchema("code"),
   IfElseNodeSchema,
   HumanInputNodeSchema,
@@ -508,6 +561,9 @@ export type KnowledgeNode = Extract<WorkflowNode, { type: "knowledge" }>;
 export type ToolNode = Extract<WorkflowNode, { type: "tool" }>;
 /** Generic tool config: `{ provider, providerId, toolName, params }` (ADR 0003). */
 export type ToolNodeConfig = ToolNode["config"];
+export type AgentNode = Extract<WorkflowNode, { type: "agent" }>;
+/** Agent config: strategy, instruction/query, inline tool list, loop + memory (ADR 0005). */
+export type AgentNodeConfig = AgentNode["config"];
 export type IfElseNode = Extract<WorkflowNode, { type: "ifElse" }>;
 export type IfElseCase = IfElseNode["config"]["cases"][number];
 export type ConditionRow = IfElseCase["conditions"][number];
@@ -569,6 +625,16 @@ export function workflowNodeOutputFields(type: WorkflowNodeType): WorkflowNodeOu
     tool: [
       { name: "text", type: "string", description: "Tool output text" },
       { name: "data", type: "object", description: "Tool output data" },
+    ],
+    agent: [
+      { name: "text", type: "string", description: "Final answer" },
+      { name: "usage", type: "object", description: "Aggregated token usage" },
+      {
+        name: "data",
+        type: "object",
+        description: "Agent run data",
+        children: [{ name: "steps", type: "Array[Object]", description: "Tool-call trace (name, args, result)" }],
+      },
     ],
     ifElse: [{ name: "matched", type: "string", description: "Id of the matched branch (case id or \"else\")" }],
     humanInput: [
@@ -1113,6 +1179,23 @@ export function createNode(
     };
   }
 
+  if (type === "agent") {
+    return {
+      ...base,
+      type,
+      config: {
+        strategy: "functionCalling",
+        instruction: "",
+        query: "{{userInput.query}}",
+        tools: [],
+        maxIterations: 5,
+        memory: false,
+        temperature: 0.7,
+        maxTokens: 800,
+      },
+    };
+  }
+
   return {
     ...base,
     type,
@@ -1144,6 +1227,7 @@ export function nodeTypeLabel(type: WorkflowNodeType): string {
     llm: "LLM",
     knowledge: "Knowledge",
     tool: "Tool",
+    agent: "Agent",
     code: "Code",
     ifElse: "If/Else",
     humanInput: "Human Input",
@@ -1179,6 +1263,7 @@ export function nodeTypeDescription(type: WorkflowNodeType): string {
     llm: "Generate a response from the configured model.",
     knowledge: "Provide external context for downstream nodes.",
     tool: "Call a configured tool through the runtime boundary.",
+    agent: "Let a model call tools in a loop to reach an answer.",
     code: "Run custom transformation logic.",
     ifElse: "Branch the workflow based on a condition.",
     humanInput: "Pause for a human to review and choose an action.",

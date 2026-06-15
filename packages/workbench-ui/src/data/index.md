@@ -23,6 +23,11 @@ Data boundary and React Query hooks for the workbench UI.
   hooks.
 - `useKnowledgeBases.ts` exposes Knowledge Base list/read/mutation hooks plus
   document create/delete/reindex hooks.
+- `useMcpServers.ts` exposes account-level MCP server list/create/update/refresh/
+  delete hooks. The list is auth-gated; on every load it mirrors the fetched
+  snapshot tools into the client-only domain registry via
+  `registerMcpToolDescriptors` so the Tool Browser/inspectors resolve MCP tools
+  synchronously (the server never injects this global).
 
 ## Behavior
 

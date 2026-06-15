@@ -49,7 +49,13 @@ import {
   type PlatformCreditsProvider,
 } from "./routes/credits";
 import { createKnowledgeRoutes } from "./routes/knowledge";
+import { createMcpRoutes } from "./routes/mcp";
+import { createPrismaMcpRepository, type McpRepository } from "./mcp/repository";
+import type { McpServerConnection } from "./mcp/client";
+import { handleBuiltinMcpRequest } from "./mcp/builtin-server";
+import { loadMcpConnections } from "./mcp/connections";
 import { executeWorkflowRuntime, type EmailSender } from "./runtime";
+import type { ToolDescriptor } from "@ai-agent-workflow/workflow-domain";
 import { frontendOrigins, getPlatformEmbeddingConfig } from "./config";
 import { createPlatformEmbeddingAdapter, type EmbeddingAdapter } from "./knowledge/embeddings";
 import { createKnowledgeIndexingRunner, type KnowledgeIndexingRunner } from "./knowledge/indexer";
@@ -90,6 +96,10 @@ export type CreateServerAppOptions = {
   runs?: RunRepository;
   /** Knowledge Base persistence. Defaults to the Prisma-backed repository. */
   knowledge?: KnowledgeRepository;
+  /** MCP server persistence. Defaults to the Prisma-backed repository. */
+  mcp?: McpRepository;
+  /** MCP snapshot connector override (tests/e2e). Defaults to the live `snapshotTools`. */
+  mcpSnapshot?: (server: McpServerConnection) => Promise<ToolDescriptor[]>;
   /** Platform embedding adapter for KB indexing. Defaults to env-configured OpenAI-compatible embeddings. */
   embeddings?: EmbeddingAdapter;
   /** Optional runner override for tests. */
@@ -364,6 +374,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
   const workflows = options.workflows ?? createPrismaWorkflowRepository();
   const runRepo = options.runs ?? createPrismaRunRepository();
   const knowledge = options.knowledge ?? createPrismaKnowledgeRepository();
+  const mcp = options.mcp ?? createPrismaMcpRepository();
   const platformCreditsProvider = options.platformCreditsProvider ?? loadPlatformCreditsProvider;
   const creditBalanceLoader = options.creditBalanceLoader ?? loadCreditBalance;
   const creditConsumer = options.creditConsumer ?? consumeCredits;
@@ -463,6 +474,10 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
         creditBudget,
         userId,
         emailSender,
+        // Agent MCP tools resolve connections at run time (ADR 0004 — never a
+        // process-global): the built-in server (ADR 0006) for everyone, plus a
+        // signed-in user's own servers. Available to anonymous runs too.
+        mcpServers: () => loadMcpConnections(mcp, userId),
         resume,
         onStreamEvent: (event) => {
           const buf = state.streamBuffers.get(runId);
@@ -502,6 +517,15 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
           } else if (event.type === "node.tokens" && event.nodeId && event.tokenUsage) {
             const existing = nodeOutputs.get(event.nodeId) ?? { output: "" };
             nodeOutputs.set(event.nodeId, { ...existing, ...event.tokenUsage });
+          } else if (event.type === "agent.tool" && event.nodeId && (event.phase === "start" || event.phase === "end")) {
+            pushToBuffer(buf, {
+              type: "agent.tool",
+              runId,
+              nodeId: event.nodeId,
+              tool: event.tool,
+              phase: event.phase,
+              result: typeof event.result === "string" ? event.result : undefined,
+            });
           }
         },
       },
@@ -663,6 +687,11 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
   app.route("/", createCreditRoutes());
   // User-level reusable Knowledge Bases plus the read-only anonymous example KB.
   app.route("/", createKnowledgeRoutes({ repository: knowledge, resolveUserId: resolveUser, indexer: knowledgeIndexer }));
+  // Account-level MCP servers (HTTP) — registered, snapshotted, and pickable as tools.
+  app.route("/", createMcpRoutes({ repository: mcp, resolveUserId: resolveUser, snapshot: options.mcpSnapshot }));
+  // Built-in MCP server (ADR 0006): platform-hosted, auth-less, read-only example
+  // server. Self-connected at run time via @langchain/mcp-adapters; no auth gate.
+  app.all("/mcp/builtin", (c) => handleBuiltinMcpRequest(c.req.raw));
 
   app.get(apiPaths.workflows(), async (c) => {
     const userId = await resolveUser(c);

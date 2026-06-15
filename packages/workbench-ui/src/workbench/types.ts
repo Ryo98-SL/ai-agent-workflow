@@ -2,6 +2,7 @@ import type {
   CreateCustomModelRequest,
   CreateFileKnowledgeDocumentRequest,
   CreateKnowledgeBaseRequest,
+  CreateMcpServerRequest,
   CreateTextKnowledgeDocumentRequest,
   CreateRunRequest,
   ResumeRunRequest,
@@ -9,10 +10,12 @@ import type {
   CustomModelDto,
   KnowledgeBaseDto,
   KnowledgeDocumentDto,
+  McpServerDto,
   ProviderKeyDto,
   RunEvent,
   RunInterrupt,
   UpdateKnowledgeBaseRequest,
+  UpdateMcpServerRequest,
   WorkflowDto,
   WorkflowRun,
   WorkflowSummary,
@@ -37,24 +40,41 @@ type NodeExecutionStateBase = {
   durationMs?: number;
 };
 
-export type LlmNodeExecutionState = NodeExecutionStateBase & {
-  nodeType: "llm";
+/** One live tool call in an Agent node's run, built from `agent.tool` SSE events. */
+export type AgentToolStep = {
+  tool: string;
+  status: "running" | "done";
+  /** Short text preview of the tool's return (present once the call ends). */
+  result?: string;
+};
+
+/**
+ * Streaming-capable node state — LLM and Agent nodes both stream a final answer
+ * (and Agent nodes also accumulate a live tool-call strip via `toolSteps`).
+ */
+export type StreamingNodeExecutionState = NodeExecutionStateBase & {
+  nodeType: "llm" | "agent";
   streamingText: string;
   inputTokens?: number;
   outputTokens?: number;
   output?: string;
   data?: Record<string, unknown>;
   error?: string;
+  /** Agent only: ordered live tool-call strip. */
+  toolSteps?: AgentToolStep[];
 };
 
+/** @deprecated Use {@link StreamingNodeExecutionState} (now covers Agent too). */
+export type LlmNodeExecutionState = StreamingNodeExecutionState;
+
 export type GenericNodeExecutionState = NodeExecutionStateBase & {
-  nodeType: Exclude<WorkflowNodeType, "llm">;
+  nodeType: Exclude<WorkflowNodeType, "llm" | "agent">;
   output?: string;
   data?: Record<string, unknown>;
   error?: string;
 };
 
-export type NodeExecutionState = LlmNodeExecutionState | GenericNodeExecutionState;
+export type NodeExecutionState = StreamingNodeExecutionState | GenericNodeExecutionState;
 
 export type WorkbenchStatus = "idle" | "loading" | "running" | "waiting" | "success" | "error";
 
@@ -127,6 +147,11 @@ export type WorkbenchWorkflowApi = {
   ) => Promise<{ document: KnowledgeDocumentDto }>;
   deleteKnowledgeDocument: (id: string) => Promise<void>;
   reindexKnowledgeDocument: (id: string) => Promise<{ document: KnowledgeDocumentDto }>;
+  listMcpServers: () => Promise<{ servers: McpServerDto[] }>;
+  createMcpServer: (request: CreateMcpServerRequest) => Promise<{ server: McpServerDto }>;
+  updateMcpServer: (id: string, request: UpdateMcpServerRequest) => Promise<{ server: McpServerDto }>;
+  refreshMcpServer: (id: string) => Promise<{ server: McpServerDto }>;
+  deleteMcpServer: (id: string) => Promise<void>;
   listProviderKeys: () => Promise<{ keys: ProviderKeyDto[] }>;
   createProviderKey: (request: { provider: string; label: string; apiKey: string }) => Promise<{ key: ProviderKeyDto }>;
   deleteProviderKey: (id: string) => Promise<void>;

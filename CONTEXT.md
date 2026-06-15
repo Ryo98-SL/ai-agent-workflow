@@ -104,7 +104,72 @@ _Avoid_: tool catalog, adapter registry, plugin list
 **Tool Browser**:
 The Dify-style searchable picker (tabs: All / Plugin / Custom / Workflow / MCP)
 that lists **Tool Registry** entries so the user can choose *which* tool to add.
-Picking a tool inserts a **Tool Node** already bound to that tool. Distinct from
-the general **Node Palette**, which picks a node *type*; the Tool Browser drills
-into the one Tool type to pick a specific tool.
+Picking a tool inserts a **Tool Node** already bound to that tool, *or* adds a
+tool to an **Agent Node**'s **Agent Tool List** (multi-select). Distinct from the
+general **Node Palette**, which picks a node *type*; the Tool Browser drills into
+the one Tool type to pick a specific tool.
 _Avoid_: tool picker, tool palette, marketplace
+
+### Agent
+
+**Agent Node**:
+A workflow node (`type: "agent"`) that runs a *bounded, model-driven tool-calling
+loop*: given an instruction + a query, the model repeatedly decides whether to
+call one of its tools and observe the result, until it produces a final answer or
+hits an iteration cap. Unlike a **Tool Node** (which deterministically runs *one*
+tool the author chose), an Agent Node lets the *model* choose which of several
+tools to call, and when. Mirrors Dify's *Agent* node.
+_Avoid_: agent type, react node, function-calling node, tool-loop node
+
+**Agent Tool List**:
+The set of tools an **Agent Node** may call, chosen *inline* from the **Tool
+Registry** via the **Tool Browser** (multi-select) and stored in the node's
+`config` as a list of tool bindings (the same `provider / providerId / toolName /
+params` identity used by a **Tool Node**). Tools are *embedded data on the agent*,
+not wired in by edges — an Agent Node holds its own tools and decides at runtime
+which to invoke. An **MCP Tool** is one such binding, indistinguishable in shape
+from a built-in one.
+_Avoid_: agent tools, attached tools, wired tools, tool edges
+
+**Agentic Strategy**:
+How an **Agent Node** drives its tool-calling loop. **Function Calling** uses the
+model's native structured tool calls — the *implemented* strategy; requires a
+tool-calling-capable model (DeepSeek / OpenAI / Anthropic / newer). **ReAct**
+parses `Thought / Action / Observation` text for models without native tool
+calling — *reserved*: selectable in the inspector but not yet wired (it exists for
+future local/Ollama support). Mirrors Dify's *Agentic Strategy* picker.
+_Avoid_: agent mode, reasoning strategy, tool mode
+
+### MCP
+
+**MCP Server**:
+An account-level (per-user) registry entry pointing at a *remote HTTP* MCP
+endpoint — URL, **Server Identifier** (unique per user, kebab/underscore, ≤24
+chars), display name/icon, and auth **Headers**. Registered through the *Add MCP
+Server (HTTP)* dialog. Secrets in its headers are stored encrypted server-side and
+never written into workflow JSON (like provider API keys). It is *not* a workflow
+node and never appears on the canvas; it is a source of **MCP Tools**. Anonymous
+visitors cannot register one (parallels Knowledge Bases) — but everyone, including
+anonymous visitors, always gets the read-only **Built-in MCP Server** below.
+_Avoid_: mcp connection, server node, plugin, integration
+
+**Built-in MCP Server**:
+A platform-provided, read-only **MCP Server** that the app *hosts itself* and
+exposes to *everyone* — including anonymous visitors — with no registration and no
+secrets. The MCP analogue of the seeded example Knowledge Base: its **MCP Tools**
+always appear in the Tool Browser's MCP tab and execute live over the real MCP
+transport like any other. Defined in code (not a per-user database row) and cannot
+be edited or deleted. Distinct from **Built-in tools** (the static Current Time /
+Send Email registry entries), which are not MCP.
+_Avoid_: example mcp, demo server, seeded mcp, default mcp, built-in tool
+
+**MCP Tool**:
+A **Tool Registry** entry *discovered from* an **MCP Server**: identity
+`{ provider: "mcp", providerId: <server identifier>, toolName: <mcp tool name> }`.
+Its descriptor (param-spec, output fields) is converted from the tool's JSON
+Schema and **snapshotted** into the catalog when the server is added or refreshed,
+so the **Tool Browser** and inspectors resolve it synchronously offline — but it
+is *executed* by connecting live to its MCP Server at run time. Pickable in the
+Tool Browser's MCP tab like any other tool, into an **Agent Tool List** or a
+standalone **Tool Node**.
+_Avoid_: remote tool, dynamic tool, plugin tool

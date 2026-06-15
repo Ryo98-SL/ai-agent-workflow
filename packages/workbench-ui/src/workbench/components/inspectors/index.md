@@ -9,10 +9,18 @@ Node-specific configuration forms for the selection inspector.
 - `StartInspector.tsx` edits Start text input field declarations.
 - `LLMInspector.tsx` edits message-based prompts with variable chips, optional
   conversation memory, prompt variable reference status, output variables, and a
-  compact Model Setting field. The field opens a popover with the shared
-  `ModelSettingsPanel`; provider API keys are selected from model groups, while
-  node overrides store provider, model, endpoint URL, temperature, and max
-  tokens.
+  compact Model Setting field (the shared `NodeModelSettingField`).
+- `sharedModelSettingField.tsx` is the reusable per-node model selector
+  (`NodeModelSettingField`) + `modelSettingsForEditor`/`sanitizeNodeModelSettings`,
+  shared by the LLM and Agent inspectors. The field opens a popover with the shared
+  `ModelSettingsPanel`; node overrides store provider, model, endpoint URL,
+  temperature, and max tokens.
+- `AgentInspector.tsx` edits an Agent node: Agentic Strategy picker (functionCalling
+  / react, with a "not implemented" note on react), the shared model field, an inline
+  tool list (multi-select Tool Browser, per built-in tool an optional author-fixed
+  `ToolParamForm`, MCP tools shown model-filled), variable-aware Instruction + Query
+  editors (Query required), a Maximum Iterations slider (1–50), a memory toggle, and
+  the output variables panel.
 - `ToolInspector.tsx` lets users rebind a Tool node through the Tool Browser and
   renders descriptor-defined params through `ToolParamForm`.
 - `IfElseInspector.tsx` edits case branches, condition combinators, operators,

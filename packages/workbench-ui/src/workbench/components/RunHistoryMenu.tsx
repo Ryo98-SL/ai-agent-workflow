@@ -213,7 +213,8 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
           sseEvent.type === "node.started" ||
           sseEvent.type === "node.stream" ||
           sseEvent.type === "node.completed" ||
-          sseEvent.type === "node.failed"
+          sseEvent.type === "node.failed" ||
+          sseEvent.type === "agent.tool"
         ) {
           setResumeNodeStates((prev) => reduceRunNodeStreamEvent(prev ?? new Map(), sseEvent));
         } else if (sseEvent.type === "run.completed" || sseEvent.type === "run.waiting") {

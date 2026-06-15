@@ -196,6 +196,14 @@ export function createLocalWorkflowApi(serverApi: WorkbenchWorkflowApi): Workben
     deleteKnowledgeDocument: (id) => serverApi.deleteKnowledgeDocument(id),
     reindexKnowledgeDocument: (id) => serverApi.reindexKnowledgeDocument(id),
 
+    // MCP servers are account-level (auth required); anonymous users have none.
+    // Delegate for type parity — mutations receive the server's unauthorized error.
+    listMcpServers: () => serverApi.listMcpServers(),
+    createMcpServer: (request) => serverApi.createMcpServer(request),
+    updateMcpServer: (id, request) => serverApi.updateMcpServer(id, request),
+    refreshMcpServer: (id) => serverApi.refreshMcpServer(id),
+    deleteMcpServer: (id) => serverApi.deleteMcpServer(id),
+
     // Account endpoints are not used in anonymous mode; delegate for type parity.
     listProviderKeys: () => serverApi.listProviderKeys(),
     createProviderKey: (request) => serverApi.createProviderKey(request),

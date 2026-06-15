@@ -27,6 +27,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { InlineNodePalettePopover, type InlineNodePaletteState } from "./InlineNodePalettePopover";
 import { WorkflowInsertableEdge, type WorkflowInsertableEdgeData } from "./WorkflowInsertableEdge";
 import {
+  AgentWorkflowNode,
   CodeWorkflowNode,
   EndWorkflowNode,
   HumanInputWorkflowNode,
@@ -67,6 +68,7 @@ type WorkflowCanvasProps = {
 const nodeTypes = {
   start: StartWorkflowNode,
   llm: LlmWorkflowNode,
+  agent: AgentWorkflowNode,
   knowledge: KnowledgeWorkflowNode,
   tool: ToolWorkflowNode,
   code: CodeWorkflowNode,

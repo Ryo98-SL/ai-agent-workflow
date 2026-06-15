@@ -1,8 +1,10 @@
 import type { ApiErrorResponse } from "@ai-agent-workflow/api-contracts";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
-import type { WorkflowRuntimeState } from "@ai-agent-workflow/workflow-domain";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import type { OpenAICompatibleSettings, WorkflowRuntimeState } from "@ai-agent-workflow/workflow-domain";
 import type { EmbeddingAdapter } from "../knowledge/embeddings";
 import type { KnowledgeRepository } from "../knowledge/repository";
+import type { McpServerConnection } from "../mcp/client";
 
 export type RuntimeNodeResult = {
   nodeId: string;
@@ -22,7 +24,20 @@ export type RuntimeStreamEvent = {
   output?: string;
   data?: Record<string, unknown>;
   tokenUsage?: { inputTokens?: number; outputTokens?: number };
+  /**
+   * Agent tool-call observability (`type: "agent.tool"`, ADR 0005). Re-attributed
+   * to the parent agent `nodeId` from the prebuilt loop's inner tool events. `tool`
+   * is the tool name (MCP tools are `${identifier}__${toolName}`); `phase` is
+   * `"start"` (with `args`) or `"end"` (with `result`).
+   */
+  tool?: string;
+  phase?: "start" | "end";
+  args?: unknown;
+  result?: unknown;
 };
+
+/** A bind-capable chat model (the concrete LangChain model used for agent loops). */
+export type BoundCapableChatModel = BaseChatModel;
 
 /** A single conversation turn kept in the run thread's memory channel. */
 export type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -78,6 +93,17 @@ export type RuntimeExecutorOptions = {
   query?: string;
   /** Sends emails for the Email tool node when real sending is enabled. */
   emailSender?: EmailSender;
+  /**
+   * Resolves the current user's MCP server connections (decrypted headers) for an
+   * Agent node that binds MCP tools (ADR 0004). Injected by the run entry from the
+   * per-user MCP repository; absent for anonymous runs (no MCP servers).
+   */
+  mcpServers?: () => Promise<McpServerConnection[]>;
+  /**
+   * Test/advanced seam: overrides how an Agent node's bound model is built from
+   * resolved settings. Defaults to `createBoundCapableModel(settings, fetch)`.
+   */
+  agentModelFactory?: (settings: OpenAICompatibleSettings) => BoundCapableChatModel;
   /**
    * When set, the run resumes a paused thread: the graph is re-entered with
    * `Command({ resume: value })` on the existing `threadId`/checkpointer instead

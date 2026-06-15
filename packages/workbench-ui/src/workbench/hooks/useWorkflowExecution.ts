@@ -13,8 +13,8 @@ function newId(): string {
 
 /**
  * Picks the assistant reply for a Chat Mode turn from the run's node states: the
- * reached End node's resolved Answer Template, falling back to the last LLM node's
- * text (or its live streaming text). Mirrors the runtime's "answer" semantics.
+ * reached End node's resolved Answer Template, falling back to the last LLM/Agent
+ * node's text (or its live streaming text). Mirrors the runtime's "answer" semantics.
  */
 export function deriveChatAnswer(nodeStates: Map<string, NodeExecutionState>): string {
   const states = [...nodeStates.values()];
@@ -22,12 +22,12 @@ export function deriveChatAnswer(nodeStates: Map<string, NodeExecutionState>): s
   if (ended.length > 0) {
     return ended[ended.length - 1].output ?? "";
   }
-  const llms = states.filter((state) => state.nodeType === "llm");
-  const lastLlm = llms[llms.length - 1];
-  if (!lastLlm || lastLlm.nodeType !== "llm") {
+  const streaming = states.filter((state) => state.nodeType === "llm" || state.nodeType === "agent");
+  const last = streaming[streaming.length - 1];
+  if (!last || (last.nodeType !== "llm" && last.nodeType !== "agent")) {
     return "";
   }
-  return (lastLlm.output ?? lastLlm.streamingText ?? "").trim();
+  return (last.output ?? last.streamingText ?? "").trim();
 }
 
 export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
@@ -79,7 +79,8 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
           sseEvent.type === "node.started" ||
           sseEvent.type === "node.stream" ||
           sseEvent.type === "node.completed" ||
-          sseEvent.type === "node.failed"
+          sseEvent.type === "node.failed" ||
+          sseEvent.type === "agent.tool"
         ) {
           setNodeStates((prev) => reduceRunNodeStreamEvent(prev, sseEvent));
         } else if (sseEvent.type === "run.waiting") {

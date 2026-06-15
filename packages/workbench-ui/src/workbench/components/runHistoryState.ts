@@ -32,10 +32,10 @@ export function createNodeExecutionStateFromRunResult({
     durationMs,
   };
 
-  if (node.type === "llm") {
+  if (node.type === "llm" || node.type === "agent") {
     return {
       ...base,
-      nodeType: "llm",
+      nodeType: node.type,
       streamingText: "",
       output: nodeResult.output,
       data: nodeResult.data,
@@ -44,14 +44,14 @@ export function createNodeExecutionStateFromRunResult({
 
   return {
     ...base,
-    nodeType: node.type as Exclude<WorkflowNodeType, "llm">,
+    nodeType: node.type as Exclude<WorkflowNodeType, "llm" | "agent">,
     output: nodeResult.output,
     data: nodeResult.data,
   };
 }
 
 export function nodeReadableText(state: NodeExecutionState) {
-  return state.nodeType === "llm"
+  return state.nodeType === "llm" || state.nodeType === "agent"
     ? state.status === "succeeded"
       ? state.output || state.streamingText
       : state.streamingText

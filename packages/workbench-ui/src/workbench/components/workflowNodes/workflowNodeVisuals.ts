@@ -1,4 +1,5 @@
 import {
+  Bot,
   Braces,
   Brain,
   Clock,
@@ -17,6 +18,7 @@ import type { WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
 export const workflowNodeIconBackgroundClassNames = {
   start: "bg-emerald-700",
   llm: "bg-violet-700",
+  agent: "bg-indigo-700",
   knowledge: "bg-sky-700",
   tool: "bg-amber-700",
   code: "bg-slate-700",
@@ -29,6 +31,7 @@ export const workflowNodeIconBackgroundClassNames = {
 export const workflowNodeIcons = {
   start: Play,
   llm: Brain,
+  agent: Bot,
   knowledge: Database,
   tool: Wrench,
   code: Braces,

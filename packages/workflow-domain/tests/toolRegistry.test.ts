@@ -1,13 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   BUILTIN_TOOL_DESCRIPTORS,
   createDefaultWorkflow,
   createNode,
+  getToolDescriptors,
+  jsonSchemaToParamSpec,
   nodeOutputFields,
+  paramSpecToJsonSchema,
+  registerMcpToolDescriptors,
   resolveToolDescriptor,
   TOOL_DESCRIPTORS,
   toolDescriptorKey,
   validateWorkflowFile,
+  type ToolDescriptor,
+  type ToolParamSpec,
   type WorkflowNode,
 } from "@ai-agent-workflow/workflow-domain";
 
@@ -122,5 +128,132 @@ describe("tool descriptor registry", () => {
 
     const unknownNode: WorkflowNode = { ...emailNode, config: { ...emailNode.config, toolName: "nope" } };
     expect(nodeOutputFields(unknownNode).map((f) => f.name)).toEqual(["text", "data"]);
+  });
+});
+
+describe("paramSpecToJsonSchema", () => {
+  it("maps each param type, enum, required, and description", () => {
+    const params: ToolParamSpec[] = [
+      { name: "to", label: "To", type: "string", required: true, help: "Recipient" },
+      { name: "body", label: "Body", type: "text" },
+      { name: "count", label: "Count", type: "number" },
+      { name: "send", label: "Send", type: "boolean" },
+      {
+        name: "tone",
+        label: "Tone",
+        type: "select",
+        options: [
+          { value: "formal", label: "Formal" },
+          { value: "casual", label: "Casual" },
+        ],
+      },
+    ];
+    const schema = paramSpecToJsonSchema(params);
+    expect(schema.type).toBe("object");
+    expect(schema.required).toEqual(["to"]);
+    expect(schema.properties).toEqual({
+      to: { type: "string", description: "Recipient" },
+      body: { type: "string", description: "Body" },
+      count: { type: "number", description: "Count" },
+      send: { type: "boolean", description: "Send" },
+      tone: { type: "string", enum: ["formal", "casual"], description: "Tone" },
+    });
+  });
+
+  it("returns empty object schema for no params", () => {
+    expect(paramSpecToJsonSchema([])).toEqual({ type: "object", properties: {}, required: [] });
+  });
+});
+
+describe("jsonSchemaToParamSpec", () => {
+  it("round-trips a representative MCP-style input schema", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        city: { type: "string", title: "City", description: "City name" },
+        days: { type: "integer", description: "Forecast horizon" },
+        units: { type: "string", enum: ["metric", "imperial"] },
+        verbose: { type: "boolean" },
+        filters: { type: "array", items: { type: "string" } },
+      },
+      required: ["city"],
+    };
+    const specs = jsonSchemaToParamSpec(schema, { primaryFirst: true });
+    expect(specs).toEqual([
+      { name: "city", label: "City", type: "string", required: true, help: "City name", primary: true },
+      { name: "days", label: "days", type: "number", required: false, help: "Forecast horizon" },
+      {
+        name: "units",
+        label: "units",
+        type: "select",
+        required: false,
+        options: [
+          { value: "metric", label: "metric" },
+          { value: "imperial", label: "imperial" },
+        ],
+      },
+      { name: "verbose", label: "verbose", type: "boolean", required: false },
+      { name: "filters", label: "filters", type: "text", required: false },
+    ]);
+  });
+
+  it("returns [] for malformed input", () => {
+    expect(jsonSchemaToParamSpec(null)).toEqual([]);
+    expect(jsonSchemaToParamSpec("nope")).toEqual([]);
+    expect(jsonSchemaToParamSpec({})).toEqual([]);
+    expect(jsonSchemaToParamSpec({ type: "object" })).toEqual([]);
+  });
+});
+
+describe("client-only MCP descriptor merge", () => {
+  afterEach(() => {
+    // The injected set is a module-level global — reset so tests don't bleed.
+    registerMcpToolDescriptors([]);
+  });
+
+  const mcpDescriptor: ToolDescriptor = {
+    provider: "mcp",
+    providerId: "weather",
+    toolName: "forecast",
+    label: "Forecast",
+    icon: "plug",
+    category: "mcp",
+    description: "Weather forecast",
+    params: [{ name: "city", label: "City", type: "string", required: true }],
+    defaultParams: {},
+    outputFields: [
+      { name: "text", type: "string", description: "Forecast text" },
+      { name: "data", type: "object", description: "Forecast data" },
+    ],
+  };
+
+  it("resolves an injected MCP descriptor and its output fields without touching built-ins", () => {
+    expect(resolveToolDescriptor({ provider: "mcp", providerId: "weather", toolName: "forecast" })).toBeUndefined();
+
+    registerMcpToolDescriptors([mcpDescriptor]);
+
+    expect(getToolDescriptors()).toEqual([...BUILTIN_TOOL_DESCRIPTORS, mcpDescriptor]);
+    const resolved = resolveToolDescriptor({ provider: "mcp", providerId: "weather", toolName: "forecast" });
+    expect(resolved?.label).toBe("Forecast");
+
+    const mcpToolNode: WorkflowNode = {
+      id: "tool1",
+      type: "tool",
+      label: "Forecast",
+      position: { x: 0, y: 0 },
+      config: { provider: "mcp", providerId: "weather", toolName: "forecast", params: {} },
+    };
+    expect(nodeOutputFields(mcpToolNode).map((f) => f.name)).toEqual(["text", "data"]);
+
+    // Built-in resolution is unaffected by injection.
+    expect(resolveToolDescriptor({ provider: "builtin", providerId: "builtin", toolName: "currentTime" })?.label).toBe(
+      "Current Time",
+    );
+  });
+
+  it("replaces (not appends) the injected set on each call", () => {
+    registerMcpToolDescriptors([mcpDescriptor]);
+    registerMcpToolDescriptors([]);
+    expect(getToolDescriptors()).toEqual([...BUILTIN_TOOL_DESCRIPTORS]);
   });
 });

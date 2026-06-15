@@ -13,7 +13,11 @@ helpers shared by apps, server code, and future packages.
   KB id (`EXAMPLE_KNOWLEDGE_BASE_ID`), collision-free readable node factories,
   and node output variable metadata.
 - `src/toolRegistry.ts` exports Tool Registry descriptors, parameter specs,
-  output metadata, and identity lookup helpers for built-in tools.
+  output metadata, and identity lookup helpers for built-in tools. It also owns
+  the pure param-spec↔JSON-Schema converters (`paramSpecToJsonSchema`,
+  `jsonSchemaToParamSpec`) and the **client-only** MCP descriptor merge
+  (`registerMcpToolDescriptors` / `getToolDescriptors`) that keeps
+  `resolveToolDescriptor` synchronous (ADR 0004 §6 — never inject on the server).
 - `src/conditions.ts` evaluates If/Else branches against runtime state.
 - `src/availableVariables.ts` computes upstream variable groups for prompt,
   condition, tool, and template authoring.
@@ -27,14 +31,18 @@ helpers shared by apps, server code, and future packages.
 
 ## Behavior
 
-The schema supports Start, LLM, Knowledge, Tool, Code, If/Else, Human Input,
-Template, and End nodes. Start nodes declare text input fields. LLM nodes use
-message-based prompts and optional conversation memory. Knowledge nodes
+The schema supports Start, LLM, Knowledge, Tool, Agent, Code, If/Else, Human
+Input, Template, and End nodes. Start nodes declare text input fields. LLM nodes
+use message-based prompts and optional conversation memory. Knowledge nodes
 reference user-level KBs with `knowledgeBaseIds`, resolve a `queryTemplate`, and
 carry semantic retrieval defaults. Tool nodes bind to a
-`provider/providerId/toolName` identity plus generic JSON params. Human Input
-nodes define reviewer prompts, actions, and optional text input. Template nodes
-shape runtime variables into final text.
+`provider/providerId/toolName` identity plus generic JSON params. Agent nodes
+(ADR 0005) run a bounded function-calling loop over an inline tool list
+(`tools`: the same identity triple a Tool node binds to) with `instruction`,
+variable-bearing `query` (defaults to `{{userInput.query}}`), `maxIterations`,
+and `memory`; `react` strategy is reserved. Human Input nodes define reviewer
+prompts, actions, and optional text input. Template nodes shape runtime
+variables into final text.
 
 Model settings accept DeepSeek, OpenAI, Anthropic, and Ollama providers.
 Workflow API keys live in `settings.modelProviderKeys`; active stored-key or AI

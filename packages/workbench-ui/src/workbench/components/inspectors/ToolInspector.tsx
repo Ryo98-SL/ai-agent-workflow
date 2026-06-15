@@ -15,6 +15,7 @@ import { ToolParamForm } from "../tools/ToolParamForm";
 
 type ToolInspectorProps = {
   node: ToolNode;
+  onOpenMcpServers?: () => void;
   updateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
 };
 
@@ -23,7 +24,7 @@ type ToolInspectorProps = {
  * chosen (no adapter dropdown); the form is generated from the descriptor's
  * param-spec, and "更换工具" reopens the Tool Browser to rebind in place.
  */
-export function ToolInspector({ node, updateNode }: ToolInspectorProps) {
+export function ToolInspector({ node, onOpenMcpServers, updateNode }: ToolInspectorProps) {
   const [browsing, setBrowsing] = useState(false);
   const descriptor = resolveToolDescriptor(node.config);
   const Icon = resolveToolIcon(descriptor?.icon);
@@ -87,7 +88,7 @@ export function ToolInspector({ node, updateNode }: ToolInspectorProps) {
           )}
         >
           <div className="h-[440px] w-[320px] overflow-hidden rounded-md border border-border bg-card shadow-xl shadow-black/20">
-            <ToolBrowser selectedKey={boundKey} onSelect={rebind} />
+            <ToolBrowser selectedKey={boundKey} onSelect={rebind} onOpenMcpServers={onOpenMcpServers} />
           </div>
         </Popover>
       </div>

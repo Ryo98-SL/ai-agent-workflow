@@ -1,42 +1,48 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, Search } from "lucide-react";
-import { TOOL_DESCRIPTORS, type ToolDescriptor } from "@ai-agent-workflow/workflow-domain";
+import { ArrowLeft, Check, Search, Settings2 } from "lucide-react";
+import { getToolDescriptors, toolDescriptorKey, type ToolDescriptor } from "@ai-agent-workflow/workflow-domain";
 import { resolveToolIcon } from "../workflowNodes/workflowNodeVisuals";
 
 /**
  * Dify-style Tool Browser (CONTEXT.md — Tool Browser). Lists Tool Registry entries
- * so the user can pick which tool to add/rebind. Only `builtin` tools exist today;
- * the Plugin / Custom / Workflow / MCP tabs are reserved placeholders. There is no
- * marketplace chrome (featured / install counts) by design.
+ * so the user can pick which tool to add/rebind, or — in multi-select mode — pick
+ * several into an Agent's tool list. The MCP tab is populated from the client-only
+ * descriptor registry ({@link getToolDescriptors}), kept in sync by `useMcpServers`.
+ * The Plugin / Custom / Workflow tabs are reserved placeholders.
  */
 const TABS = [
   { id: "all", label: "All" },
+  { id: "builtin", label: "Built-in" },
+  { id: "mcp", label: "MCP" },
   { id: "plugin", label: "Plugin" },
   { id: "custom", label: "Custom" },
   { id: "workflow", label: "Workflow" },
-  { id: "mcp", label: "MCP" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
 type ToolBrowserProps = {
-  onSelect: (descriptor: ToolDescriptor) => void;
+  /** Single-select: pick one tool (add/rebind flows). */
+  onSelect?: (descriptor: ToolDescriptor) => void;
   /** Back to the node palette (shown in the add-node flow, omitted when rebinding). */
   onBack?: () => void;
-  /** Highlights the currently-bound tool (rebind flow). */
+  /** Highlights the currently-bound tool (single-select rebind flow). */
   selectedKey?: string;
+  /** Multi-select: the currently-selected tool keys (Agent tool list). */
+  selectedKeys?: Set<string>;
+  /** Multi-select: toggle a tool in/out of the list (keeps the browser open). */
+  onToggle?: (descriptor: ToolDescriptor) => void;
+  /** Opens the MCP server management dialog from the MCP tab. */
+  onOpenMcpServers?: () => void;
 };
 
-function descriptorKey(descriptor: ToolDescriptor): string {
-  return `${descriptor.provider}:${descriptor.providerId}:${descriptor.toolName}`;
-}
-
-export function ToolBrowser({ onSelect, onBack, selectedKey }: ToolBrowserProps) {
+export function ToolBrowser({ onSelect, onBack, selectedKey, selectedKeys, onToggle, onOpenMcpServers }: ToolBrowserProps) {
   const [tab, setTab] = useState<TabId>("all");
   const [query, setQuery] = useState("");
+  const multiSelect = Boolean(onToggle);
 
   const tools = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return TOOL_DESCRIPTORS.filter((descriptor) => {
+    return getToolDescriptors().filter((descriptor) => {
       const matchesTab = tab === "all" || descriptor.category === tab;
       const matchesQuery =
         needle === "" ||
@@ -45,6 +51,9 @@ export function ToolBrowser({ onSelect, onBack, selectedKey }: ToolBrowserProps)
       return matchesTab && matchesQuery;
     });
   }, [tab, query]);
+
+  const isSelected = (key: string) => (multiSelect ? Boolean(selectedKeys?.has(key)) : key === selectedKey);
+  const handlePick = (descriptor: ToolDescriptor) => (multiSelect ? onToggle?.(descriptor) : onSelect?.(descriptor));
 
   return (
     <div className="flex h-full flex-col">
@@ -86,23 +95,35 @@ export function ToolBrowser({ onSelect, onBack, selectedKey }: ToolBrowserProps)
             </button>
           ))}
         </div>
+        {tab === "mcp" && onOpenMcpServers && (
+          <button
+            type="button"
+            onClick={onOpenMcpServers}
+            className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Settings2 size={13} aria-hidden />
+            管理 MCP 服务器
+          </button>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
         {tools.length === 0 ? (
-          <p className="px-3 py-10 text-center text-xs text-muted-foreground">{query ? "无匹配工具" : "敬请期待"}</p>
+          <ToolBrowserEmpty tab={tab} hasQuery={Boolean(query)} onOpenMcpServers={onOpenMcpServers} />
         ) : (
           tools.map((descriptor) => {
             const Icon = resolveToolIcon(descriptor.icon);
-            const key = descriptorKey(descriptor);
+            const key = toolDescriptorKey(descriptor.provider, descriptor.providerId, descriptor.toolName);
+            const selected = isSelected(key);
             return (
               <button
                 key={key}
                 type="button"
-                onClick={() => onSelect(descriptor)}
+                onClick={() => handlePick(descriptor)}
+                aria-pressed={multiSelect ? selected : undefined}
                 className={[
                   "flex w-full items-center gap-2.5 rounded-md p-2 text-left transition-colors hover:bg-accent",
-                  key === selectedKey ? "bg-accent" : "",
+                  selected ? "bg-accent" : "",
                 ].join(" ")}
               >
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-amber-700 text-white">
@@ -114,6 +135,17 @@ export function ToolBrowser({ onSelect, onBack, selectedKey }: ToolBrowserProps)
                     <span className="block truncate text-xs text-muted-foreground">{descriptor.description}</span>
                   )}
                 </span>
+                {multiSelect && (
+                  <span
+                    className={[
+                      "flex size-5 shrink-0 items-center justify-center rounded border",
+                      selected ? "border-brand bg-brand text-brand-foreground" : "border-border",
+                    ].join(" ")}
+                    aria-hidden
+                  >
+                    {selected && <Check size={13} />}
+                  </span>
+                )}
               </button>
             );
           })
@@ -121,4 +153,36 @@ export function ToolBrowser({ onSelect, onBack, selectedKey }: ToolBrowserProps)
       </div>
     </div>
   );
+}
+
+function ToolBrowserEmpty({
+  tab,
+  hasQuery,
+  onOpenMcpServers,
+}: {
+  tab: TabId;
+  hasQuery: boolean;
+  onOpenMcpServers?: () => void;
+}) {
+  if (hasQuery) {
+    return <p className="px-3 py-10 text-center text-xs text-muted-foreground">无匹配工具</p>;
+  }
+  if (tab === "mcp") {
+    return (
+      <div className="flex flex-col items-center gap-2 px-3 py-10 text-center">
+        <p className="text-xs text-muted-foreground">还没有 MCP 工具。注册一个 HTTP MCP 服务器后，其工具会显示在这里。</p>
+        {onOpenMcpServers && (
+          <button
+            type="button"
+            onClick={onOpenMcpServers}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+          >
+            <Settings2 size={13} aria-hidden />
+            管理 MCP 服务器
+          </button>
+        )}
+      </div>
+    );
+  }
+  return <p className="px-3 py-10 text-center text-xs text-muted-foreground">敬请期待</p>;
 }

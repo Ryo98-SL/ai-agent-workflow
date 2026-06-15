@@ -82,7 +82,7 @@ export function getWorkflowNodeSize(node: WorkflowNode) {
     return { width: ifElseLayout.width, height };
   }
 
-  if (node.type === "llm") {
+  if (node.type === "llm" || node.type === "agent") {
     const descriptionLineCount = node.description ? Math.ceil(node.description.length / 34) : 0;
     const height = Math.max(llmWorkflowNodeSize.minHeight, 96 + descriptionLineCount * 18);
 
@@ -159,6 +159,6 @@ export function getWorkflowNodeHandles(node: WorkflowNode) {
 }
 
 export function getWorkflowNodeCardClassName(type: WorkflowNodeType) {
-  const sizeClassName = type === "start" || type === "llm" ? "w-[220px]" : "w-[184px]";
+  const sizeClassName = type === "start" || type === "llm" || type === "agent" ? "w-[220px]" : "w-[184px]";
   return `${sizeClassName} rounded-md border bg-card text-card-foreground p-3 shadow-sm`;
 }

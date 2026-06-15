@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Annotation, Command, END, MemorySaver, START, StateGraph, interrupt, isGraphInterrupt } from "@langchain/langgraph";
+import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from "@langchain/core/messages";
 import {
   KnowledgeNodeOutputDataSchema,
   createApiErrorResponse,
@@ -14,6 +16,7 @@ import {
   resolveMemorySettings,
   resolveToolDescriptor,
   type JsonValue,
+  type OpenAICompatibleSettings,
   type WorkflowFile,
   type WorkflowNode,
   type WorkflowNodeType,
@@ -23,11 +26,13 @@ import { RuntimeValidationError, normalizeRuntimeError } from "./errors";
 import { logger } from "../logger";
 import type { EmbeddingAdapter } from "../knowledge/embeddings";
 import type { KnowledgeRepository } from "../knowledge/repository";
-import { callChatCompletion, summarizeMessages } from "./models";
+import { callChatCompletion, createBoundCapableModel, resolveAgentModelSettings, stringifyMessageContent, summarizeMessages } from "./models";
+import { assembleAgentTools, extractAgentSteps, extractAgentUsage } from "./agentTools";
 import { materializeStartValues } from "./startValues";
 import { resolvePrompt } from "./prompts";
 import { resolveToolRuntime } from "./tools/registry";
-import type { ChatMessage, EmailSender, RuntimeExecutionResult, RuntimeExecutorOptions, RuntimeInterrupt, RuntimeNodeResult, RuntimeStreamEvent } from "./types";
+import type { McpServerConnection } from "../mcp/client";
+import type { BoundCapableChatModel, ChatMessage, EmailSender, RuntimeExecutionResult, RuntimeExecutorOptions, RuntimeInterrupt, RuntimeNodeResult, RuntimeStreamEvent } from "./types";
 import { validateWorkflow } from "./validation";
 
 type RuntimeGraphState = {
@@ -74,6 +79,10 @@ type RuntimeNodeBuildContext = {
   userId: string | null;
   workflow: WorkflowFile;
   emailSender?: EmailSender;
+  /** Resolves the current user's MCP server connections for Agent MCP tools. */
+  mcpServers?: () => Promise<McpServerConnection[]>;
+  /** Builds an Agent node's bound model from resolved settings (test-overridable). */
+  createAgentModel: (settings: OpenAICompatibleSettings) => BoundCapableChatModel;
 };
 
 type RuntimeNodeOutput = {
@@ -96,6 +105,7 @@ type RuntimeNodeBuilder = (
 const runtimeNodeBuilders = {
   start: buildStartNode,
   llm: buildLlmNode,
+  agent: buildAgentNode,
   knowledge: buildKnowledgeNode,
   tool: buildToolNode,
   code: buildPlaceholderNode,
@@ -146,6 +156,8 @@ export async function executeWorkflowRuntime(
       userId: options.userId ?? null,
       workflow,
       emailSender: options.emailSender,
+      mcpServers: options.mcpServers,
+      createAgentModel: options.agentModelFactory ?? ((settings) => createBoundCapableModel(settings, fetchImpl)),
     };
 
     for (const node of reachableNodes) {
@@ -297,6 +309,14 @@ export async function executeWorkflowRuntime(
           ? langEvent.metadata.langgraph_node
           : undefined;
 
+      // An Agent node runs the prebuilt loop as a sub-graph, so its inner model/tool
+      // events arrive with a sub-graph `langgraph_node` ("agent"/"tools"). Re-attribute
+      // them to the parent agent node id (via the checkpoint namespace, falling back to
+      // the currently running node) so model streaming, token metering, and tool steps
+      // are surfaced on the agent node itself (ADR 0005 §8).
+      const agentOwnerId = resolveAgentOwnerId(langEvent.metadata, nodeById, runningNodeId);
+      const modelOwnerId = nodeId ?? agentOwnerId;
+
       if (langEvent.event === "on_chain_start" && nodeId) {
         nodeStartTimes.set(nodeId, Date.now());
         runningNodeId = nodeId;
@@ -304,13 +324,27 @@ export async function executeWorkflowRuntime(
         const event: RuntimeStreamEvent = { type: "node.started", payload: langEvent, nodeId, nodeType: node.type };
         streamEvents.push(event);
         await options.onStreamEvent?.(event);
-      } else if (langEvent.event === "on_chat_model_stream" && nodeId) {
+      } else if (langEvent.event === "on_chat_model_stream" && modelOwnerId) {
         const delta = extractStreamDelta(langEvent.data);
         if (delta) {
-          const event: RuntimeStreamEvent = { type: "node.stream", payload: langEvent, nodeId, message: delta };
+          const event: RuntimeStreamEvent = { type: "node.stream", payload: langEvent, nodeId: modelOwnerId, message: delta };
           streamEvents.push(event);
           await options.onStreamEvent?.(event);
         }
+      } else if ((langEvent.event === "on_tool_start" || langEvent.event === "on_tool_end") && agentOwnerId) {
+        // Tool wrappers only run inside an Agent loop, so any tool event belongs to
+        // the owning agent node. Surface it as a lightweight live `agent.tool` event.
+        const phase = langEvent.event === "on_tool_start" ? "start" : "end";
+        const event: RuntimeStreamEvent = {
+          type: "agent.tool",
+          payload: langEvent,
+          nodeId: agentOwnerId,
+          tool: typeof langEvent.name === "string" ? langEvent.name : undefined,
+          phase,
+          ...(phase === "start" ? { args: extractToolInput(langEvent.data) } : { result: extractToolOutput(langEvent.data) }),
+        };
+        streamEvents.push(event);
+        await options.onStreamEvent?.(event);
       } else if (langEvent.event === "on_chain_end" && nodeId) {
         if (runningNodeId === nodeId) runningNodeId = undefined;
         const startTime = nodeStartTimes.get(nodeId) ?? Date.now();
@@ -344,10 +378,10 @@ export async function executeWorkflowRuntime(
         };
         streamEvents.push(event);
         await options.onStreamEvent?.(event);
-      } else if (langEvent.event === "on_chat_model_end" && nodeId) {
+      } else if (langEvent.event === "on_chat_model_end" && modelOwnerId) {
         const tokenUsage = extractTokenUsage(langEvent.data);
         if (tokenUsage) {
-          const event: RuntimeStreamEvent = { type: "node.tokens", payload: langEvent, nodeId, tokenUsage };
+          const event: RuntimeStreamEvent = { type: "node.tokens", payload: langEvent, nodeId: modelOwnerId, tokenUsage };
           streamEvents.push(event);
           await options.onStreamEvent?.(event);
 
@@ -529,6 +563,109 @@ async function buildLlmNode(
       : {}),
     ...(memoryUpdate ? { memoryUpdate } : {}),
   };
+}
+
+/** Detects LangGraph's recursion-limit error so the agent surfaces a clear `maxIterations` message. */
+function isRecursionError(error: unknown): boolean {
+  return error instanceof Error && error.name === "GraphRecursionError";
+}
+
+/**
+ * Runs an Agent node (ADR 0005) as a bounded function-calling loop over its inline
+ * tool list. Built-in and live MCP tools are assembled, bound to the model via
+ * LangGraph's prebuilt agent, and looped until the model answers or `maxIterations`
+ * is hit. The final answer is `text`; the ordered tool-call trace + token usage land
+ * in `data` (`{ steps, usage }`). ReAct is reserved (throws). Inner tool/model
+ * events are re-attributed to this node by the streamEvents loop (see below).
+ */
+async function buildAgentNode(
+  node: WorkflowNode,
+  state: RuntimeGraphState,
+  context: RuntimeNodeBuildContext,
+): Promise<RuntimeNodeOutput> {
+  if (node.type !== "agent") {
+    throw new RuntimeValidationError(`Node "${node.id}" cannot run with the Agent node builder.`);
+  }
+  if (node.config.strategy === "react") {
+    throw new RuntimeValidationError("ReAct strategy is not implemented yet — use Function Calling.");
+  }
+
+  const settings = resolveAgentModelSettings(context.workflow, node);
+  const model = context.createAgentModel(settings);
+
+  const useMemory = node.config.memory === true;
+  // Reuse the shared conversation channel exactly like the LLM node (un-summarized tail).
+  const history = useMemory ? state.messages.slice(state.summarizedCount) : [];
+
+  const instruction = resolvePrompt(node.config.instruction, state.values).trim();
+  const query = resolvePrompt(node.config.query, state.values).trim();
+  if (!query) {
+    throw new RuntimeValidationError(`Agent node "${node.id}" resolved an empty query.`);
+  }
+
+  const { tools, close } = await assembleAgentTools({
+    bindings: node.config.tools,
+    values: state.values,
+    emailSender: context.emailSender,
+    mcpConnections: context.mcpServers,
+  });
+
+  try {
+    const agent = createReactAgent({ llm: model, tools });
+    const messages: BaseMessage[] = [
+      ...(instruction ? [new SystemMessage(instruction)] : []),
+      ...history.map((message) =>
+        message.role === "assistant" ? new AIMessage(message.content) : new HumanMessage(message.content),
+      ),
+      new HumanMessage(query),
+    ];
+
+    let result: { messages?: BaseMessage[] };
+    try {
+      // recursionLimit covers the alternating model+tool turns (a turn = call + observe).
+      result = (await agent.invoke({ messages }, { recursionLimit: node.config.maxIterations * 2 + 1 })) as {
+        messages?: BaseMessage[];
+      };
+    } catch (error) {
+      if (isRecursionError(error)) {
+        throw new RuntimeValidationError(
+          `Agent node "${node.id}" exceeded its maximum of ${node.config.maxIterations} iteration(s) without finishing.`,
+        );
+      }
+      throw error;
+    }
+
+    const resultMessages = result.messages ?? [];
+    const finalMessage = resultMessages[resultMessages.length - 1];
+    const text = finalMessage ? stringifyMessageContent(finalMessage.content) : "";
+    const steps = extractAgentSteps(resultMessages);
+    const usage = extractAgentUsage(resultMessages);
+    const data = { steps, usage };
+
+    // Chat Mode stores the raw user message (not the resolved prompt) as the memory turn.
+    const userTurn = isChatWorkflow(context.workflow) && context.query !== undefined ? context.query : query;
+    return {
+      output: text,
+      data,
+      stateValue: { text, data, usage },
+      logMetadata: {
+        outputLength: text.length,
+        toolCalls: steps.length,
+        strategy: node.config.strategy,
+        memory: useMemory,
+      },
+      ...(useMemory
+        ? {
+            appendMessages: [
+              { role: "user", content: userTurn },
+              { role: "assistant", content: text },
+            ] satisfies ChatMessage[],
+          }
+        : {}),
+    };
+  } finally {
+    await close();
+  }
 }
 
 async function buildKnowledgeNode(
@@ -741,6 +878,50 @@ function formatKnowledgeContext(result: KnowledgeNodeOutputData["result"]): stri
       ].join("\n");
     })
     .join("\n\n");
+}
+
+/**
+ * Resolves the parent Agent node that owns a sub-graph event. The prebuilt agent
+ * runs nested under the agent node's task, so its checkpoint namespace embeds the
+ * parent node id (`agentId:…|agent:…`). Scans the namespace for an `agent`-typed
+ * node id; falls back to the currently running node when it is an agent (robust to
+ * any namespace-propagation differences).
+ */
+function resolveAgentOwnerId(
+  metadata: Record<string, unknown> | undefined,
+  nodeById: Map<string, WorkflowNode>,
+  runningNodeId: string | undefined,
+): string | undefined {
+  const rawNs = metadata?.langgraph_checkpoint_ns ?? metadata?.checkpoint_ns;
+  if (typeof rawNs === "string" && rawNs) {
+    for (const token of rawNs.split(/[|:]/)) {
+      const node = nodeById.get(token);
+      if (node?.type === "agent") {
+        return node.id;
+      }
+    }
+  }
+  if (runningNodeId) {
+    const running = nodeById.get(runningNodeId);
+    if (running?.type === "agent") {
+      return runningNodeId;
+    }
+  }
+  return undefined;
+}
+
+function extractToolInput(data: unknown): unknown {
+  return isRecord(data) ? data.input : undefined;
+}
+
+function extractToolOutput(data: unknown): unknown {
+  if (!isRecord(data)) return undefined;
+  const output = data.output;
+  // LangChain tool end emits a ToolMessage; surface its text for a lightweight strip.
+  if (isRecord(output) && "content" in output) {
+    return output.content;
+  }
+  return output;
 }
 
 function extractStreamDelta(data: unknown): string | undefined {

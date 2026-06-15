@@ -120,7 +120,9 @@ Design constraints:
   tags, and flow steps before loading the draft.
 - Variable-bearing fields use `VariableRichTextEditor`, backed by Lexical. The
   canonical stored value remains the plain template string with
-  `{{nodeId.path}}` placeholders; chips are editor presentation only.
+  `{{nodeId.path}}` placeholders; chips are editor presentation only. The `/`
+  insertion menu anchors to Lexical's typeahead rect through Floating UI so it
+  can flip and clamp its scrollable height to the available viewport space.
 - Tool nodes are descriptor-driven. The palette drills into `ToolBrowser`, the
   inspector can rebind a tool, and `ToolParamForm` renders controls from
   workflow-domain param specs.

@@ -17,8 +17,9 @@ export function reduceRunNodeStreamEvent(
     const { nodeId, nodeType } = event;
     const next = new Map(prev);
     const base = { nodeId, status: "running" as const, startedAt: Date.now() };
-    if (nodeType === "llm") {
-      next.set(nodeId, { ...base, nodeType: "llm", streamingText: "" });
+    // LLM and Agent nodes stream a final answer; Agent also accumulates tool steps.
+    if (nodeType === "llm" || nodeType === "agent") {
+      next.set(nodeId, { ...base, nodeType, streamingText: "", ...(nodeType === "agent" ? { toolSteps: [] } : {}) });
     } else {
       next.set(nodeId, { ...base, nodeType });
     }
@@ -27,9 +28,29 @@ export function reduceRunNodeStreamEvent(
 
   if (event.type === "node.stream") {
     const existing = prev.get(event.nodeId);
-    if (!existing || existing.nodeType !== "llm") return prev;
+    if (!existing || (existing.nodeType !== "llm" && existing.nodeType !== "agent")) return prev;
     const next = new Map(prev);
     next.set(event.nodeId, { ...existing, streamingText: existing.streamingText + event.delta });
+    return next;
+  }
+
+  if (event.type === "agent.tool") {
+    const existing = prev.get(event.nodeId);
+    if (!existing || existing.nodeType !== "agent") return prev;
+    const steps = [...(existing.toolSteps ?? [])];
+    if (event.phase === "start") {
+      steps.push({ tool: event.tool ?? "tool", status: "running" });
+    } else {
+      // Close the most recent running call (the one this end pairs with).
+      for (let index = steps.length - 1; index >= 0; index -= 1) {
+        if (steps[index].status === "running") {
+          steps[index] = { ...steps[index], status: "done", result: event.result };
+          break;
+        }
+      }
+    }
+    const next = new Map(prev);
+    next.set(event.nodeId, { ...existing, toolSteps: steps });
     return next;
   }
 
@@ -39,7 +60,7 @@ export function reduceRunNodeStreamEvent(
     if (!existing) return prev;
     const completedAt = Date.now();
     const next = new Map(prev);
-    if (existing.nodeType === "llm") {
+    if (existing.nodeType === "llm" || existing.nodeType === "agent") {
       next.set(nodeId, {
         ...existing,
         status: "succeeded",

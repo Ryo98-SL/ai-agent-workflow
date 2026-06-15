@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, ChevronRight, Loader2, UserCheck } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronRight, Loader2, UserCheck, Wrench } from "lucide-react";
 import type { ResumeRunRequest, RunInput, RunInterrupt } from "@ai-agent-workflow/api-contracts";
 import {
   resolveLLMModelSettings,
   type WorkflowFile,
   type WorkflowNode,
 } from "@ai-agent-workflow/workflow-domain";
-import type { DebugState, NodeExecutionState } from "../types";
+import type { AgentToolStep, DebugState, NodeExecutionState } from "../types";
 import { HumanReviewForm } from "./HumanReviewForm";
 import { JsonViewer } from "./JsonViewer";
 import { NodeTypeIcon } from "./NodeTypeIcon";
@@ -175,7 +175,7 @@ function RunNodeCard({
   const duration = formatRunDuration(state.durationMs);
   const sections = buildInspectorSections(workflow, workflowNode, state, debugState.result?.run.input);
   const readableText =
-    state.nodeType === "llm"
+    state.nodeType === "llm" || state.nodeType === "agent"
       ? state.status === "succeeded"
         ? state.output || state.streamingText
         : state.streamingText
@@ -221,11 +221,14 @@ export function RunNodeExecutionDetails({
   sections: InspectorSections;
   state: NodeExecutionState;
 }) {
+  const isStreamingNode = state.nodeType === "llm" || state.nodeType === "agent";
+  const toolSteps = state.nodeType === "agent" ? agentToolSteps(state) : [];
   return (
     <div className="space-y-3">
-      {state.nodeType === "llm" && state.status === "running" && !state.streamingText && <TypingDots />}
+      {state.nodeType === "agent" && toolSteps.length > 0 && <AgentToolSteps steps={toolSteps} />}
+      {isStreamingNode && state.status === "running" && !state.streamingText && toolSteps.length === 0 && <TypingDots />}
       {readableText && <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">{readableText}</p>}
-      {state.nodeType === "llm" && (state.inputTokens !== undefined || state.outputTokens !== undefined) && (
+      {isStreamingNode && (state.inputTokens !== undefined || state.outputTokens !== undefined) && (
         <p className="text-xs text-muted-foreground">
           {state.inputTokens ?? "?"} in · {state.outputTokens ?? "?"} out
         </p>
@@ -235,6 +238,51 @@ export function RunNodeExecutionDetails({
       {sections.processData !== undefined && <InspectorSection title="Process Data" value={sections.processData} />}
       {sections.outData !== undefined && <InspectorSection title="Out Data" value={sections.outData} />}
     </div>
+  );
+}
+
+/**
+ * Tool-call strip for an Agent node. Prefers the live `toolSteps` (from `agent.tool`
+ * SSE events); after completion (or in Run History) falls back to the recorded
+ * `data.steps` trace so the same strip renders for finished runs.
+ */
+function agentToolSteps(state: NodeExecutionState): AgentToolStep[] {
+  if (state.nodeType !== "agent") return [];
+  if (state.toolSteps && state.toolSteps.length > 0) {
+    return state.toolSteps;
+  }
+  const steps = (state.data as { steps?: Array<{ name?: string; result?: unknown }> } | undefined)?.steps;
+  if (Array.isArray(steps)) {
+    return steps.map((step) => ({
+      tool: typeof step.name === "string" ? step.name : "tool",
+      status: "done" as const,
+      result: typeof step.result === "string" ? step.result : undefined,
+    }));
+  }
+  return [];
+}
+
+function AgentToolSteps({ steps }: { steps: AgentToolStep[] }) {
+  return (
+    <ul className="space-y-1" aria-label="Agent tool calls">
+      {steps.map((step, index) => (
+        <li
+          key={`${step.tool}-${index}`}
+          className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs"
+        >
+          {step.status === "running" ? (
+            <Loader2 size={12} className="shrink-0 animate-spin text-brand" aria-hidden />
+          ) : (
+            <CheckCircle2 size={12} className="shrink-0 text-brand" aria-hidden />
+          )}
+          <Wrench size={11} className="shrink-0 text-muted-foreground" aria-hidden />
+          <span className="shrink-0 font-medium text-foreground">{step.tool}</span>
+          <span className="min-w-0 flex-1 truncate text-muted-foreground">
+            {step.status === "running" ? "调用中…" : step.result ? `→ ${step.result}` : "→ 返回"}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

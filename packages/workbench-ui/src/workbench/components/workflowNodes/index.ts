@@ -1,3 +1,4 @@
+export { AgentWorkflowNode } from "./AgentWorkflowNode";
 export { CodeWorkflowNode } from "./CodeWorkflowNode";
 export { EndWorkflowNode } from "./EndWorkflowNode";
 export { HumanInputWorkflowNode } from "./HumanInputWorkflowNode";

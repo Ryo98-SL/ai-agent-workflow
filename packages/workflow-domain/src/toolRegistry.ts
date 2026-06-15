@@ -145,6 +145,38 @@ export const BUILTIN_TOOL_DESCRIPTORS: ToolDescriptor[] = [currentTimeDescriptor
 /** All registered tools. Only builtin entries exist today (MCP/custom/workflow reserved). */
 export const TOOL_DESCRIPTORS: ToolDescriptor[] = [...BUILTIN_TOOL_DESCRIPTORS];
 
+/**
+ * MCP tool descriptors merged into the registry at run time.
+ *
+ * ⚠️ **CLIENT-ONLY** (ADR 0004 §6 — multi-tenant safety). This module-level set is
+ * a process-global. In the browser that is exactly right: the web app fetches the
+ * signed-in user's MCP server snapshots and calls {@link registerMcpToolDescriptors}
+ * so {@link resolveToolDescriptor} stays **synchronous** and the Tool Browser /
+ * inspectors render offline.
+ *
+ * The **server MUST NEVER** call {@link registerMcpToolDescriptors} — a server
+ * process is shared across all tenants, so injecting one user's MCP tools into this
+ * global would leak them into every other user's request. Server code resolves
+ * per-user descriptors explicitly at the API boundary instead.
+ */
+let injectedMcpDescriptors: ToolDescriptor[] = [];
+
+/**
+ * Replaces the client-only injected MCP descriptor set (see {@link injectedMcpDescriptors}).
+ * **Client-only** — never call this on the server (multi-tenant safety, ADR 0004 §6).
+ */
+export function registerMcpToolDescriptors(list: ToolDescriptor[]): void {
+  injectedMcpDescriptors = [...list];
+}
+
+/**
+ * All descriptors visible to synchronous lookups: built-ins plus any client-injected
+ * MCP descriptors. On the server (which never injects) this is exactly the built-ins.
+ */
+export function getToolDescriptors(): ToolDescriptor[] {
+  return [...BUILTIN_TOOL_DESCRIPTORS, ...injectedMcpDescriptors];
+}
+
 /** Stable lookup key for a tool's identity triple. */
 export function toolDescriptorKey(provider: string, providerId: string, toolName: string): string {
   return `${provider}:${providerId}:${toolName}`;
@@ -155,9 +187,121 @@ export function resolveToolDescriptor(
   config: Pick<ToolNodeConfig, "provider" | "providerId" | "toolName">,
 ): ToolDescriptor | undefined {
   const key = toolDescriptorKey(config.provider, config.providerId, config.toolName);
-  return TOOL_DESCRIPTORS.find(
+  return getToolDescriptors().find(
     (descriptor) => toolDescriptorKey(descriptor.provider, descriptor.providerId, descriptor.toolName) === key,
   );
+}
+
+/**
+ * Converts a tool's declarative param-spec into a JSON Schema object — the
+ * model-facing argument schema for an agent's bound tool (ADR 0005). Author-fixed
+ * params are stripped by the caller before binding; what remains is exposed to the
+ * model. Pure and dependency-free (shared by server runtime and UI).
+ */
+export function paramSpecToJsonSchema(params: ToolParamSpec[]): {
+  type: "object";
+  properties: Record<string, unknown>;
+  required: string[];
+} {
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+  for (const param of params) {
+    let schema: Record<string, unknown>;
+    switch (param.type) {
+      case "number":
+        schema = { type: "number" };
+        break;
+      case "boolean":
+        schema = { type: "boolean" };
+        break;
+      case "select":
+        schema = { type: "string" };
+        if (param.options?.length) {
+          schema.enum = param.options.map((option) => option.value);
+        }
+        break;
+      // string + text both map to a JSON string.
+      default:
+        schema = { type: "string" };
+        break;
+    }
+    const description = param.help ?? param.label;
+    if (description) {
+      schema.description = description;
+    }
+    properties[param.name] = schema;
+    if (param.required) {
+      required.push(param.name);
+    }
+  }
+  return { type: "object", properties, required };
+}
+
+/**
+ * Inverse of {@link paramSpecToJsonSchema}: converts an MCP tool's input JSON Schema
+ * into declarative param-specs so its descriptor renders in the inspector/Tool
+ * Browser (ADR 0004 snapshot). Property `type` maps `string`→`string`,
+ * `number`/`integer`→`number`, `boolean`→`boolean`, an `enum`→`select`; anything
+ * else (array/object/unknown) becomes a `text` placeholder. Defensive: a malformed
+ * schema yields `[]`.
+ *
+ * @param opts.primaryFirst When true, marks the first produced param `primary` so it
+ *   surfaces on the node card summary.
+ */
+export function jsonSchemaToParamSpec(schema: unknown, opts: { primaryFirst?: boolean } = {}): ToolParamSpec[] {
+  if (!schema || typeof schema !== "object") {
+    return [];
+  }
+  const root = schema as Record<string, unknown>;
+  const properties = root.properties;
+  if (!properties || typeof properties !== "object") {
+    return [];
+  }
+  const required = new Set(
+    Array.isArray(root.required) ? root.required.filter((name): name is string => typeof name === "string") : [],
+  );
+
+  const specs: ToolParamSpec[] = [];
+  for (const [name, rawProp] of Object.entries(properties as Record<string, unknown>)) {
+    const prop = rawProp && typeof rawProp === "object" ? (rawProp as Record<string, unknown>) : {};
+    const jsonType = typeof prop.type === "string" ? prop.type : undefined;
+    const enumValues = Array.isArray(prop.enum) && prop.enum.length > 0 ? prop.enum : undefined;
+
+    let type: ToolParamType;
+    let options: { value: string; label: string }[] | undefined;
+    if (enumValues) {
+      type = "select";
+      options = enumValues.map((value) => ({ value: String(value), label: String(value) }));
+    } else if (jsonType === "number" || jsonType === "integer") {
+      type = "number";
+    } else if (jsonType === "boolean") {
+      type = "boolean";
+    } else if (jsonType === "string") {
+      type = "string";
+    } else {
+      // array / object / unknown — surface as a free-text placeholder.
+      type = "text";
+    }
+
+    const spec: ToolParamSpec = {
+      name,
+      label: typeof prop.title === "string" ? prop.title : name,
+      type,
+      required: required.has(name),
+    };
+    if (typeof prop.description === "string") {
+      spec.help = prop.description;
+    }
+    if (options) {
+      spec.options = options;
+    }
+    specs.push(spec);
+  }
+
+  if (opts.primaryFirst && specs.length > 0) {
+    specs[0].primary = true;
+  }
+  return specs;
 }
 
 /**

@@ -48,7 +48,8 @@ Principles:
   once per conversation, each message is sent as `query`, and Human Input pauses
   render the same resume form in chat, inspector history, and debug surfaces.
 - Keep variable authoring structured: prompt-like fields use Lexical variable
-  chips, `/` insertion, and upstream Available Variables from workflow-domain.
+  chips, `/` insertion, and upstream Available Variables from workflow-domain;
+  the slash menu flips and resizes to stay inside the viewport.
 - Keep Tool nodes descriptor-driven: the Tool Browser selects a registry entry
   and the inspector renders params from the tool descriptor instead of hard-coded
   per-tool forms.

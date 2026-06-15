@@ -1,9 +1,11 @@
 import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
 import type {
+  AgentNode,
   LLMNode,
   ModelProvider,
   OpenAICompatibleSettings,
@@ -24,11 +26,29 @@ function chooseModelSettings(workflow: WorkflowFile, node: LLMNode): OpenAICompa
   return settings;
 }
 
-type RuntimeChatModel = {
-  invoke: (messages: Array<SystemMessage | HumanMessage | AIMessage>) => Promise<Record<string, any>>;
-};
+/**
+ * Resolves the bound model settings for an Agent node, reusing the LLM node's
+ * resolution path (ADR 0005 — the agent config carries the same
+ * `model`/`modelSettings`/`temperature`/`maxTokens` fields). `resolveLLMModelSettings`
+ * only reads those shared config fields, so the agent node is a structural fit.
+ */
+export function resolveAgentModelSettings(workflow: WorkflowFile, node: AgentNode): OpenAICompatibleSettings {
+  const settings = resolveLLMModelSettings(workflow, node as unknown as LLMNode);
+  if (!settings) {
+    throw new RuntimeValidationError("Agent node model provider settings are required. Configure a model provider.");
+  }
+  return settings;
+}
 
-function createChatModel(settings: OpenAICompatibleSettings, _node: LLMNode, fetchImpl: typeof fetch): RuntimeChatModel {
+/**
+ * Builds the concrete, bind-capable LangChain `BaseChatModel` for a provider's
+ * settings. This is the same instance the LLM path runs through (so `.invoke`
+ * behavior is unchanged), but returned as the real model — not the `.invoke`-only
+ * wrapper — so the Agent runtime can call `.bindTools()` for function calling
+ * (ADR 0005). Token usage, streaming, and error handling stay identical to the
+ * prior LLM path because the factory bodies are unchanged.
+ */
+export function createBoundCapableModel(settings: OpenAICompatibleSettings, fetchImpl: typeof fetch): BaseChatModel {
   const temperature = settings.temperature;
   const maxTokens = settings.maxTokens;
   const requireApiKey = (provider: ModelProvider) => {
@@ -37,7 +57,7 @@ function createChatModel(settings: OpenAICompatibleSettings, _node: LLMNode, fet
     }
     return settings.apiKey;
   };
-  const providerFactories: Record<ModelProvider, () => RuntimeChatModel> = {
+  const providerFactories: Record<ModelProvider, () => BaseChatModel> = {
     deepseek: () =>
       new ChatDeepSeek({
         model: settings.model,
@@ -87,7 +107,7 @@ function createChatModel(settings: OpenAICompatibleSettings, _node: LLMNode, fet
   return providerFactories[settings.provider]();
 }
 
-function stringifyMessageContent(content: unknown): string {
+export function stringifyMessageContent(content: unknown): string {
   if (typeof content === "string") {
     return content;
   }
@@ -174,7 +194,7 @@ export async function callChatCompletion(
         ? new AIMessage(message.content)
         : new HumanMessage(message.content);
 
-  const model = createChatModel(settings, node, fetchImpl);
+  const model = createBoundCapableModel(settings, fetchImpl);
   const historyMessages = history.map((message) =>
     message.role === "assistant" ? new AIMessage(message.content) : new HumanMessage(message.content),
   );
@@ -251,7 +271,7 @@ export async function summarizeMessages(
   fetchImpl: typeof fetch,
 ): Promise<string> {
   const settings = chooseModelSettings(workflow, node);
-  const model = createChatModel(settings, node, fetchImpl);
+  const model = createBoundCapableModel(settings, fetchImpl);
   const transcript = messages
     .map((message) => `${message.role === "assistant" ? "助手" : "用户"}：${message.content}`)
     .join("\n");

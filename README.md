@@ -70,12 +70,31 @@ KBs and add pasted text or `.txt`/`.md` files.
 
 ## Known Limits
 
-- Production graph execution beyond the supported Start, Knowledge, LLM, and
-  Tool subset is deferred.
-- Tools are registry-based (one `tool` node bound to a chosen tool; see
+- Production graph execution beyond the supported Start, Knowledge, LLM, Tool,
+  and Agent subset is deferred.
+- The Agent node (`type: "agent"`) runs a bounded, model-driven tool-calling
+  loop over an inline Agent Tool List. Only the **Function Calling** strategy is
+  implemented (requires a tool-calling-capable model); **ReAct** is selectable in
+  the inspector but surfaces a clear "not implemented" error. See
+  `docs/adr/0005-agent-node-inline-tools-function-calling.md`.
+- Tools are registry-based (one `tool` node bound to a chosen tool, or several
+  picked inline into an Agent Tool List; see
   `docs/adr/0003-generic-tool-node-and-tool-registry.md`). Built-in tools are
-  Current Time and Send Email; MCP, Custom (API), and Workflow-as-tool are
-  reserved in the schema/Tool Browser but not implemented.
+  Current Time and Send Email. **MCP tools are implemented** as an account-level
+  Tool Registry provider — remote **HTTP** servers registered per user with
+  **Headers** auth, snapshotted into the Tool Browser MCP tab and pickable into a
+  Tool node or an Agent Tool List (see
+  `docs/adr/0004-mcp-as-account-level-tool-registry-provider.md`). MCP **OAuth /
+  Configurations**, **stdio** transport, and **resources/prompts-as-tools** are
+  deferred; **Custom (API)** and **Workflow-as-tool** providers remain reserved
+  placeholders.
+- A read-only **Built-in MCP Server** (ADR 0006) is hosted by the app and available
+  to **everyone, including anonymous visitors** — no registration, no secrets. Its
+  demo tools appear in the Tool Browser MCP tab and execute live over the real MCP
+  transport, the MCP analogue of the seeded example Knowledge Base. Registering your
+  *own* MCP server still requires signing in.
+- MCP header secrets are encrypted server-side and never written into workflow
+  JSON or exports; anonymous (signed-out) users cannot register an MCP server.
 - Anonymous Knowledge runs are limited to the seeded read-only example KB;
   anonymous uploads are not supported.
 - Knowledge ingestion is pasted text and `.txt`/`.md` files only; PDF/DOCX,

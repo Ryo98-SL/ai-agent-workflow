@@ -8,15 +8,21 @@ server; this folder only edits workflow draft config.
 
 ## Structure
 
-- `ToolBrowser.tsx` lists registered tool descriptors, supports search, and
-  exposes reserved tabs for future plugin/custom/workflow/MCP tools.
+- `ToolBrowser.tsx` lists registered tool descriptors (`getToolDescriptors()` —
+  built-in + client-injected MCP), supports search, and has Built-in / MCP tabs
+  plus reserved Plugin / Custom / Workflow tabs. It works single-select (add /
+  rebind via `onSelect`) or multi-select (Agent tool list via `selectedKeys` +
+  `onToggle`). The MCP tab surfaces a "管理 MCP 服务器" entry (`onOpenMcpServers`)
+  and an empty-state CTA.
 - `ToolParamForm.tsx` renders one control per descriptor param spec, including
   variable-aware rich text for string/text params that support variables.
 
 ## Behavior
 
 The node palette opens `ToolBrowser` before creating a Tool node, and
-`ToolInspector` reuses it to rebind an existing node. `ToolParamForm` persists
-generic JSON params under the Tool node config; no built-in tool gets a custom
-hand-written inspector. Unknown future providers can reuse the same UI once
-their descriptors exist.
+`ToolInspector` reuses it to rebind an existing node. The Agent inspector reuses
+it in multi-select mode to pick several tools into the Agent tool list.
+`ToolParamForm` persists generic JSON params under the node config; for an Agent
+tool binding it holds the **author-fixed** params (unset params are filled by the
+model). No built-in tool gets a hand-written inspector; MCP descriptors render
+through the same UI once injected.

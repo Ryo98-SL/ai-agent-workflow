@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Brain, Braces, Database, Flag, GitBranch, Play, TextCursorInput, UserCheck, Wrench, type LucideIcon } from "lucide-react";
+import { Bot, Brain, Braces, Database, Flag, GitBranch, Play, TextCursorInput, UserCheck, Wrench, type LucideIcon } from "lucide-react";
 import type { WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
 import type { ToolIdentity } from "../types";
 import { Button } from "./Button";
@@ -18,6 +18,7 @@ const items: PaletteItem[] = [
   { type: "start", label: "Start", description: "Graph entry marker", group: "Basic", icon: Play },
   { type: "end", label: "End", description: "Graph exit marker", group: "Basic", icon: Flag },
   { type: "llm", label: "LLM", description: "Executable chat debug node", group: "AI", icon: Brain },
+  { type: "agent", label: "Agent", description: "Model calls tools in a loop", group: "AI", icon: Bot },
   { type: "knowledge", label: "Knowledge", description: "Schema placeholder", group: "AI", icon: Database },
   { type: "tool", label: "Tool", description: "浏览工具 · Current time · Send email", group: "Tools", icon: Wrench },
   { type: "code", label: "Code", description: "Future runtime", group: "Tools", icon: Braces },

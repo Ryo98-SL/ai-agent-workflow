@@ -1,4 +1,13 @@
-import { useCallback, useMemo, useState } from "react";
+import {
+  autoUpdate,
+  flip,
+  offset as floatingOffset,
+  shift,
+  size as floatingSize,
+  useFloating,
+  type VirtualElement,
+} from "@floating-ui/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
@@ -24,6 +33,11 @@ class VariableMenuOption extends MenuOption {
     this.nodeType = nodeType;
   }
 }
+
+const MENU_WIDTH_PX = 288;
+const MENU_MAX_HEIGHT_PX = 288;
+const MENU_OFFSET_PX = 20;
+const VIEWPORT_PADDING_PX = 12;
 
 /** Matches a `/` (at start or after whitespace) plus the typed query after it. */
 function checkForSlashTrigger(text: string): MenuTextMatch | null {
@@ -95,59 +109,121 @@ export function SlashVariablePlugin({ nodeId }: { nodeId: string }) {
         if (anchorElementRef.current == null) {
           return null;
         }
-        return createPortal(
-          // `relative` + high z so the menu paints above the z-30 inspector panel
-          // (the Lexical anchor is body-level with z-auto, so a static child's
-          // z-index would have no effect).
-          <div className="relative z-[100] mt-5 w-72 overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl shadow-black/20">
-            <div className="max-h-72 overflow-y-auto py-1" role="listbox">
-              {options.length === 0 ? (
-                <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-                  {query ? "无匹配变量" : "没有可用的上游变量"}
-                </p>
-              ) : (
-                options.map((option, index) => {
-                  const previous = options[index - 1];
-                  const showHeader = !previous || previous.nodeLabel !== option.nodeLabel;
-                  const NodeIcon = workflowNodeIcons[option.nodeType];
-                  const active = index === selectedIndex;
-                  return (
-                    <div key={option.key} ref={option.setRefElement}>
-                      {showHeader && (
-                        <div className="flex items-center gap-1.5 px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          <NodeIcon className="size-3" aria-hidden />
-                          <span className="truncate">{option.nodeLabel}</span>
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={active}
-                        className={[
-                          "flex w-full items-center gap-2 px-2.5 py-1.5 text-left",
-                          active ? "bg-muted" : "",
-                        ].join(" ")}
-                        onMouseEnter={() => setHighlightedIndex(index)}
-                        onClick={() => {
-                          setHighlightedIndex(index);
-                          selectOptionAndCleanUp(option);
-                        }}
-                      >
-                        <span className="shrink-0 font-mono text-[10px] font-semibold text-blue-500">{"{x}"}</span>
-                        <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                          {option.field.path.join(".")}
-                        </span>
-                        <span className="shrink-0 text-[11px] text-muted-foreground">{option.field.type}</span>
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>,
-          anchorElementRef.current,
+        return (
+          <SlashVariableMenuPopover
+            anchorElement={anchorElementRef.current}
+            options={options}
+            query={query}
+            selectedIndex={selectedIndex}
+            selectOptionAndCleanUp={selectOptionAndCleanUp}
+            setHighlightedIndex={setHighlightedIndex}
+          />
         );
       }}
     />
+  );
+}
+
+function SlashVariableMenuPopover({
+  anchorElement,
+  options,
+  query,
+  selectedIndex,
+  selectOptionAndCleanUp,
+  setHighlightedIndex,
+}: {
+  anchorElement: HTMLElement;
+  options: VariableMenuOption[];
+  query: string | null;
+  selectedIndex: number | null;
+  selectOptionAndCleanUp: (option: VariableMenuOption) => void;
+  setHighlightedIndex: (index: number) => void;
+}) {
+  const [availableMenuHeight, setAvailableMenuHeight] = useState(MENU_MAX_HEIGHT_PX);
+  const virtualReference = useMemo<VirtualElement>(
+    () => ({
+      contextElement: anchorElement,
+      getBoundingClientRect: () => anchorElement.getBoundingClientRect(),
+    }),
+    [anchorElement],
+  );
+  const { floatingStyles, refs, update } = useFloating({
+    middleware: [
+      floatingOffset(MENU_OFFSET_PX),
+      flip({ padding: VIEWPORT_PADDING_PX }),
+      shift({ padding: VIEWPORT_PADDING_PX }),
+      floatingSize({
+        padding: VIEWPORT_PADDING_PX,
+        apply({ availableHeight }) {
+          const nextHeight = Math.max(0, Math.min(MENU_MAX_HEIGHT_PX, Math.floor(availableHeight)));
+          setAvailableMenuHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
+        },
+      }),
+    ],
+    placement: "bottom-start",
+    strategy: "fixed",
+    whileElementsMounted: autoUpdate,
+  });
+
+  useEffect(() => {
+    refs.setPositionReference(virtualReference);
+  }, [refs, virtualReference]);
+
+  useEffect(() => {
+    void update();
+  }, [options.length, query, update]);
+
+  return createPortal(
+    <div
+      ref={refs.setFloating}
+      style={{ ...floatingStyles, width: MENU_WIDTH_PX }}
+      className="z-[100] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl shadow-black/20"
+    >
+      <div style={{ maxHeight: availableMenuHeight }} className="overflow-y-auto py-1" role="listbox">
+        {options.length === 0 ? (
+          <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+            {query ? "无匹配变量" : "没有可用的上游变量"}
+          </p>
+        ) : (
+          options.map((option, index) => {
+            const previous = options[index - 1];
+            const showHeader = !previous || previous.nodeLabel !== option.nodeLabel;
+            const NodeIcon = workflowNodeIcons[option.nodeType];
+            const active = index === selectedIndex;
+            return (
+              <div key={option.key} ref={option.setRefElement}>
+                {showHeader && (
+                  <div className="flex items-center gap-1.5 px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <NodeIcon className="size-3" aria-hidden />
+                    <span className="truncate">{option.nodeLabel}</span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  className={[
+                    "flex w-full items-center gap-2 px-2.5 py-1.5 text-left",
+                    active ? "bg-muted" : "",
+                  ].join(" ")}
+                  onMouseEnter={() => setHighlightedIndex(index)}
+                  onClick={() => {
+                    setHighlightedIndex(index);
+                    selectOptionAndCleanUp(option);
+                  }}
+                >
+                  <span className="shrink-0 font-mono text-[10px] font-semibold text-blue-500">{"{x}"}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                    {option.field.path.join(".")}
+                  </span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">{option.field.type}</span>
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>,
+    anchorElement,
   );
 }

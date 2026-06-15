@@ -12,6 +12,9 @@ ReactFlow node components for persisted workflow node types.
 - `LlmWorkflowNode.tsx` shows the effective model, provider logo, and model
   capability icons supplied by the canvas after resolving node overrides over
   workflow defaults, then renders the node description when present.
+- `AgentWorkflowNode.tsx` shows the effective model + provider logo, a strategy
+  badge (FC / ReAct), and a compact tool-list summary (count + the first few tool
+  icons). Single input / single output like the LLM card.
 - `KnowledgeWorkflowNode.tsx` previews the selected KB label, query template,
   and top-K retrieval setting supplied by the Knowledge node config.
 - `ToolWorkflowNode.tsx` previews the bound tool descriptor and primary params
@@ -21,7 +24,7 @@ ReactFlow node components for persisted workflow node types.
 - `TemplateWorkflowNode.tsx` previews the template text.
 - Other node files bind schema node types to icons and shared shell behavior.
 - `workflowNodeLayout.ts` centralizes ReactFlow node dimensions and handle
-  bounds, including dynamic Start/LLM sizing and Start/End handle availability.
+  bounds, including dynamic Start/LLM/Agent sizing and Start/End handle availability.
 - `workflowNodeVisuals.ts` centralizes per-node-type icon background colors and
   icon foreground styling shared with the node palette.
 - `index.ts` re-exports node components and layout constants for the canvas.
