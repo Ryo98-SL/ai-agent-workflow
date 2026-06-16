@@ -12,8 +12,11 @@ embeddings, and the in-process indexing runner live in `src/knowledge/`.
 pnpm --filter @ai-agent-workflow/server dev
 ```
 
-The local server listens on `http://127.0.0.1:8788` by default. Set `PORT` to
-override the port.
+The local server listens on `http://0.0.0.0:8788` by default. Set `PORT` to
+override the port, and set `HOST=127.0.0.1` when you want local-only binding.
+Production deploys should run `pnpm --filter @ai-agent-workflow/server start`
+after `pnpm --filter @ai-agent-workflow/server db:deploy` applies Prisma
+migrations.
 
 Workflow runs require provider-aware model settings on the workflow when an LLM
 node executes. The runtime executes Start, LLM, Knowledge, Tool, If/Else,

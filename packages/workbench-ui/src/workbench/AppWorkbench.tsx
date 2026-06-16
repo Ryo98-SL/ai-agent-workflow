@@ -43,6 +43,7 @@ import type { AddNodeOptions, AppWorkbenchProps, ToolIdentity, WorkflowNodeActio
 import { workflowDirtySnapshot } from "./workflowDirtySnapshot";
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8788";
+const DRAFT_WORKFLOW_SESSION_KEY = "__draft__";
 
 /**
  * Binds a freshly-created Tool node to the tool chosen in the Tool Browser
@@ -103,6 +104,10 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     resumeRun,
     newConversation,
     conversationTurns,
+    activateWorkflowSession,
+    prepareWorkflowSessionSwitch,
+    moveActiveWorkflowSession,
+    resetWorkflowSession,
   } = useWorkflowExecution(workflowApi);
   const [workflowId, setWorkflowId] = useState<string | undefined>();
   const [savedWorkflowSnapshot, setSavedWorkflowSnapshot] = useState<string | null>(null);
@@ -112,6 +117,9 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
   const [debugOpen, setDebugOpen] = useState(false);
   // Lifted so the active Debug Panel sub-route survives panel close/reopen.
   const [debugView, setDebugView] = useState<"input" | "run">("input");
+  const debugViewRef = useRef<"input" | "run">("input");
+  const debugViewByWorkflowRef = useRef<Map<string, "input" | "run">>(new Map());
+  const activeDebugViewKeyRef = useRef(DRAFT_WORKFLOW_SESSION_KEY);
   const { canRedo, canUndo, commitGraphHistoryEntry, redo, resetHistory, undo } = useWorkflowGraphHistory({
     setWorkflow,
   });
@@ -129,23 +137,62 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     setDebugOpen(false);
   }, []);
 
+  useEffect(() => {
+    debugViewRef.current = debugView;
+  }, [debugView]);
+
+  const persistActiveDebugView = useCallback(() => {
+    debugViewByWorkflowRef.current.set(activeDebugViewKeyRef.current, debugViewRef.current);
+  }, []);
+
+  const activateWorkflowDebugView = useCallback(
+    (sessionKey: string) => {
+      persistActiveDebugView();
+      activeDebugViewKeyRef.current = sessionKey;
+      const nextView = debugViewByWorkflowRef.current.get(sessionKey) ?? "input";
+      debugViewRef.current = nextView;
+      setDebugView(nextView);
+    },
+    [persistActiveDebugView],
+  );
+
+  const moveActiveWorkflowDebugView = useCallback(
+    (sessionKey: string) => {
+      const currentKey = activeDebugViewKeyRef.current;
+      debugViewByWorkflowRef.current.set(sessionKey, debugViewRef.current);
+      if (currentKey !== sessionKey) {
+        debugViewByWorkflowRef.current.delete(currentKey);
+      }
+      activeDebugViewKeyRef.current = sessionKey;
+      debugViewRef.current = debugViewByWorkflowRef.current.get(sessionKey) ?? debugViewRef.current;
+    },
+    [],
+  );
+
   const applyWorkflowDto = useCallback(
     (dto: WorkflowDto) => {
+      activateWorkflowSession(dto.id);
+      activateWorkflowDebugView(dto.id);
       setWorkflow(dto.workflow);
       setWorkflowId(dto.id);
       setSavedWorkflowSnapshot(workflowDirtySnapshot(dto.workflow));
       resetHistory();
       resetSelectionPanels();
     },
-    [resetHistory, resetSelectionPanels],
+    [activateWorkflowDebugView, activateWorkflowSession, resetHistory, resetSelectionPanels],
   );
 
-  const applySavedWorkflowDto = useCallback((dto: WorkflowDto, previousWorkflow: WorkflowFile) => {
-    const nextWorkflow = preserveTransientModelProvider(dto.workflow, previousWorkflow);
-    setWorkflow(nextWorkflow);
-    setWorkflowId(dto.id);
-    setSavedWorkflowSnapshot(workflowDirtySnapshot(nextWorkflow));
-  }, []);
+  const applySavedWorkflowDto = useCallback(
+    (dto: WorkflowDto, previousWorkflow: WorkflowFile) => {
+      const nextWorkflow = preserveTransientModelProvider(dto.workflow, previousWorkflow);
+      moveActiveWorkflowSession(dto.id);
+      moveActiveWorkflowDebugView(dto.id);
+      setWorkflow(nextWorkflow);
+      setWorkflowId(dto.id);
+      setSavedWorkflowSnapshot(workflowDirtySnapshot(nextWorkflow));
+    },
+    [moveActiveWorkflowDebugView, moveActiveWorkflowSession],
+  );
 
   const errorMessage = useCallback((error: unknown) => {
     return error instanceof Error ? error.message : "Workflow API request failed.";
@@ -197,6 +244,9 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
           // nothing behind. Anonymous visitors get the customer-support RAG demo;
           // signed-in users start from the neutral default.
           const nextWorkflow = isAnonymous ? createKnowledgeDemoWorkflow() : createDefaultWorkflow();
+          resetWorkflowSession(DRAFT_WORKFLOW_SESSION_KEY);
+          activateWorkflowSession(DRAFT_WORKFLOW_SESSION_KEY);
+          activateWorkflowDebugView(DRAFT_WORKFLOW_SESSION_KEY);
           setWorkflow(nextWorkflow);
           setWorkflowId(undefined);
           setSavedWorkflowSnapshot(workflowDirtySnapshot(nextWorkflow));
@@ -205,7 +255,6 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
         }
 
         if (!cancelled) {
-          setDebugState({ status: "idle" });
           setInitialLoaded(true);
         }
       } catch (error) {
@@ -220,7 +269,20 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     return () => {
       cancelled = true;
     };
-  }, [applyWorkflowDto, errorMessage, isAnonymous, resetHistory, workflowApi, resetSelectionPanels, sessionPending, workflowRefreshNonce]);
+  }, [
+    activateWorkflowDebugView,
+    activateWorkflowSession,
+    applyWorkflowDto,
+    errorMessage,
+    isAnonymous,
+    resetHistory,
+    resetSelectionPanels,
+    resetWorkflowSession,
+    sessionPending,
+    setDebugState,
+    workflowApi,
+    workflowRefreshNonce,
+  ]);
 
   const markWorkflow = useCallback((updater: SetStateAction<WorkflowFile>) => {
     setWorkflow(updater);
@@ -488,14 +550,16 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
   // Loads a workflow as a fresh unsaved draft (canvas + panels reset).
   const loadWorkflowDraft = useCallback(
     (next: WorkflowFile) => {
+      resetWorkflowSession(DRAFT_WORKFLOW_SESSION_KEY);
+      activateWorkflowSession(DRAFT_WORKFLOW_SESSION_KEY);
+      activateWorkflowDebugView(DRAFT_WORKFLOW_SESSION_KEY);
       setWorkflow(next);
       resetSelectionPanels();
-      setDebugState({ status: "idle" });
       setWorkflowId(undefined);
       setSavedWorkflowSnapshot(workflowDirtySnapshot(next));
       resetHistory();
     },
-    [resetHistory, resetSelectionPanels],
+    [activateWorkflowDebugView, activateWorkflowSession, resetHistory, resetSelectionPanels, resetWorkflowSession],
   );
 
   // Blank fallback (e.g. after deleting the last workflow) — no picker.
@@ -523,16 +587,17 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
   const switchWorkflow = useCallback(
     async (id: string) => {
       if (id === workflowId) return;
+      prepareWorkflowSessionSwitch();
+      persistActiveDebugView();
       setDebugState({ status: "loading" });
       try {
         const response = await workflowApi.getWorkflow(id);
         applyWorkflowDto(response.workflow);
-        setDebugState({ status: "idle" });
       } catch (error) {
         setDebugState({ status: "error", error: errorMessage(error) });
       }
     },
-    [applyWorkflowDto, errorMessage, workflowApi, workflowId],
+    [applyWorkflowDto, errorMessage, persistActiveDebugView, prepareWorkflowSessionSwitch, setDebugState, workflowApi, workflowId],
   );
 
   // Guard switching when there are unsaved changes: surface the top "Save & switch"
@@ -571,23 +636,21 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
         setDebugState({ status: "error", error: errorMessage(error) });
       }
     },
-    [applyWorkflowDto, errorMessage, handleNewWorkflow, invalidateWorkflowList, workflowApi, workflowId],
+    [applyWorkflowDto, errorMessage, handleNewWorkflow, invalidateWorkflowList, setDebugState, workflowApi, workflowId],
   );
 
   const saveWorkflow = useCallback(
     async (mode: "save" | "saveAs", workflowToPersist: WorkflowFile = workflow) => {
-      setDebugState({ status: "loading" });
       try {
         await persistWorkflow(mode, workflowToPersist);
         invalidateWorkflowList();
-        setDebugState({ status: "idle" });
         return true;
       } catch (error) {
         setDebugState({ status: "error", error: errorMessage(error) });
         return false;
       }
     },
-    [errorMessage, invalidateWorkflowList, persistWorkflow, workflow],
+    [errorMessage, invalidateWorkflowList, persistWorkflow, setDebugState, workflow],
   );
 
   const confirmPendingSwitch = useCallback(async () => {

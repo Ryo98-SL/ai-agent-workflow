@@ -17,9 +17,14 @@ pnpm smoke
 pnpm build
 ```
 
-`pnpm dev` starts the API server at `http://127.0.0.1:8788` and the web app
-at `http://127.0.0.1:5173`. The web and desktop renderers use
+`pnpm dev` starts the API server on port `8788` and the web app at
+`http://127.0.0.1:5173`. The web and desktop renderers use
 `VITE_WORKFLOW_API_BASE_URL` when a different API origin is needed.
+
+For production API deploys, run Prisma migrations with
+`pnpm --filter @ai-agent-workflow/server db:deploy` and start the server with
+`pnpm --filter @ai-agent-workflow/server start`. The server honors Railway-style
+`PORT` and binds to `HOST` or `0.0.0.0` by default.
 
 ## 硬性要求
 

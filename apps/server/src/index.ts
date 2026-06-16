@@ -13,7 +13,7 @@ const isDirectRun = process.argv[1]?.endsWith("/src/index.ts") ?? false;
 
 if (isDirectRun) {
   const port = Number(process.env.PORT ?? "8788");
-  const host = "127.0.0.1";
+  const host = process.env.HOST ?? "0.0.0.0";
 
   // Must run before any outbound fetch (e.g. Better Auth OAuth token exchange).
   configureOutboundProxy(resolveOutboundProxyUrl());

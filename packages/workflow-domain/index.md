@@ -22,7 +22,8 @@ helpers shared by apps, server code, and future packages.
 - `src/availableVariables.ts` computes upstream variable groups for prompt,
   condition, tool, and template authoring.
 - `src/workflowTemplates.ts` exports starter workflow metadata and factories for
-  the New Workflow picker.
+  the New Workflow picker, including RAG/HITL examples and Agent examples that
+  bind both built-in and MCP tools inline.
 - `src/promptVariables.ts` extracts and resolves namespaced `{{nodeId.field}}`
   placeholders against workflow runtime state.
 - `src/index.ts` is the public package entrypoint.
@@ -50,3 +51,8 @@ credit preference lives in `settings.providerKeyPrefs`. Loading rejects
 unsupported versions and malformed graph data with normalized messages.
 Serialization updates `metadata.updatedAt` and migrates legacy workflow provider
 keys into the provider keyring.
+
+Starter workflow factories create runnable examples for the New Workflow picker:
+blank, customer-support RAG, customer-support HITL, Agent tool routing, and a
+customer-support Agent that combines Knowledge retrieval with a built-in tool and
+a Built-in MCP Server tool.

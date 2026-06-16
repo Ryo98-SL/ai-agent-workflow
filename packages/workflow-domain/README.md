@@ -9,10 +9,13 @@ user-editable `description` alongside its label and type-specific config.
 Knowledge nodes have a strong RAG config with `knowledgeBaseIds`,
 `queryTemplate`, and semantic retrieval defaults. The package also exposes
 output-variable metadata helpers so UI/runtime consumers can describe LLM,
-Knowledge, Tool, and Human Input outputs consistently. Starter templates include
-a blank workflow, a ready-to-run Chinese customer-support RAG demo
-(Start -> Knowledge -> LLM), and a support bot with If/Else plus Human Input
-review over the seeded example KB (`EXAMPLE_KNOWLEDGE_BASE_ID`).
+Knowledge, Tool, Agent, and Human Input outputs consistently. Starter templates
+include a blank workflow, a ready-to-run Chinese customer-support RAG demo
+(Start -> Knowledge -> LLM), a support bot with If/Else plus Human Input review
+over the seeded example KB (`EXAMPLE_KNOWLEDGE_BASE_ID`), an Agent tool-routing
+demo with a built-in tool plus a Built-in MCP Server tool, and a customer-support
+Agent demo that combines Knowledge retrieval with the same built-in/MCP Agent
+Tool List.
 
 Model settings are provider-aware. Persisted workflow settings support
 `deepseek`, `openai`, `anthropic`, and `ollama`, defaulting to DeepSeek

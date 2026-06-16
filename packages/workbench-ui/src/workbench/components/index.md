@@ -61,9 +61,13 @@ Focused React components for the server-backed workbench shell.
   local draft and persists them with its own Save button so metadata changes do
   not activate the header Save control. It is embedded beside each workflow row
   in `WorkflowSwitcher.tsx`.
-- `DebugPanel.tsx` gathers Start inputs and triggers runs. In read-only mode it
-  hides the Start input/run controls and delegates historical output rendering
-  to `RunOutput.tsx`.
+- `DebugPanel.tsx` gathers Start inputs and triggers runs. Its live state is fed
+  from the active workflow's Debug Session, so switching workflows changes the
+  visible run output and Chat Mode transcript instead of leaking the previous
+  workflow's debug details. Chat composer Enter submission respects IME
+  composition so Chinese/Japanese/Korean candidate confirmation does not send the
+  draft. In read-only mode it hides the Start input/run controls and delegates
+  historical output rendering to `RunOutput.tsx`.
 - `RunOutput.tsx`, `RunNodeCard.tsx`, and `RunOutputPrimitives.tsx` render the
   shared latest-run surface: a persistent run-status header, filtered or full
   per-node cards, live LLM text, token counts, errors, and collapsible Input /
@@ -140,4 +144,6 @@ from `Intl.DateTimeFormat(undefined, ...)`. Edge selection is local, but
 edge/node deletion must persist graph changes through structure history. All
 anchored popovers should use the shared body-level popover path. Prompt-like
 fields should keep the canonical `{{nodeId.path}}` string as state, even when a
-Lexical editor renders variable chips.
+Lexical editor renders variable chips. Debug Session state and SSE streams are
+workflow-scoped; do not route workflow switching through a global debug state
+unless the target workflow's session is explicitly restored.

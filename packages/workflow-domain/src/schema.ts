@@ -1087,6 +1087,194 @@ export function createSupportBotWithReviewWorkflow(): WorkflowFile {
   };
 }
 
+/**
+ * Agent tool-routing demo. It keeps the graph intentionally small so the Agent
+ * node's inline Agent Tool List is the visible point: one built-in tool plus one
+ * Built-in MCP Server tool.
+ */
+export function createAgentToolsDemoWorkflow(): WorkflowFile {
+  const now = new Date().toISOString();
+  return {
+    version: "1",
+    metadata: {
+      name: "Agent 工具调度演示",
+      description: "Agent 在一个节点内同时使用内置工具和 Built-in MCP 工具，完成工具选择与回答。",
+      icon: "bot",
+      createdAt: now,
+      updatedAt: now,
+    },
+    graph: {
+      nodes: [
+        {
+          id: "start1",
+          type: "start",
+          label: "Start",
+          description: "收集要交给 Agent 处理的问题。",
+          position: { x: 80, y: 160 },
+          config: {
+            fields: [
+              {
+                name: "request",
+                label: "任务",
+                required: true,
+                defaultValue: "请先获取当前时间，再调用 MCP 示例工具说明云舵如何接入外部工具。",
+              },
+            ],
+          },
+        },
+        {
+          id: "agent1",
+          type: "agent",
+          label: "Agent",
+          description: "自主选择 Current Time 和 Built-in MCP 工具，并整合为回答。",
+          position: { x: 360, y: 150 },
+          config: {
+            strategy: "functionCalling",
+            instruction:
+              "你是云舵工作流的工具调度演示 Agent。根据用户任务决定是否调用工具；需要时间信息时调用 Current Time，需要说明 MCP 能力时调用 Built-in MCP 工具。回答要简洁，并明确列出你使用过的工具。",
+            query: "{{start1.request}}",
+            tools: [
+              {
+                provider: "builtin",
+                providerId: "builtin",
+                toolName: "currentTime",
+                params: { timezone: "Asia/Shanghai" },
+              },
+              { provider: "mcp", providerId: "builtin", toolName: "get_demo_fact", params: {} },
+            ],
+            maxIterations: 6,
+            memory: false,
+            temperature: 0.2,
+            maxTokens: 900,
+          },
+        },
+        {
+          id: "end1",
+          type: "end",
+          label: "完成",
+          description: "输出 Agent 的最终回答。",
+          position: { x: 640, y: 150 },
+          config: { answer: "{{agent1.text}}" },
+        },
+      ],
+      edges: [
+        { id: "edge-start-agent", source: "start1", target: "agent1" },
+        { id: "edge-agent-end", source: "agent1", target: "end1" },
+      ],
+    },
+    settings: {
+      modelProvider: {
+        provider: "deepseek",
+        baseURL: "https://api.deepseek.com",
+        model: "deepseek-v4-flash",
+      },
+      modelProviderKeys: {},
+      providerKeyPrefs: {},
+    },
+  };
+}
+
+/**
+ * Customer-support Agent demo. It extends the seeded support-domain examples with
+ * Knowledge retrieval before the Agent, while the Agent itself owns both built-in
+ * and MCP tools in its inline tool list.
+ */
+export function createSupportAgentWorkflow(): WorkflowFile {
+  const now = new Date().toISOString();
+  return {
+    version: "1",
+    metadata: {
+      name: "客服 Agent（工具 + MCP）",
+      description: "基于示例知识库检索客户问题，再由 Agent 调用内置工具和 Built-in MCP 工具生成回复。",
+      icon: "bot",
+      createdAt: now,
+      updatedAt: now,
+    },
+    graph: {
+      nodes: [
+        {
+          id: "start1",
+          type: "start",
+          label: "Start",
+          description: "收集客户问题。",
+          position: { x: 80, y: 180 },
+          config: {
+            fields: [
+              {
+                name: "customerQuestion",
+                label: "客户问题",
+                required: true,
+                defaultValue: "我想申请退款，请问今天提交大概多久能处理？",
+              },
+            ],
+          },
+        },
+        {
+          id: "knowledge1",
+          type: "knowledge",
+          label: "Knowledge",
+          description: "在「云舵客服知识库」中检索相关资料。",
+          position: { x: 340, y: 170 },
+          config: {
+            knowledgeBaseIds: [EXAMPLE_KNOWLEDGE_BASE_ID],
+            queryTemplate: "{{start1.customerQuestion}}",
+            retrieval: { mode: "semantic", topK: 5 },
+          },
+        },
+        {
+          id: "agent1",
+          type: "agent",
+          label: "客服 Agent",
+          description: "结合知识库上下文，自主调用工具补充时间和 MCP 示例信息。",
+          position: { x: 620, y: 160 },
+          config: {
+            strategy: "functionCalling",
+            instruction:
+              "你是云舵的客服 Agent。先依据知识库资料回答客户问题；需要当前时间或时区信息时调用 Current Time；需要说明系统外部工具能力时调用 Built-in MCP 工具。不要编造知识库没有的信息，无法确认时建议联系人工客服。",
+            query:
+              "知识库资料：\n{{knowledge1.context}}\n\n客户问题：{{start1.customerQuestion}}\n\n请给出简洁、准确、有礼貌的中文回复。",
+            tools: [
+              {
+                provider: "builtin",
+                providerId: "builtin",
+                toolName: "currentTime",
+                params: { timezone: "Asia/Shanghai" },
+              },
+              { provider: "mcp", providerId: "builtin", toolName: "get_demo_fact", params: {} },
+            ],
+            maxIterations: 6,
+            memory: true,
+            temperature: 0.3,
+            maxTokens: 900,
+          },
+        },
+        {
+          id: "end1",
+          type: "end",
+          label: "客服回复",
+          description: "输出客服 Agent 的最终回复。",
+          position: { x: 900, y: 160 },
+          config: { answer: "{{agent1.text}}" },
+        },
+      ],
+      edges: [
+        { id: "edge-start-knowledge", source: "start1", target: "knowledge1" },
+        { id: "edge-knowledge-agent", source: "knowledge1", target: "agent1" },
+        { id: "edge-agent-end", source: "agent1", target: "end1" },
+      ],
+    },
+    settings: {
+      modelProvider: {
+        provider: "deepseek",
+        baseURL: "https://api.deepseek.com",
+        model: "deepseek-v4-flash",
+      },
+      modelProviderKeys: {},
+      providerKeyPrefs: {},
+    },
+  };
+}
+
 export function createReadableNodeId(type: WorkflowNodeType, existingNodes: Pick<WorkflowNode, "id">[] = []): string {
   const base = type;
   const existingIds = new Set(existingNodes.map((node) => node.id));

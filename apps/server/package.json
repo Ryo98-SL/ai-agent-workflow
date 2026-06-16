@@ -14,12 +14,14 @@
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.build.json",
     "dev": "pnpm db:up && tsx --env-file=.env src/index.ts",
+    "start": "tsx src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:generate": "prisma generate",
+    "db:deploy": "prisma migrate deploy",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:studio": "prisma studio"
@@ -42,13 +44,13 @@
     "dotenv": "^17.4.2",
     "dotenv-expand": "^13.0.0",
     "hono": "^4.7.11",
+    "tsx": "^4.19.4",
     "undici": "^8.3.0",
     "zod": "^3.25.42"
   },
   "devDependencies": {
     "@ai-agent-workflow/tsconfig": "workspace:*",
     "prisma": "^6.19.3",
-    "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4"
   }

@@ -17,8 +17,12 @@ Electron, server, or runtime execution dependencies.
   `knowledgeBaseIds`, `queryTemplate`, and semantic retrieval settings. The file
   also exports output-variable metadata helpers for LLM and Knowledge nodes, the
   well-known example KB id (`EXAMPLE_KNOWLEDGE_BASE_ID`, re-exported by the server
-  seed so storage and fixtures never drift), and `createKnowledgeDemoWorkflow`,
-  the anonymous Chinese customer-support RAG demo wiring Start → Knowledge → LLM.
+  seed so storage and fixtures never drift), `createKnowledgeDemoWorkflow`,
+  the anonymous Chinese customer-support RAG demo wiring Start → Knowledge → LLM,
+  `createAgentToolsDemoWorkflow`, the Start → Agent → End tool-routing demo with
+  one built-in tool and one Built-in MCP Server tool, and
+  `createSupportAgentWorkflow`, the Start → Knowledge → Agent → End support Agent
+  demo.
 - `src/toolRegistry.ts` defines declarative Tool descriptors, parameter specs,
   output fields, and lookup helpers. Built-in descriptors currently cover
   Current Time and Send Email; MCP/custom/workflow providers are schema-reserved.
@@ -27,7 +31,8 @@ Electron, server, or runtime execution dependencies.
 - `src/availableVariables.ts` computes upstream Available Variables for a
   consumer node, including Chat Mode's ambient `userInput` namespace.
 - `src/workflowTemplates.ts` defines the starter workflow registry used by the
-  New Workflow picker.
+  New Workflow picker, including the RAG/HITL examples plus Agent templates that
+  demonstrate inline built-in and MCP tool bindings.
 - `src/promptVariables.ts` defines namespaced prompt placeholder parsing,
   runtime-state resolution, and legacy variable value merging.
 - `src/index.ts` exports the stable public API used by app, runtime, and tests.

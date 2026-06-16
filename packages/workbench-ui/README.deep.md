@@ -13,7 +13,8 @@ Core responsibilities:
 - `src/workbench/AppWorkbench.tsx` owns workflow state, panel visibility,
   initial source loading, local/remote API switching, persistence calls, graph
   undo/redo ownership, workflow-level run calls, Chat Mode sends, provider-key
-  preparation, New Workflow template loading, and unsaved switch handling.
+  preparation, New Workflow template loading, workflow-scoped Debug Session
+  selection, and unsaved switch handling.
 - `src/workbench/workflowDirtySnapshot.ts` owns the canonical content snapshot
   used for Save button dirty state.
 - `src/workbench/components` owns the canvas-first shell, popovers, inspectors,
@@ -107,11 +108,15 @@ Design constraints:
   `knowledgeBaseIds` config, edit the query template, tune semantic retrieval
   limits, and render output variables.
 - Chat Mode uses `workflow.settings.mode === "chat"`. `useWorkflowExecution`
-  keeps a stable conversation id, sends user text as the `query` run field, and
-  derives assistant replies from the reached End node or the last LLM node. Start
-  fields are gated once per conversation; "New conversation" resets transcript
-  and memory thread. Summary-buffer settings live in workflow settings and are
-  edited from the Chat Panel.
+  keeps Debug Sessions keyed by workflow, including each workflow's stable
+  conversation id, transcript, turn count, latest debug state, and node execution
+  state. SSE streams are keyed the same way, so switching workflows does not
+  cancel an in-flight run or leak its node/debug events into the newly selected
+  workflow. It sends user text as the `query` run field and derives assistant
+  replies from the reached End node or the last LLM node. Start fields are gated
+  once per conversation; "New conversation" resets transcript and memory thread
+  for the active workflow. Summary-buffer settings live in workflow settings and
+  are edited from the Chat Panel.
 - Human Input nodes pause runs with a normalized interrupt. `resumeRun` keeps
   completed node state visible, posts the selected action/text, and subscribes
   to a fresh SSE leg on the same run.

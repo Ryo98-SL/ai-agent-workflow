@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react";
 import { RunSseEventSchema, type CreateRunRequest, type ResumeRunRequest } from "@ai-agent-workflow/api-contracts";
 import type { ChatTurn, DebugState, NodeExecutionState, WorkbenchWorkflowApi } from "../types";
 import { reduceRunNodeStreamEvent } from "../runStreamReducer";
@@ -9,6 +9,33 @@ function newConversationId(): string {
 
 function newId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`;
+}
+
+type WorkflowExecutionSession = {
+  nodeStates: Map<string, NodeExecutionState>;
+  debugState: DebugState;
+  conversationId: string;
+  conversationTurns: number;
+  transcript: ChatTurn[];
+  activeChat: boolean;
+};
+
+function cloneTranscript(transcript: ChatTurn[]): ChatTurn[] {
+  return transcript.map((turn) => ({
+    ...turn,
+    nodeStates: turn.nodeStates ? new Map(turn.nodeStates) : undefined,
+  }));
+}
+
+function createEmptySession(): WorkflowExecutionSession {
+  return {
+    nodeStates: new Map(),
+    debugState: { status: "idle" },
+    conversationId: newConversationId(),
+    conversationTurns: 0,
+    transcript: [],
+    activeChat: false,
+  };
 }
 
 /**
@@ -33,44 +60,228 @@ export function deriveChatAnswer(nodeStates: Map<string, NodeExecutionState>): s
 export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
   const [nodeStates, setNodeStates] = useState<Map<string, NodeExecutionState>>(() => new Map());
   const [debugState, setDebugState] = useState<DebugState>({ status: "idle" });
-  const eventSourceRef = useRef<EventSource | null>(null);
-  // Stable across runs so memory-enabled nodes accumulate history; reset by the
-  // user via "New conversation".
-  const conversationIdRef = useRef<string>(newConversationId());
   const [conversationTurns, setConversationTurns] = useState(0);
   // Chat Mode transcript. The last entry is the "live" turn while a run is active.
   const [transcript, setTranscript] = useState<ChatTurn[]>([]);
+  const nodeStatesRef = useRef<Map<string, NodeExecutionState>>(new Map());
+  const debugStateRef = useRef<DebugState>({ status: "idle" });
+  const conversationTurnsRef = useRef(0);
+  const transcriptRef = useRef<ChatTurn[]>([]);
+  const eventSourceRefs = useRef<Map<string, EventSource>>(new Map());
+  // Stable across runs so memory-enabled nodes accumulate history; reset by the
+  // user via "New conversation".
+  const conversationIdRef = useRef<string>(newConversationId());
   // Mirror of `nodeStates` for synchronous reads inside SSE handlers (finalizing a
   // chat turn needs the freshest node states without waiting for a re-render).
-  const nodeStatesRef = useRef<Map<string, NodeExecutionState>>(new Map());
+  const sessionsRef = useRef<Map<string, WorkflowExecutionSession>>(new Map());
+  const activeSessionKeyRef = useRef<string | null>(null);
   useEffect(() => {
     nodeStatesRef.current = nodeStates;
   }, [nodeStates]);
+  useEffect(() => {
+    debugStateRef.current = debugState;
+  }, [debugState]);
+  useEffect(() => {
+    conversationTurnsRef.current = conversationTurns;
+  }, [conversationTurns]);
+  useEffect(() => {
+    transcriptRef.current = transcript;
+  }, [transcript]);
   // Whether the active run is a Chat Mode turn (drives transcript finalization).
   const activeChatRef = useRef(false);
   // Once a leg reaches a terminal/paused state, ignore further stream events — a
   // closed SSE stream can still fire a reconnect/onerror that would clobber it.
-  const finishedRef = useRef(false);
+  const finishedBySessionRef = useRef<Map<string, boolean>>(new Map());
 
-  // Updates the live (last) chat turn, if one is active.
-  const patchActiveTurn = useCallback((patch: Partial<ChatTurn>) => {
-    setTranscript((prev) => {
-      if (prev.length === 0) return prev;
-      const next = [...prev];
-      next[next.length - 1] = { ...next[next.length - 1], ...patch };
-      return next;
+  const setNodeStatesAndRef = useCallback((next: SetStateAction<Map<string, NodeExecutionState>>) => {
+    setNodeStates((prev) => {
+      const resolved = typeof next === "function" ? next(prev) : next;
+      nodeStatesRef.current = resolved;
+      const key = activeSessionKeyRef.current;
+      if (key) {
+        const current = sessionsRef.current.get(key) ?? createEmptySession();
+        sessionsRef.current.set(key, { ...current, nodeStates: resolved });
+      }
+      return resolved;
     });
   }, []);
+
+  const setDebugStateAndRef = useCallback((next: SetStateAction<DebugState>) => {
+    setDebugState((prev) => {
+      const resolved = typeof next === "function" ? next(prev) : next;
+      debugStateRef.current = resolved;
+      const key = activeSessionKeyRef.current;
+      if (key) {
+        const current = sessionsRef.current.get(key) ?? createEmptySession();
+        sessionsRef.current.set(key, { ...current, debugState: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setConversationTurnsAndRef = useCallback((next: SetStateAction<number>) => {
+    setConversationTurns((prev) => {
+      const resolved = typeof next === "function" ? next(prev) : next;
+      conversationTurnsRef.current = resolved;
+      const key = activeSessionKeyRef.current;
+      if (key) {
+        const current = sessionsRef.current.get(key) ?? createEmptySession();
+        sessionsRef.current.set(key, { ...current, conversationTurns: resolved });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const setTranscriptAndRef = useCallback((next: SetStateAction<ChatTurn[]>) => {
+    setTranscript((prev) => {
+      const resolved = typeof next === "function" ? next(prev) : next;
+      transcriptRef.current = resolved;
+      const key = activeSessionKeyRef.current;
+      if (key) {
+        const current = sessionsRef.current.get(key) ?? createEmptySession();
+        sessionsRef.current.set(key, { ...current, transcript: cloneTranscript(resolved) });
+      }
+      return resolved;
+    });
+  }, []);
+
+  const closeSessionStream = useCallback((sessionKey: string) => {
+    const source = eventSourceRefs.current.get(sessionKey);
+    if (source) {
+      source.close();
+      eventSourceRefs.current.delete(sessionKey);
+    }
+    finishedBySessionRef.current.set(sessionKey, true);
+  }, []);
+
+  const snapshotCurrentSession = useCallback(
+    (): WorkflowExecutionSession => ({
+      nodeStates: new Map(nodeStatesRef.current),
+      debugState: debugStateRef.current,
+      conversationId: conversationIdRef.current,
+      conversationTurns: conversationTurnsRef.current,
+      transcript: cloneTranscript(transcriptRef.current),
+      activeChat: activeChatRef.current,
+    }),
+    [],
+  );
+
+  const persistActiveSession = useCallback(() => {
+    const key = activeSessionKeyRef.current;
+    if (!key) return;
+    sessionsRef.current.set(key, snapshotCurrentSession());
+  }, [snapshotCurrentSession]);
+
+  const renderSession = useCallback((session: WorkflowExecutionSession) => {
+    const nextNodeStates = new Map(session.nodeStates);
+    const nextTranscript = cloneTranscript(session.transcript);
+    nodeStatesRef.current = nextNodeStates;
+    debugStateRef.current = session.debugState;
+    conversationIdRef.current = session.conversationId;
+    conversationTurnsRef.current = session.conversationTurns;
+    transcriptRef.current = nextTranscript;
+    activeChatRef.current = session.activeChat;
+    setNodeStates(nextNodeStates);
+    setDebugState(session.debugState);
+    setConversationTurns(session.conversationTurns);
+    setTranscript(nextTranscript);
+  }, []);
+
+  const readSession = useCallback(
+    (sessionKey: string): WorkflowExecutionSession => {
+      if (activeSessionKeyRef.current === sessionKey) {
+        return snapshotCurrentSession();
+      }
+      return sessionsRef.current.get(sessionKey) ?? createEmptySession();
+    },
+    [snapshotCurrentSession],
+  );
+
+  const updateSession = useCallback(
+    (sessionKey: string, updater: (session: WorkflowExecutionSession) => WorkflowExecutionSession) => {
+      const next = updater(readSession(sessionKey));
+      sessionsRef.current.set(sessionKey, {
+        ...next,
+        nodeStates: new Map(next.nodeStates),
+        transcript: cloneTranscript(next.transcript),
+      });
+      if (activeSessionKeyRef.current === sessionKey) {
+        renderSession(next);
+      }
+    },
+    [readSession, renderSession],
+  );
+
+  const restoreSession = useCallback(
+    (session: WorkflowExecutionSession) => {
+      renderSession(session);
+    },
+    [renderSession],
+  );
+
+  const activateWorkflowSession = useCallback(
+    (sessionKey: string) => {
+      if (activeSessionKeyRef.current === sessionKey) return;
+      persistActiveSession();
+      const session = sessionsRef.current.get(sessionKey) ?? createEmptySession();
+      activeSessionKeyRef.current = sessionKey;
+      sessionsRef.current.set(sessionKey, session);
+      restoreSession(session);
+    },
+    [persistActiveSession, restoreSession],
+  );
+
+  const resetWorkflowSession = useCallback(
+    (sessionKey: string) => {
+      closeSessionStream(sessionKey);
+      const session = createEmptySession();
+      sessionsRef.current.set(sessionKey, session);
+      if (activeSessionKeyRef.current === sessionKey) {
+        restoreSession(session);
+      }
+    },
+    [closeSessionStream, restoreSession],
+  );
+
+  const prepareWorkflowSessionSwitch = useCallback(() => {
+    persistActiveSession();
+    activeSessionKeyRef.current = null;
+  }, [persistActiveSession]);
+
+  const moveActiveWorkflowSession = useCallback((sessionKey: string) => {
+    const currentKey = activeSessionKeyRef.current;
+    const snapshot = snapshotCurrentSession();
+    if (currentKey && currentKey !== sessionKey) {
+      sessionsRef.current.delete(currentKey);
+    }
+    sessionsRef.current.set(sessionKey, snapshot);
+    activeSessionKeyRef.current = sessionKey;
+  }, [snapshotCurrentSession]);
+
+  // Updates the live (last) chat turn, if one is active.
+  const patchActiveTurn = useCallback(
+    (sessionKey: string, patch: Partial<ChatTurn>) => {
+      updateSession(sessionKey, (session) => {
+        if (session.transcript.length === 0) return session;
+        const transcript = cloneTranscript(session.transcript);
+        transcript[transcript.length - 1] = { ...transcript[transcript.length - 1], ...patch };
+        return { ...session, transcript };
+      });
+    },
+    [updateSession],
+  );
 
   // Subscribes to a run's SSE stream and drives node + debug state. Shared by the
   // initial run and by resume (which opens a fresh stream on the same run).
   const subscribeToStream = useCallback(
-    (runId: string) => {
+    (sessionKey: string, runId: string) => {
+      closeSessionStream(sessionKey);
+      finishedBySessionRef.current.set(sessionKey, false);
       const source = new EventSource(workflowApi.runStreamUrl(runId));
-      eventSourceRef.current = source;
+      eventSourceRefs.current.set(sessionKey, source);
 
       source.onmessage = (msgEvent) => {
-        if (finishedRef.current) return;
+        if (finishedBySessionRef.current.get(sessionKey)) return;
         const parsed = RunSseEventSchema.safeParse(JSON.parse(String(msgEvent.data)));
         if (!parsed.success) return;
         const sseEvent = parsed.data;
@@ -82,42 +293,64 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
           sseEvent.type === "node.failed" ||
           sseEvent.type === "agent.tool"
         ) {
-          setNodeStates((prev) => reduceRunNodeStreamEvent(prev, sseEvent));
+          updateSession(sessionKey, (session) => ({
+            ...session,
+            nodeStates: reduceRunNodeStreamEvent(session.nodeStates, sseEvent),
+          }));
         } else if (sseEvent.type === "run.waiting") {
           // Paused on a Human Input node: close this leg and surface the form.
-          finishedRef.current = true;
+          finishedBySessionRef.current.set(sessionKey, true);
           source.close();
-          eventSourceRef.current = null;
-          setDebugState({ status: "waiting", waiting: { runId, interrupt: sseEvent.interrupt } });
-          if (activeChatRef.current) {
-            patchActiveTurn({ status: "waiting", answer: deriveChatAnswer(nodeStatesRef.current) });
+          eventSourceRefs.current.delete(sessionKey);
+          const session = readSession(sessionKey);
+          updateSession(sessionKey, () => ({
+            ...session,
+            debugState: { status: "waiting", waiting: { runId, interrupt: sseEvent.interrupt } },
+          }));
+          if (session.activeChat) {
+            patchActiveTurn(sessionKey, { status: "waiting", answer: deriveChatAnswer(session.nodeStates) });
           }
         } else if (sseEvent.type === "run.completed") {
-          finishedRef.current = true;
+          finishedBySessionRef.current.set(sessionKey, true);
           source.close();
-          eventSourceRef.current = null;
+          eventSourceRefs.current.delete(sessionKey);
           const runStatus = sseEvent.status;
           // Snapshot node states now so this chat turn's trace survives later turns.
-          const turnNodeStates = new Map(nodeStatesRef.current);
+          const session = readSession(sessionKey);
+          const turnNodeStates = new Map(session.nodeStates);
           const answer = deriveChatAnswer(turnNodeStates);
           Promise.all([workflowApi.getRun(runId), workflowApi.listRunEvents(runId)])
             .then(([runRes, eventsRes]) => {
               const result = { run: runRes.run, events: eventsRes.events };
-              setDebugState({ status: runStatus === "failed" ? "error" : "success", result });
-              if (activeChatRef.current) {
-                patchActiveTurn({
-                  status: runStatus === "failed" ? "error" : "success",
+              updateSession(sessionKey, (current) => {
+                const nextStatus = runStatus === "failed" ? "error" : "success";
+                const next = { ...current, debugState: { status: nextStatus, result } as DebugState };
+                if (!current.activeChat || current.transcript.length === 0) return next;
+                const transcript = cloneTranscript(current.transcript);
+                transcript[transcript.length - 1] = {
+                  ...transcript[transcript.length - 1],
+                  status: nextStatus,
                   answer,
                   nodeStates: turnNodeStates,
                   result,
-                });
-              }
+                };
+                return { ...next, transcript };
+              });
             })
             .catch(() => {
-              setDebugState({ status: runStatus === "failed" ? "error" : "success" });
-              if (activeChatRef.current) {
-                patchActiveTurn({ status: runStatus === "failed" ? "error" : "success", answer, nodeStates: turnNodeStates });
-              }
+              updateSession(sessionKey, (current) => {
+                const nextStatus = runStatus === "failed" ? "error" : "success";
+                const next = { ...current, debugState: { status: nextStatus } as DebugState };
+                if (!current.activeChat || current.transcript.length === 0) return next;
+                const transcript = cloneTranscript(current.transcript);
+                transcript[transcript.length - 1] = {
+                  ...transcript[transcript.length - 1],
+                  status: nextStatus,
+                  answer,
+                  nodeStates: turnNodeStates,
+                };
+                return { ...next, transcript };
+              });
             });
         }
       };
@@ -125,46 +358,56 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
       source.onerror = () => {
         // The stream closes normally after run.completed/run.waiting; don't treat
         // that as an error or overwrite the final result.
-        if (finishedRef.current) {
+        if (finishedBySessionRef.current.get(sessionKey)) {
           source.close();
-          eventSourceRef.current = null;
+          eventSourceRefs.current.delete(sessionKey);
           return;
         }
-        finishedRef.current = true;
+        finishedBySessionRef.current.set(sessionKey, true);
         source.close();
-        eventSourceRef.current = null;
-        setDebugState({ status: "error", error: "SSE connection failed." });
-        if (activeChatRef.current) {
-          patchActiveTurn({ status: "error", error: "连接中断，请重试。" });
+        eventSourceRefs.current.delete(sessionKey);
+        const session = readSession(sessionKey);
+        updateSession(sessionKey, () => ({
+          ...session,
+          debugState: { status: "error", error: "SSE connection failed." },
+        }));
+        if (session.activeChat) {
+          patchActiveTurn(sessionKey, { status: "error", error: "连接中断，请重试。" });
         }
       };
     },
-    [patchActiveTurn, workflowApi],
+    [closeSessionStream, patchActiveTurn, readSession, updateSession, workflowApi],
   );
 
   const runWorkflow = useCallback(
     (workflowId: string, request: CreateRunRequest) => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-
-      activeChatRef.current = false;
-      finishedRef.current = false;
-      setNodeStates(new Map());
-      setDebugState({ status: "running" });
+      const sessionKey = activeSessionKeyRef.current ?? workflowId;
+      closeSessionStream(sessionKey);
+      const session = readSession(sessionKey);
+      updateSession(sessionKey, () => ({
+        ...session,
+        activeChat: false,
+        nodeStates: new Map(),
+        debugState: { status: "running" },
+      }));
 
       workflowApi
-        .createRun(workflowId, { ...request, conversationId: conversationIdRef.current })
+        .createRun(workflowId, { ...request, conversationId: session.conversationId })
         .then(({ run }) => {
-          setConversationTurns((count) => count + 1);
-          subscribeToStream(run.id);
+          updateSession(sessionKey, (current) => ({
+            ...current,
+            conversationTurns: current.conversationTurns + 1,
+          }));
+          subscribeToStream(sessionKey, run.id);
         })
         .catch((err: unknown) => {
-          setDebugState({ status: "error", error: err instanceof Error ? err.message : "Run creation failed." });
+          updateSession(sessionKey, (current) => ({
+            ...current,
+            debugState: { status: "error", error: err instanceof Error ? err.message : "Run creation failed." },
+          }));
         });
     },
-    [subscribeToStream, workflowApi],
+    [closeSessionStream, readSession, subscribeToStream, updateSession, workflowApi],
   );
 
   /**
@@ -174,85 +417,94 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
    */
   const sendChatMessage = useCallback(
     (workflowId: string, query: string, baseInput: CreateRunRequest["input"], extra: Partial<CreateRunRequest> = {}) => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-
-      activeChatRef.current = true;
-      finishedRef.current = false;
-      setNodeStates(new Map());
-      nodeStatesRef.current = new Map();
-      setDebugState({ status: "running" });
-      setTranscript((prev) => [...prev, { id: newId(), query, status: "running", answer: "" }]);
+      const sessionKey = activeSessionKeyRef.current ?? workflowId;
+      closeSessionStream(sessionKey);
+      const session = readSession(sessionKey);
+      updateSession(sessionKey, () => ({
+        ...session,
+        activeChat: true,
+        nodeStates: new Map(),
+        debugState: { status: "running" },
+        transcript: [...cloneTranscript(session.transcript), { id: newId(), query, status: "running", answer: "" }],
+      }));
 
       workflowApi
-        .createRun(workflowId, { ...extra, input: baseInput, query, conversationId: conversationIdRef.current })
+        .createRun(workflowId, { ...extra, input: baseInput, query, conversationId: session.conversationId })
         .then(({ run }) => {
-          setConversationTurns((count) => count + 1);
-          patchActiveTurn({ runId: run.id });
-          subscribeToStream(run.id);
+          updateSession(sessionKey, (current) => ({
+            ...current,
+            conversationTurns: current.conversationTurns + 1,
+          }));
+          patchActiveTurn(sessionKey, { runId: run.id });
+          subscribeToStream(sessionKey, run.id);
         })
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : "Run creation failed.";
-          setDebugState({ status: "error", error: message });
-          patchActiveTurn({ status: "error", error: message });
+          updateSession(sessionKey, (current) => ({
+            ...current,
+            debugState: { status: "error", error: message },
+          }));
+          patchActiveTurn(sessionKey, { status: "error", error: message });
         });
     },
-    [patchActiveTurn, subscribeToStream, workflowApi],
+    [closeSessionStream, patchActiveTurn, readSession, subscribeToStream, updateSession, workflowApi],
   );
 
   // Answers a paused Human Input interrupt and re-subscribes to the continuation.
   // Node states are kept so already-finished nodes stay rendered.
   const resumeRun = useCallback(
     (runId: string, request: ResumeRunRequest) => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-
-      finishedRef.current = false;
-      setDebugState({ status: "running" });
-      if (activeChatRef.current) {
-        patchActiveTurn({ status: "running" });
+      const sessionKey =
+        [...sessionsRef.current.entries()].find(([, session]) => session.debugState.waiting?.runId === runId)?.[0] ??
+        activeSessionKeyRef.current;
+      if (!sessionKey) return;
+      closeSessionStream(sessionKey);
+      const session = readSession(sessionKey);
+      updateSession(sessionKey, () => ({ ...session, debugState: { status: "running" } }));
+      if (session.activeChat) {
+        patchActiveTurn(sessionKey, { status: "running" });
       }
 
       workflowApi
         .resumeRun(runId, request)
         .then(() => {
-          subscribeToStream(runId);
+          subscribeToStream(sessionKey, runId);
         })
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : "Resume failed.";
-          setDebugState({ status: "error", error: message });
-          if (activeChatRef.current) {
-            patchActiveTurn({ status: "error", error: message });
+          updateSession(sessionKey, (current) => ({
+            ...current,
+            debugState: { status: "error", error: message },
+          }));
+          if (session.activeChat) {
+            patchActiveTurn(sessionKey, { status: "error", error: message });
           }
         });
     },
-    [patchActiveTurn, subscribeToStream, workflowApi],
+    [closeSessionStream, patchActiveTurn, readSession, subscribeToStream, updateSession, workflowApi],
   );
 
   const newConversation = useCallback(() => {
     conversationIdRef.current = newConversationId();
-    setConversationTurns(0);
-    setTranscript([]);
+    setConversationTurnsAndRef(0);
+    setTranscriptAndRef([]);
     activeChatRef.current = false;
-    setNodeStates(new Map());
-    setDebugState({ status: "idle" });
-  }, []);
+    setNodeStatesAndRef(new Map());
+    setDebugStateAndRef({ status: "idle" });
+  }, [setConversationTurnsAndRef, setDebugStateAndRef, setNodeStatesAndRef, setTranscriptAndRef]);
 
   const cleanup = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
+    for (const source of eventSourceRefs.current.values()) {
+      source.close();
     }
+    eventSourceRefs.current.clear();
+    finishedBySessionRef.current.clear();
   }, []);
 
   return {
     nodeStates,
     debugState,
-    setDebugState,
+    setDebugState: setDebugStateAndRef,
     runWorkflow,
     sendChatMessage,
     transcript,
@@ -260,5 +512,9 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
     newConversation,
     conversationTurns,
     cleanup,
+    activateWorkflowSession,
+    prepareWorkflowSessionSwitch,
+    moveActiveWorkflowSession,
+    resetWorkflowSession,
   };
 }

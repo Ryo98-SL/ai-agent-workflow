@@ -108,7 +108,10 @@ export function ChatPanel({
   };
   useEffect(() => {
     if (!stickToBottomRef.current) return;
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    const scrollEl = scrollRef.current;
+    if (scrollEl && typeof scrollEl.scrollTo === "function") {
+      scrollEl.scrollTo({ top: scrollEl.scrollHeight });
+    }
   }, [transcript, liveAnswer]);
 
   const updateBaseField = (key: string, value: string) => setBaseValues((current) => ({ ...current, [key]: value }));
@@ -122,6 +125,9 @@ export function ChatPanel({
   };
 
   const onComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) {
+      return;
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       submit();
@@ -322,25 +328,27 @@ function ChatTurnView({
       </div>
 
       {/* Assistant message */}
-      <div className="flex justify-start">
-        <div className="max-w-[85%] space-y-1.5">
+      <div className="space-y-1.5">
+        <div className="flex justify-start">
           {turn.status === "error" ? (
-            <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <div className="flex max-w-[85%] items-center gap-1.5 rounded-2xl rounded-bl-sm border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               <AlertTriangle size={14} aria-hidden />
               {turn.error || "运行失败"}
             </div>
           ) : thinking ? (
-            <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm bg-muted px-3 py-2 text-sm text-muted-foreground">
+            <div className="flex max-w-[85%] items-center gap-2 rounded-2xl rounded-bl-sm bg-muted px-3 py-2 text-sm text-muted-foreground">
               <Loader2 size={14} className="animate-spin" aria-hidden />
               思考中…
             </div>
           ) : (
-            <div className="whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-muted px-3 py-2 text-sm text-foreground">
+            <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-muted px-3 py-2 text-sm text-foreground">
               {answer || (turn.status === "waiting" ? "等待人工复核…" : "")}
             </div>
           )}
+        </div>
 
-          {(turn.runId || isLive) && (
+        {(turn.runId || isLive) && (
+          <div className="flex justify-start">
             <button
               type="button"
               onClick={() => setShowTrace((value) => !value)}
@@ -349,14 +357,14 @@ function ChatTurnView({
               {showTrace ? <ChevronDown size={12} aria-hidden /> : <ChevronRight size={12} aria-hidden />}
               执行轨迹
             </button>
-          )}
+          </div>
+        )}
 
-          {showTrace && (
-            <div className="rounded-md border border-border bg-background/60 p-2">
-              <RunOutput workflow={workflow} debugState={traceDebugState} nodeStates={traceNodeStates} />
-            </div>
-          )}
-        </div>
+        {showTrace && (
+          <div className="w-[92%] max-w-[760px] rounded-md border border-border bg-background/60 p-2">
+            <RunOutput workflow={workflow} debugState={traceDebugState} nodeStates={traceNodeStates} />
+          </div>
+        )}
       </div>
     </div>
   );

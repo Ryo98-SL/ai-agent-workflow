@@ -1,6 +1,8 @@
 import {
+  createAgentToolsDemoWorkflow,
   createDefaultWorkflow,
   createKnowledgeDemoWorkflow,
+  createSupportAgentWorkflow,
   createSupportBotWithReviewWorkflow,
   type WorkflowFile,
 } from "./schema";
@@ -61,6 +63,26 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     requires: ["credits"],
     flow: ["Start", "Knowledge", "LLM", "If/Else", "人工复核 / 自动回复"],
     build: createSupportBotWithReviewWorkflow,
+  },
+  {
+    id: "agent-tools-demo",
+    name: "Agent 工具调度演示",
+    description: "Agent 在一个节点内同时使用内置工具和 Built-in MCP 工具，完成工具选择与回答。",
+    icon: "bot",
+    tags: ["Agent", "Tool", "MCP"],
+    requires: ["credits"],
+    flow: ["Start", "Agent", "End"],
+    build: createAgentToolsDemoWorkflow,
+  },
+  {
+    id: "support-agent",
+    name: "客服 Agent（工具 + MCP）",
+    description: "基于示例知识库检索客户问题，再由 Agent 调用内置工具和 Built-in MCP 工具生成回复。",
+    icon: "bot",
+    tags: ["RAG", "Agent", "Tool", "MCP", "记忆"],
+    requires: ["credits"],
+    flow: ["Start", "Knowledge", "Agent", "End"],
+    build: createSupportAgentWorkflow,
   },
 ];
 

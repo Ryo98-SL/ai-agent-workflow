@@ -145,6 +145,128 @@ describe("MVP smoke loop", () => {
     expect(api.getWorkflow).toHaveBeenCalledWith("workflow-2");
   });
 
+  it("keeps Debug Panel output scoped to the active workflow", async () => {
+    const user = userEvent.setup();
+    const { api, workflows } = createMemoryWorkflowApi();
+    const seed = workflows.get("workflow-1")!;
+    workflows.set("workflow-2", {
+      id: "workflow-2",
+      workflow: { ...seed.workflow, metadata: { ...seed.workflow.metadata, name: "Second Workflow" } },
+    });
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Run workflow" }));
+    await screen.findByText("Workflow Run");
+    await user.clear(screen.getByRole("textbox", { name: /Topic/ }));
+    await user.type(screen.getByRole("textbox", { name: /Topic/ }), "first workflow");
+    await user.click(screen.getAllByRole("button", { name: "Run workflow" }).at(-1)!);
+    expect(await screen.findByText("Memory runtime output.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Switch workflow" }));
+    await user.click(await screen.findByRole("button", { name: "Second Workflow" }));
+    expect(await screen.findByText("Second Workflow")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Run workflow" }));
+    const secondPanel = await findFloatingPanel("Run Log");
+    expect(within(secondPanel).getByText("Workflow Run")).toBeInTheDocument();
+    expect(within(secondPanel).queryByText("Run succeeded")).not.toBeInTheDocument();
+    expect(screen.queryByText("Memory runtime output.")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Switch workflow" }));
+    await user.click(await screen.findByRole("button", { name: "Seed Workflow" }));
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Run workflow" }));
+    const restoredPanel = await findFloatingPanel("Run Log");
+    expect(within(restoredPanel).getByText("Run succeeded")).toBeInTheDocument();
+    await user.click(within(restoredPanel).getByRole("button", { name: /LLM/ }));
+    expect(await screen.findByText("Memory runtime output.")).toBeInTheDocument();
+  });
+
+  it("continues an in-flight Chat Mode HITL run while another workflow is open", async () => {
+    const user = userEvent.setup();
+    const originalWindowEventSource = window.EventSource;
+    const originalGlobalEventSource = globalThis.EventSource;
+    class WaitingEventSource {
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      private closed = false;
+
+      constructor(public readonly url: string) {
+        const [, runId = "run-test"] = url.match(/\/runs\/([^/]+)\/stream/) ?? [];
+        setTimeout(() => {
+          if (this.closed) return;
+          this.onmessage?.(
+            new MessageEvent("message", {
+              data: JSON.stringify({
+                type: "run.waiting",
+                runId,
+                interrupt: {
+                  nodeId: "humanInput1",
+                  prompt: "需要人工确认",
+                  actions: [{ id: "approve", label: "通过", value: "approved" }],
+                  allowTextInput: false,
+                },
+              }),
+            }),
+          );
+        }, 20);
+      }
+
+      close() {
+        this.closed = true;
+      }
+    }
+    Object.defineProperty(window, "EventSource", { writable: true, configurable: true, value: WaitingEventSource });
+    Object.defineProperty(globalThis, "EventSource", { writable: true, configurable: true, value: WaitingEventSource });
+
+    try {
+      const { api, workflows } = createMemoryWorkflowApi((workflow) => ({
+        ...workflow,
+        metadata: { ...workflow.metadata, mode: "chat" },
+        graph: {
+          ...workflow.graph,
+          nodes: workflow.graph.nodes.map((node) =>
+            node.type === "start" ? { ...node, config: { ...node.config, fields: [] } } : node,
+          ),
+        },
+      }));
+      const seed = workflows.get("workflow-1")!;
+      workflows.set("workflow-2", {
+        id: "workflow-2",
+        workflow: { ...seed.workflow, metadata: { ...seed.workflow.metadata, name: "Second Workflow", mode: "workflow" } },
+      });
+
+      render(<AppWorkbench workflowApi={api} />);
+      expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Run workflow" }));
+      await user.type(screen.getByPlaceholderText("输入消息，Enter 发送，Shift+Enter 换行"), "needs review");
+      await user.click(screen.getByRole("button", { name: "发送" }));
+
+      await user.click(screen.getByRole("button", { name: "Switch workflow" }));
+      await user.click(await screen.findByRole("button", { name: "Second Workflow" }));
+      expect(await screen.findByText("Second Workflow")).toBeInTheDocument();
+
+      await waitFor(() => expect(api.runStreamUrl).toHaveBeenCalled());
+
+      await user.click(screen.getByRole("button", { name: "Switch workflow" }));
+      await user.click(await screen.findByRole("button", { name: "Seed Workflow" }));
+      expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Run workflow" }));
+
+      expect(await screen.findByText("等待你的复核")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /通过/ })).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("工作流运行中…")).toBeDisabled();
+    } finally {
+      Object.defineProperty(window, "EventSource", { writable: true, configurable: true, value: originalWindowEventSource });
+      Object.defineProperty(globalThis, "EventSource", {
+        writable: true,
+        configurable: true,
+        value: originalGlobalEventSource,
+      });
+    }
+  });
+
   it("edits Start fields and prevents adding a second Start node", async () => {
     const user = userEvent.setup();
     const { api } = createMemoryWorkflowApi();

@@ -52,7 +52,9 @@ remain in memory so the UI can run unsaved drafts and replay stream state.
   workflow-domain descriptors; Send Email is dry-run unless an env-gated Resend
   sender is configured.
 - `src/index.ts` exports the app factory and starts the Node server when run by
-  the package `dev` script.
+  the package `dev` or production `start` script. It binds to `HOST` or
+  `0.0.0.0` by default so Railway-style public networking can reach the service
+  through `$PORT`.
 - `tests/routes.test.ts` covers request validation, normalized errors,
   workflow CRUD routes, provider/keyring model calls, node-level model
   settings, Knowledge Base metadata routes, run streams, resume flows, and run
@@ -74,3 +76,10 @@ Route tests call `app.request()` directly. Each test creates a fresh app and can
 inject repositories, mocked `fetch`, embedding adapters, checkpointers, and
 tool senders so workflow IDs, run IDs, timestamps, model output, stream events,
 and resume behavior remain deterministic.
+
+## Deployment
+
+The production start path intentionally uses `tsx src/index.ts` because the
+current TypeScript build output is used as a CI/build validation artifact rather
+than the runtime entrypoint. `db:deploy` runs `prisma migrate deploy` for
+managed Postgres databases such as Neon before the server starts.

@@ -57,6 +57,12 @@ sets `{{userInput.query}}`. Conversation memory and its summary compression are
 configured here.
 _Avoid_: chatflow, conversation mode, agent mode
 
+**Debug Session**:
+A workflow-scoped view of the current or last run, including node execution
+state and any Chat Mode transcript for that workflow. Switching workflows changes
+the visible Debug Session; debug state is not global across workflows.
+_Avoid_: run log, debug panel state, global debug state
+
 ### Output
 
 **Answer Template**:

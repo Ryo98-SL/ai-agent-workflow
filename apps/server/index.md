@@ -24,8 +24,9 @@ LangGraph-backed workflow execution.
   review/templates, resolves model settings, and returns structured node output
   data through a folder entrypoint.
 - `src/net/` contains network helper code for provider access.
-- `src/index.ts` exports server public APIs and starts the local Node server for
-  `pnpm --filter @ai-agent-workflow/server dev`.
+- `src/index.ts` exports server public APIs and starts the Node server for
+  `pnpm --filter @ai-agent-workflow/server dev` and
+  `pnpm --filter @ai-agent-workflow/server start`.
 - `tests/` covers routes, durable repositories, crypto, credits config,
   indexing, runtime behavior, streams, and resume flows.
 
@@ -51,3 +52,7 @@ pgvector and does not support PDF/DOCX parsing or hybrid retrieval.
 Built-in tools are registered in `src/runtime/tools/`: Current Time returns
 formatted time metadata, and Send Email composes a dry-run by default or sends
 through the env-gated Resend adapter.
+
+The package exposes `db:deploy` for production Prisma migrations and binds the
+server to `HOST` or `0.0.0.0` by default so Railway can route public traffic to
+the `$PORT` listener.

@@ -47,6 +47,10 @@ Principles:
 - Keep Chat Mode separate from one-shot workflow runs: Start fields are collected
   once per conversation, each message is sent as `query`, and Human Input pauses
   render the same resume form in chat, inspector history, and debug surfaces.
+- Keep Debug Sessions scoped to workflows: switching workflows restores that
+  workflow's run output and Chat Mode transcript, or shows an empty debug panel
+  when the target workflow has not run in the current browser session. Runs keep
+  streaming into their own workflow session after the user switches away.
 - Keep variable authoring structured: prompt-like fields use Lexical variable
   chips, `/` insertion, and upstream Available Variables from workflow-domain;
   the slash menu flips and resizes to stay inside the viewport.
