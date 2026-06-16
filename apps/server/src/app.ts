@@ -678,6 +678,8 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     }),
   );
 
+  app.get("/", (c) => c.text("Hello from AI Agent Workflow server."));
+
   // Better Auth handles /api/auth/* (sign-in, sign-up, OAuth callbacks, session).
   app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 

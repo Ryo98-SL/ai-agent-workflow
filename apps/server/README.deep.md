@@ -12,8 +12,10 @@ remain in memory so the UI can run unsaved drafts and replay stream state.
   carry an inline workflow, transient model-provider settings, provider keyring
   values, a stored provider-key id, a Chat Mode query, and a conversation id.
   Run deletion removes the authenticated user's durable row and clears any
-  matching owner-scoped in-memory snapshot/events. Authenticated runs use the
-  durable Postgres checkpointer when available; anonymous runs use `MemorySaver`.
+  matching owner-scoped in-memory snapshot/events. The root path returns a
+  plain text greeting for deployment smoke tests without touching auth or
+  storage. Authenticated runs use the durable Postgres checkpointer when
+  available; anonymous runs use `MemorySaver`.
 - `src/auth/` owns Better Auth integration, request user resolution, and AES-GCM
   secret encryption helpers used for provider keys and platform credit keys.
 - `src/db/prisma.ts`, `src/workflows/repository.ts`, and `src/runs/repository.ts`

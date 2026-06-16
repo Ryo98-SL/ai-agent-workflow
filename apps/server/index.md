@@ -2,15 +2,16 @@
 
 ## Purpose
 
-`apps/server` owns the server-side REST surface for workflow persistence,
-account settings, Knowledge Bases, AI credits, live run streaming, and
-LangGraph-backed workflow execution.
+`apps/server` owns the server-side REST surface for deployment smoke tests,
+workflow persistence, account settings, Knowledge Bases, AI credits, live run
+streaming, and LangGraph-backed workflow execution.
 
 ## Structure
 
 - `src/app.ts` builds the Hono app, validates requests, mounts auth/account/
-  credit/Knowledge routes, manages live run memory/SSE buffers, and delegates
-  durable workflow/run persistence to repository modules.
+  credit/Knowledge routes, serves the root smoke-test greeting, manages live run
+  memory/SSE buffers, and delegates durable workflow/run persistence to
+  repository modules.
 - `src/auth/` resolves Better Auth users and encrypts/decrypts stored secrets.
 - `src/db/`, `src/workflows/`, and `src/runs/` contain Prisma access and
   repository boundaries for durable records.

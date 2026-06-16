@@ -182,6 +182,15 @@ afterEach(() => {
 });
 
 describe("workflow API server", () => {
+  it("responds on the root path for smoke tests", async () => {
+    const app = createTestApp();
+    const response = await app.request("/");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/plain");
+    expect(await response.text()).toBe("Hello from AI Agent Workflow server.");
+  });
+
   it("responds to browser CORS requests", async () => {
     const app = createTestApp();
     const preflightResponse = await app.request("/api/workflows", {
