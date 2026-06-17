@@ -4,6 +4,18 @@ import { useWorkbenchData } from "./WorkbenchDataProvider";
 import { useSession } from "./useAccount";
 import { createLocalWorkflowApi } from "./localWorkflowStore";
 
+const localWorkflowApiCache = new WeakMap<WorkbenchWorkflowApi, WorkbenchWorkflowApi>();
+
+function getLocalWorkflowApi(serverApi: WorkbenchWorkflowApi): WorkbenchWorkflowApi {
+  const cached = localWorkflowApiCache.get(serverApi);
+  if (cached) {
+    return cached;
+  }
+  const localApi = createLocalWorkflowApi(serverApi);
+  localWorkflowApiCache.set(serverApi, localApi);
+  return localApi;
+}
+
 /**
  * Returns the workflow API matching the current auth state: the server-backed
  * client when signed in, a localStorage-backed adapter when anonymous. The
@@ -16,7 +28,7 @@ export function useActiveWorkflowApi(): WorkbenchWorkflowApi {
   const isAuthed = Boolean(data?.user);
 
   return useMemo(
-    () => (isAuthed ? workflowApi : createLocalWorkflowApi(workflowApi)),
+    () => (isAuthed ? workflowApi : getLocalWorkflowApi(workflowApi)),
     [isAuthed, workflowApi],
   );
 }

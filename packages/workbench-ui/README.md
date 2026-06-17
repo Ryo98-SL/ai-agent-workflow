@@ -9,6 +9,8 @@ Principles:
 - Keep workflow persistence and runs behind the injected API.
 - Route anonymous workflow CRUD through IndexedDB while delegating execution,
   Knowledge Bases, account, and credits to the injected server API.
+- Keep signed-out session refreshes from reloading the active local workflow, so
+  unsaved anonymous edits survive tab focus/session checks.
 - Keep popovers mounted under `body` so canvas containers cannot clip them.
 - Keep node handle behavior direction-aware: source creates outgoing edges,
   target creates incoming edges.

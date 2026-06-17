@@ -94,6 +94,9 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
   const [workflow, setWorkflow] = useState<WorkflowFile>(() => createDefaultWorkflow());
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
+  const authSourceKey = sessionData?.user?.id ? `user:${sessionData.user.id}` : "anonymous";
+  const bootstrapKey = `${authSourceKey}:${workflowRefreshNonce}`;
+  const loadedBootstrapRef = useRef<{ key: string; workflowApi: typeof workflowApi } | null>(null);
   const {
     nodeStates,
     debugState,
@@ -227,6 +230,13 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
       return;
     }
 
+    if (
+      loadedBootstrapRef.current?.key === bootstrapKey &&
+      loadedBootstrapRef.current.workflowApi === workflowApi
+    ) {
+      return;
+    }
+
     async function loadInitialWorkflow() {
       setDebugState({ status: "loading" });
       try {
@@ -255,6 +265,7 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
         }
 
         if (!cancelled) {
+          loadedBootstrapRef.current = { key: bootstrapKey, workflowApi };
           setInitialLoaded(true);
         }
       } catch (error) {
@@ -274,6 +285,7 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     activateWorkflowSession,
     applyWorkflowDto,
     errorMessage,
+    bootstrapKey,
     isAnonymous,
     resetHistory,
     resetSelectionPanels,

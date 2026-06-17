@@ -12,7 +12,9 @@ Data boundary and React Query hooks for the workbench UI.
 - `authClient.ts` creates the Better Auth browser client with credentialed
   requests against the API/auth origin.
 - `useActiveWorkflowApi.ts` switches between the injected server API and the
-  anonymous IndexedDB-backed workflow API after session state resolves.
+  anonymous IndexedDB-backed workflow API after session state resolves, caching
+  the anonymous adapter per injected API so repeated signed-out session refreshes
+  keep the same workflow source.
 - `localWorkflowStore.ts` owns anonymous workflow CRUD in IndexedDB, migrates
   legacy localStorage data, sends inline workflows for server execution, and
   delegates account/KB/credit calls to the server API.
@@ -35,4 +37,7 @@ Anonymous users can manage workflows locally, run them through the server with
 inline workflow definitions, resume Human Input runs, and read the
 server-seeded example KB. Knowledge Base mutations, provider keys, custom
 models, and credits are not stored locally; they go through the workbench API
-boundary and receive the server's auth/read-only errors.
+boundary and receive the server's auth/read-only errors. Signed-out session
+refetches must not re-bootstrap the workbench or overwrite unsaved local edits;
+only the first load, an actual auth identity change, or an explicit workflow
+refresh nonce should reload the active workflow source.

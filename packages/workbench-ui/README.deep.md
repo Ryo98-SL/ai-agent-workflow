@@ -28,8 +28,10 @@ Core responsibilities:
   boundary.
 - `src/data/localWorkflowStore.ts` backs anonymous workflow CRUD with IndexedDB,
   migrates legacy localStorage records, and sends inline workflows to the server
-  for execution. `anonymousRunStore.ts` tracks anonymous run ids for
-  session-scoped history while server memory still holds those runs.
+  for execution. `useActiveWorkflowApi.ts` caches the anonymous adapter per
+  injected server API so signed-out session refetches do not change the workflow
+  source. `anonymousRunStore.ts` tracks anonymous run ids for session-scoped
+  history while server memory still holds those runs.
 - `src/auth/` owns the Better Auth menu and local-data import prompt shown when
   an anonymous user signs in.
 - `src/theme/` owns the light/dark/system theme provider and menu.
@@ -38,14 +40,16 @@ Core responsibilities:
   runtime.
 - `src/styles.css` exposes Tailwind/base styles for consuming apps.
 - `tests/core-loop.test.tsx` covers the end-to-end UI loop with a mocked API.
-  Additional tests cover node inspector behavior, shortcut focus rules,
-  workflow dirty snapshots, and graph history.
+  Additional tests cover anonymous session refresh behavior, node inspector
+  behavior, shortcut focus rules, workflow dirty snapshots, and graph history.
 
 Design constraints:
 
 - The layout waits for the server workflow before mounting the canvas, avoiding
   a placeholder graph flash. It waits for session resolution before selecting
-  the server-backed or anonymous IndexedDB workflow source.
+  the server-backed or anonymous IndexedDB workflow source, and then only
+  bootstraps again when the auth identity changes or a workflow refresh is
+  explicitly requested.
 - Popovers use the shared Floating UI wrapper and mount under `body`; the
   header run history uses a backdrop-protected right drawer because it combines
   historical debug output and a selectable/deletable run list.
