@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { WorkflowFile } from "@ai-agent-workflow/workflow-domain";
 import { useActiveWorkflowApi } from "./useActiveWorkflowApi";
 import { useSession } from "./useAccount";
 
@@ -16,6 +17,18 @@ export function useWorkflows() {
     queryKey: ["workflows", isAuthed],
     queryFn: () => workflowApi.listWorkflows(),
     enabled: !isPending,
+  });
+}
+
+export function useCreateWorkflow() {
+  const workflowApi = useActiveWorkflowApi();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (workflow?: WorkflowFile) => workflowApi.createWorkflow(workflow ? { workflow } : undefined),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["workflows"] });
+    },
   });
 }
 

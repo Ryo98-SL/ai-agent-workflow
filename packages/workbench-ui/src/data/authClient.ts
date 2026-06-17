@@ -10,6 +10,9 @@ export type WorkbenchAuthClient = ReturnType<typeof createAuthClient>;
 export function createWorkbenchAuthClient(baseURL: string): WorkbenchAuthClient {
   return createAuthClient({
     baseURL,
+    sessionOptions: {
+      refetchOnWindowFocus: false,
+    },
     fetchOptions: {
       credentials: "include",
     },

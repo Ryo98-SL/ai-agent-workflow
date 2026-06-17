@@ -20,4 +20,7 @@ design-only galleries live in `src/pages/design/`.
 
 The homepage uses the shared workbench `brand` tokens for header tabs and
 primary accents. Studio workflow cards read each workflow's saved metadata icon,
-and the compact search field filters only real workflow summary fields.
+the top-left card opens the shared New Workflow template dialog, and the compact
+search field filters only real workflow summary fields.
+The browser favicon is served from `public/favicon.png` and matches the
+homepage header `AIW` mark.

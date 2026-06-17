@@ -13,12 +13,14 @@ workflow workbench.
 - `src/pages/workbench/index.tsx` preserves the full `AppWorkbench` editor at
   `/workbench` and syncs the active `workflowId` search parameter.
 - `src/homepage/` contains the dark Studio/Knowledge homepage shell, workflow
-  cards, compact workflow search, and Knowledge Base create entry point.
+  cards, compact workflow search, and Studio New Workflow entry point.
 - `src/pages/design/` and `src/design/` contain local design-gallery routes for
   UI review, including archived homepage candidates at `/design/home-page` and
   Search/tag variants at `/design/search-tag-filter`.
 - `src/lib/workflowApi.ts` creates the workflow REST client and exports the API
   base URL passed to the workbench auth client.
+- `public/` contains static browser assets, including the favicon rendered from
+  the homepage `AIW` product mark.
 - `vite.config.ts` configures Vite dev and build output.
 - `index.html` hosts the React root.
 

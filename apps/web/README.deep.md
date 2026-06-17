@@ -18,9 +18,11 @@ shared workbench UI at `/workbench`, and injects a typed workflow client.
   workbench switches workflows.
 - `src/homepage/` owns the dark Studio/Knowledge homepage shell, the workflow
   card grid, compact local workflow search, the search review gallery, and the
-  Knowledge Base create entry point. Its header tabs and primary accents use the
-  shared workbench `brand` color tokens, and workflow cards render the saved
-  workflow metadata icon.
+  Studio New Workflow entry point. Its header tabs and primary accents use the
+  shared workbench `brand` color tokens, workflow cards render the saved
+  workflow metadata icon, and the top-left Studio card opens the shared New
+  Workflow template dialog. The header uses a three-column grid with a stable
+  account slot so the centered tabs do not shift across auth states.
 - `src/pages/design/` hosts design-gallery pages for workbench UI surfaces,
   including the archived homepage candidate at `/design/home-page` and the
   Search/tag variants at `/design/search-tag-filter`.
@@ -28,6 +30,8 @@ shared workbench UI at `/workbench`, and injects a typed workflow client.
   `src/design/home-page/` holds the static homepage template variants.
 - `src/lib/workflowApi.ts` creates the configured REST client from
   `VITE_WORKFLOW_API_BASE_URL` or the local server default.
+- `public/favicon.png` is a cropped screenshot of the homepage header `AIW`
+  product mark and is linked from `index.html`.
 - `vite.config.ts` owns local dev and production build settings.
 - `index.html` is the browser document shell.
 

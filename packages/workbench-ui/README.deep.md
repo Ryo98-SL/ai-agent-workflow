@@ -10,8 +10,8 @@ Core responsibilities:
 
 - `src/index.ts` exports the public component, data-provider hooks, account
   hooks, workflow hooks, provider-key store hook, theme/toast helpers, auth
-  menu, shared workflow icon glyph, Knowledge Base creation dialog, and API
-  boundary types.
+  menu, shared workflow icon glyph, New Workflow template dialog, Knowledge Base
+  creation dialog, and API boundary types.
 - `src/workbench/AppWorkbench.tsx` owns workflow state, panel visibility,
   initial source loading, local/remote API switching, persistence calls, graph
   undo/redo ownership, workflow-level run calls, Chat Mode sends, provider-key
@@ -36,7 +36,9 @@ Core responsibilities:
   source. `anonymousRunStore.ts` tracks anonymous run ids for session-scoped
   history while server memory still holds those runs.
 - `src/auth/` owns the Better Auth menu and local-data import prompt shown when
-  an anonymous user signs in.
+  an anonymous user signs in. The Better Auth client disables focus-driven
+  session refetches so returning to a tab does not call `get-session` or churn
+  auth UI state.
 - `src/theme/` owns the light/dark/system theme provider and menu.
 - `src/workbench/assets` stores bundled DeepSeek, OpenAI, Anthropic, and
   Ollama provider logos so model UI never depends on external image URLs at
@@ -135,7 +137,9 @@ Design constraints:
   to a fresh SSE leg on the same run.
 - The New Workflow dialog reads `WORKFLOW_TEMPLATES` from workflow-domain. Each
   template builds a valid unsaved `WorkflowFile`; the UI previews requirements,
-  tags, and flow steps before loading the draft.
+  tags, and flow steps before loading the draft. Product shells can import it
+  with `useCreateWorkflow` to create a selected template through the active
+  workflow API and refresh the workflow list.
 - Variable-bearing fields use `VariableRichTextEditor`, backed by Lexical. The
   canonical stored value remains the plain template string with
   `{{nodeId.path}}` placeholders; chips are editor presentation only. The `/`

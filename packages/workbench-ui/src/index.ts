@@ -21,7 +21,8 @@ export {
 } from "./data/useAccount";
 export { useProviderKeyStore } from "./data/useProviderKeyStore";
 export type { ProviderKeyEntry, ProviderKeyStore } from "./data/useProviderKeyStore";
-export { useWorkflows, useWorkflowRuns, useDeleteWorkflowRun } from "./data/useWorkflows";
+export { useWorkflows, useCreateWorkflow, useWorkflowRuns, useDeleteWorkflowRun } from "./data/useWorkflows";
+export { NewWorkflowDialog } from "./workbench/components/NewWorkflowDialog";
 export { CreateKnowledgeBaseDialog } from "./workbench/components/knowledge/CreateKnowledgeBaseDialog";
 export { ThemeProvider, useTheme } from "./theme/ThemeProvider";
 export type { ResolvedTheme, ThemeMode } from "./theme/ThemeProvider";

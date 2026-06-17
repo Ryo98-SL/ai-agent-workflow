@@ -10,7 +10,8 @@ Data boundary and React Query hooks for the workbench UI.
   Better Auth client, a shared React Query client, and a refresh nonce used
   after local-data import.
 - `authClient.ts` creates the Better Auth browser client with credentialed
-  requests against the API/auth origin.
+  requests against the API/auth origin. It disables session refetch on window
+  focus so returning to the tab does not call `get-session` or churn auth UI.
 - `useActiveWorkflowApi.ts` switches between the injected server API and the
   anonymous IndexedDB-backed workflow API after session state resolves, caching
   the anonymous adapter per injected API so repeated signed-out session refreshes
@@ -20,9 +21,10 @@ Data boundary and React Query hooks for the workbench UI.
   delegates account/KB/credit calls to the server API.
 - `anonymousRunStore.ts` tracks anonymous run ids for session-scoped history and
   drops ids when server memory can no longer read them.
-- `useWorkflows.ts` exposes workflow and run-history queries/mutations. The
-  workflow list hook is part of the public package surface so host apps can
-  render product-level workflow summaries without mounting the full editor.
+- `useWorkflows.ts` exposes workflow list/create and run-history
+  queries/mutations. The workflow hooks are part of the public package surface
+  so host apps can render product-level workflow summaries and create template
+  workflows without mounting the full editor.
 - `useAccount.ts` exposes session, provider-key, custom-model, and credits
   hooks.
 - `useKnowledgeBases.ts` exposes Knowledge Base list/read/mutation hooks plus
@@ -42,4 +44,5 @@ models, and credits are not stored locally; they go through the workbench API
 boundary and receive the server's auth/read-only errors. Signed-out session
 refetches must not re-bootstrap the workbench or overwrite unsaved local edits;
 only the first load, an actual auth identity change, or an explicit workflow
-refresh nonce should reload the active workflow source.
+refresh nonce should reload the active workflow source. Session checks should
+not be triggered merely by switching away from and back to the tab.

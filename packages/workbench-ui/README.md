@@ -11,6 +11,8 @@ Principles:
   Knowledge Bases, account, and credits to the injected server API.
 - Keep signed-out session refreshes from reloading the active local workflow, so
   unsaved anonymous edits survive tab focus/session checks.
+- Do not refetch Better Auth session merely because the browser tab regains
+  focus; explicit auth changes and workflow refreshes should drive reloads.
 - Keep popovers mounted under `body` so canvas containers cannot clip them.
 - Keep node handle behavior direction-aware: source creates outgoing edges,
   target creates incoming edges.
@@ -84,6 +86,6 @@ surfaces show output variables so downstream prompt references can be authored
 from the same panel.
 
 The package also exports the shared data provider, session/workflow hooks,
-themed toaster, theme provider, auth menu, shared workflow icon glyph, and
-Knowledge Base creation dialog so host apps can build product-level shells
-without duplicating workbench internals.
+themed toaster, theme provider, auth menu, shared workflow icon glyph, New
+Workflow template dialog, and Knowledge Base creation dialog so host apps can
+build product-level shells without duplicating workbench internals.

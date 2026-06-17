@@ -1,15 +1,19 @@
-import { useMemo, useState } from "react";
-import { CreateKnowledgeBaseDialog, useSession, useWorkflows, WorkflowIconGlyph } from "@ai-agent-workflow/workbench-ui";
+import { type ComponentProps, useMemo, useState } from "react";
+import { NewWorkflowDialog, useCreateWorkflow, useWorkflows, WorkflowIconGlyph } from "@ai-agent-workflow/workbench-ui";
 import { Database, GitBranch, Loader2, Plus, TriangleAlert } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { SearchTagFilter } from "./SearchTagFilter";
 import type { SearchTagFilterValue, StudioWorkflowCard } from "./types";
 
+type WorkflowTemplateSelection = Parameters<ComponentProps<typeof NewWorkflowDialog>["onSelect"]>[0];
+
 export function StudioPanel() {
+  const navigate = useNavigate();
   const workflowsQuery = useWorkflows();
-  const session = useSession();
+  const createWorkflow = useCreateWorkflow();
   const [filter, setFilter] = useState<SearchTagFilterValue>({ query: "" });
   const [createOpen, setCreateOpen] = useState(false);
-  const [createdKnowledgeBaseId, setCreatedKnowledgeBaseId] = useState<string | null>(null);
+  const [createWorkflowError, setCreateWorkflowError] = useState<string | null>(null);
   const workflows = useMemo<StudioWorkflowCard[]>(() => {
     return (workflowsQuery.data?.workflows ?? []).map((workflow) => ({
       ...workflow,
@@ -26,6 +30,21 @@ export function StudioPanel() {
   }, [workflowsQuery.data?.workflows]);
   const filteredWorkflows = useMemo(() => filterWorkflows(workflows, filter), [workflows, filter]);
 
+  async function handleSelectTemplate(template: WorkflowTemplateSelection) {
+    if (createWorkflow.isPending) {
+      return;
+    }
+
+    setCreateWorkflowError(null);
+    try {
+      const { workflow } = await createWorkflow.mutateAsync(template.build());
+      setCreateOpen(false);
+      navigate(`/workbench?workflowId=${encodeURIComponent(workflow.id)}`);
+    } catch (error) {
+      setCreateWorkflowError(error instanceof Error ? error.message : "Workflow could not be created.");
+    }
+  }
+
   return (
     <section className="mx-auto max-w-[1680px]">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -40,14 +59,19 @@ export function StudioPanel() {
         </div>
       </div>
 
-      {createdKnowledgeBaseId && (
-        <div className="mt-5 rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm font-medium text-emerald-100">
-          Knowledge base created. ID: {createdKnowledgeBaseId}
+      {createWorkflowError && (
+        <div className="mt-5 rounded-lg border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm font-medium text-red-100">
+          {createWorkflowError}
         </div>
       )}
 
       <div className="mt-8 grid min-w-0 gap-5 md:grid-cols-2 2xl:grid-cols-4">
-        <CreateKnowledgeCard isSignedIn={Boolean(session.data?.user)} onOpen={() => setCreateOpen(true)} />
+        <CreateWorkflowCard
+          onOpen={() => {
+            setCreateWorkflowError(null);
+            setCreateOpen(true);
+          }}
+        />
         {workflowsQuery.isLoading && <StateCard icon={Loader2} title="Loading workflows" spinning />}
         {workflowsQuery.isError && <StateCard icon={TriangleAlert} title="Workflow list could not load" />}
         {!workflowsQuery.isLoading && !workflowsQuery.isError && filteredWorkflows.length === 0 && (
@@ -58,12 +82,11 @@ export function StudioPanel() {
         ))}
       </div>
 
-      <CreateKnowledgeBaseDialog
+      <NewWorkflowDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCreated={(id) => {
-          setCreatedKnowledgeBaseId(id);
-          setCreateOpen(false);
+        onSelect={(template) => {
+          void handleSelectTemplate(template);
         }}
       />
     </section>
@@ -77,7 +100,7 @@ function filterWorkflows(workflows: StudioWorkflowCard[], filter: SearchTagFilte
   });
 }
 
-function CreateKnowledgeCard({ isSignedIn, onOpen }: { isSignedIn: boolean; onOpen: () => void }) {
+function CreateWorkflowCard({ onOpen }: { onOpen: () => void }) {
   return (
     <button
       type="button"
@@ -87,11 +110,10 @@ function CreateKnowledgeCard({ isSignedIn, onOpen }: { isSignedIn: boolean; onOp
       <span className="flex size-16 items-center justify-center rounded-2xl bg-brand text-brand-foreground transition-transform group-hover:scale-105">
         <Plus size={36} strokeWidth={2.4} aria-hidden />
       </span>
-      <span className="mt-6 block text-lg font-bold text-white">Create knowledge base</span>
+      <span className="mt-6 block text-lg font-bold text-white">New workflow</span>
       <span className="mt-2 block max-w-sm text-sm font-medium leading-6 text-white/45">
-        Start with reusable source material for retrieval-ready workflows.
+        Choose a starter workflow or begin from a blank canvas.
       </span>
-      {!isSignedIn && <span className="mt-auto pt-5 text-xs font-semibold text-amber-200/80">Sign in before saving.</span>}
     </button>
   );
 }
