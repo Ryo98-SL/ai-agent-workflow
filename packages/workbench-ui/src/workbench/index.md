@@ -9,7 +9,8 @@ Reusable workbench state, layout, and canvas runtime.
 - `AppWorkbench.tsx` owns workflow state, API calls, active local/server API
   selection, initial load gating, content-snapshot dirty state, New Workflow
   template loading, Chat Mode dispatch, provider-key preparation,
-  workflow-scoped Debug Session selection, and floating panel visibility.
+  workflow-scoped Debug Session selection, active workflow id sync callbacks,
+  and floating panel visibility.
 - `types.ts` defines workbench UI state and the injected workflow API contract.
 - `dateFormat.ts` owns shared English date formatting for user-visible
   workbench timestamps.
@@ -63,3 +64,6 @@ streaming into their owning workflow session while another workflow is open.
 Tool nodes bind to descriptors from workflow-domain and can be created from
 either the left palette or a handle palette. Variable-bearing fields render
 Lexical chips but store the canonical template string.
+
+Host applications may pass `initialWorkflowId` and `onWorkflowIdChange` to keep
+their own URL or navigation state aligned with the workbench's active workflow.

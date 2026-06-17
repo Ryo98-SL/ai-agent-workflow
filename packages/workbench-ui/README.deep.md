@@ -9,12 +9,15 @@ or runtime execution adapters.
 Core responsibilities:
 
 - `src/index.ts` exports the public component, data-provider hooks, account
-  hooks, provider-key store hook, and API boundary types.
+  hooks, workflow hooks, provider-key store hook, theme/toast helpers, auth
+  menu, shared workflow icon glyph, Knowledge Base creation dialog, and API
+  boundary types.
 - `src/workbench/AppWorkbench.tsx` owns workflow state, panel visibility,
   initial source loading, local/remote API switching, persistence calls, graph
   undo/redo ownership, workflow-level run calls, Chat Mode sends, provider-key
   preparation, New Workflow template loading, workflow-scoped Debug Session
-  selection, and unsaved switch handling.
+  selection, unsaved switch handling, and host callbacks for active workflow id
+  synchronization.
 - `src/workbench/workflowDirtySnapshot.ts` owns the canonical content snapshot
   used for Save button dirty state.
 - `src/workbench/components` owns the canvas-first shell, popovers, inspectors,
@@ -92,6 +95,10 @@ Design constraints:
   activating the header Save button.
 - Workflow switcher rows use the saved workflow summary icon, not a fixed icon,
   and keep row metadata editing adjacent to row deletion inside the popover.
+- Host apps can pass `initialWorkflowId` to select a workflow from external
+  state such as a URL, and `onWorkflowIdChange` to mirror internal workbench
+  switches back to that external state. Keep routing dependencies in host apps,
+  not inside this package.
 - Edge selection is local UI state; edge deletion persists back to the workflow
   graph.
 - DeepSeek is the normal model-settings fallback. OpenAI and Anthropic are
@@ -108,7 +115,9 @@ Design constraints:
   dialog. The dialog reads the anonymous example KB, keeps private KB mutation
   actions disabled when signed out/read-only, supports pasted text and `.txt` /
   `.md` file ingestion, and renders disabled platform embedding fields for the
-  MVP. Knowledge node settings select one KB while persisting the array-shaped
+  MVP. The creation wizard is also exported for product-level entry points such
+  as the web homepage; consumers must still wrap it in `WorkbenchDataProvider`.
+  Knowledge node settings select one KB while persisting the array-shaped
   `knowledgeBaseIds` config, edit the query template, tune semantic retrieval
   limits, and render output variables.
 - Chat Mode uses `workflow.settings.mode === "chat"`. `useWorkflowExecution`

@@ -165,6 +165,8 @@ export type WorkbenchWorkflowApi = {
 export type AppWorkbenchProps = {
   workflowApi: WorkbenchWorkflowApi;
   showDevModelProviders?: boolean;
+  initialWorkflowId?: string;
+  onWorkflowIdChange?: (workflowId: string | undefined) => void;
   /**
    * Base URL of the auth/api server, used to construct the Better Auth client.
    * Defaults to VITE_WORKFLOW_API_BASE_URL semantics on the host app side.

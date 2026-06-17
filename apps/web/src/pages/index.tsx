@@ -1,6 +1,6 @@
-import { AppWorkbench } from "@ai-agent-workflow/workbench-ui";
+import { ProductHomepage } from "../homepage/ProductHomepage";
 import { apiBaseUrl, workflowApi } from "../lib/workflowApi";
 
-export default function WorkbenchPage() {
-  return <AppWorkbench workflowApi={workflowApi} apiBaseUrl={apiBaseUrl} showDevModelProviders={import.meta.env.DEV} />;
+export default function HomePage() {
+  return <ProductHomepage workflowApi={workflowApi} apiBaseUrl={apiBaseUrl} />;
 }

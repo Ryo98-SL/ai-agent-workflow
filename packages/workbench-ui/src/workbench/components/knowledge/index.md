@@ -15,12 +15,13 @@ Workbench UI for reusable Knowledge Bases and Knowledge node configuration.
   settings/documents components. The detail view edits metadata with a bottom
   action row (Save + Delete); deleting requires an inline confirmation step.
 - `CreateKnowledgeBaseDialog.tsx` is the two-step creation wizard, opened from the
-  dialog's "Add knowledge base" button. It layers above the parent via an elevated
+  dialog's "Add knowledge base" button and exported for product-level entry
+  points such as the web homepage. It layers above the parent via an elevated
   overlay/content z-index (`z-[210]`/`z-[211]`). Step 1 collects metadata plus a
   collapsible "Advanced settings" block (chunking/retrieval tuning) and creates the
   KB; step 2 attaches documents to the new KB and only enables "Done" once at least
-  one document has been added. Closing after step 1 still selects the created KB in
-  the parent list.
+  one document has been added. Closing after step 1 still calls `onCreated` so the
+  parent surface can close the dialog and record the created KB.
 - `KnowledgeMetadataFields.tsx` — controlled labeled Name/Description inputs shared
   by the wizard (step 1) and the detail pane. Takes an `idPrefix` so the two can
   coexist in the DOM without duplicate label ids.

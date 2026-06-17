@@ -111,7 +111,8 @@ Focused React components for the server-backed workbench shell.
   closes the popover and delegates the switch to the parent via `onSwitch(id,
   name)`; the parent (`AppWorkbench`) switches immediately when clean, or — when
   the open workflow has unsaved changes (`dirty`) — shows `WorkflowSwitchBar`
-  instead. (Per-row delete still uses the inline confirm row.)
+  instead, then notifies the host through the active workflow id callback after
+  a switch is applied. (Per-row delete still uses the inline confirm row.)
 - `WorkflowSwitchBar.tsx` is a floating, top-centered notification (absolutely
   positioned over the workbench, not in flow) shown when a switch is attempted
   with unsaved changes. It offers "Save & switch" (persist then switch) and

@@ -1,5 +1,4 @@
 import type { RunEvent, WorkflowRun } from "@ai-agent-workflow/api-contracts";
-import type { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma";
 
 /**
@@ -28,6 +27,10 @@ type RunRow = {
   completedAt: Date | null;
 };
 
+type RunJsonInput = Parameters<typeof prisma.run.create>[0]["data"]["input"];
+type RunNullableJsonInput = Exclude<NonNullable<Parameters<typeof prisma.run.updateMany>[0]["data"]>["output"], undefined>;
+type RunEventRow = Awaited<ReturnType<typeof prisma.runEvent.findMany>>[number];
+
 function toRunDto(row: RunRow): WorkflowRun {
   return {
     id: row.id,
@@ -42,7 +45,8 @@ function toRunDto(row: RunRow): WorkflowRun {
   };
 }
 
-const json = (value: unknown): Prisma.InputJsonValue => (value ?? null) as Prisma.InputJsonValue;
+const json = (value: unknown): RunJsonInput => (value ?? null) as RunJsonInput;
+const nullableJson = (value: unknown): RunNullableJsonInput => (value ?? null) as RunNullableJsonInput;
 
 export function createPrismaRunRepository(): RunRepository {
   return {
@@ -66,8 +70,8 @@ export function createPrismaRunRepository(): RunRepository {
           where: { id: run.id, userId },
           data: {
             status: run.status,
-            output: json(run.output),
-            error: json(run.error),
+            output: nullableJson(run.output),
+            error: nullableJson(run.error),
             completedAt: run.completedAt ? new Date(run.completedAt) : new Date(),
           },
         }),
@@ -78,7 +82,7 @@ export function createPrismaRunRepository(): RunRepository {
             sequence: event.sequence,
             type: event.type,
             message: event.message,
-            payload: event.payload ? json(event.payload) : undefined,
+            payload: event.payload ? nullableJson(event.payload) : undefined,
             createdAt: new Date(event.createdAt),
           })),
           skipDuplicates: true,
@@ -97,7 +101,7 @@ export function createPrismaRunRepository(): RunRepository {
         return null;
       }
       const rows = await prisma.runEvent.findMany({ where: { runId }, orderBy: { sequence: "asc" } });
-      return rows.map((row) => ({
+      return rows.map((row: RunEventRow) => ({
         id: row.id,
         runId: row.runId,
         sequence: row.sequence,

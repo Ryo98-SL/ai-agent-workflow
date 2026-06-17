@@ -20,7 +20,9 @@ Data boundary and React Query hooks for the workbench UI.
   delegates account/KB/credit calls to the server API.
 - `anonymousRunStore.ts` tracks anonymous run ids for session-scoped history and
   drops ids when server memory can no longer read them.
-- `useWorkflows.ts` exposes workflow and run-history queries/mutations.
+- `useWorkflows.ts` exposes workflow and run-history queries/mutations. The
+  workflow list hook is part of the public package surface so host apps can
+  render product-level workflow summaries without mounting the full editor.
 - `useAccount.ts` exposes session, provider-key, custom-model, and credits
   hooks.
 - `useKnowledgeBases.ts` exposes Knowledge Base list/read/mutation hooks plus

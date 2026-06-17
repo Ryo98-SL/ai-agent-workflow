@@ -25,6 +25,9 @@ Principles:
   saved from their own metadata editor.
 - Keep workflow switching row-oriented: the popover list shows each workflow's
   saved icon and places metadata edit actions beside delete actions.
+- Let host apps synchronize the active workflow id with their own URL/state by
+  passing `initialWorkflowId` and `onWorkflowIdChange`; the workbench package
+  does not import router APIs directly.
 - Keep node inspection focused: the panel header edits the node label, the body
   edits the description without a framed field, and Settings / History tabs
   separate configuration from run output. History queries all runs for the open
@@ -61,7 +64,7 @@ Principles:
   per-tool forms.
 
 ```tsx
-import { AppWorkbench } from "@ai-agent-workflow/workbench-ui";
+import { AppWorkbench, WorkbenchDataProvider } from "@ai-agent-workflow/workbench-ui";
 import "@xyflow/react/dist/style.css";
 import "@ai-agent-workflow/workbench-ui/styles.css";
 
@@ -79,3 +82,8 @@ debug panel so selected nodes and historical runs show the same card details as
 the workflow run log. LLM, Knowledge, Tool, Human Input, and Template authoring
 surfaces show output variables so downstream prompt references can be authored
 from the same panel.
+
+The package also exports the shared data provider, session/workflow hooks,
+themed toaster, theme provider, auth menu, shared workflow icon glyph, and
+Knowledge Base creation dialog so host apps can build product-level shells
+without duplicating workbench internals.

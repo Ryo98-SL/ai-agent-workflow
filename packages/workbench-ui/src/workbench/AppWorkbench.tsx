@@ -81,7 +81,7 @@ export function AppWorkbench({ apiBaseUrl, ...props }: AppWorkbenchProps) {
   );
 }
 
-function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
+function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWorkflowIdChange }: AppWorkbenchProps) {
   // Server-backed when signed in, localStorage-backed when anonymous.
   const workflowApi = useActiveWorkflowApi();
   const { data: sessionData, isPending: sessionPending } = useSession();
@@ -178,11 +178,12 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
       activateWorkflowDebugView(dto.id);
       setWorkflow(dto.workflow);
       setWorkflowId(dto.id);
+      onWorkflowIdChange?.(dto.id);
       setSavedWorkflowSnapshot(workflowDirtySnapshot(dto.workflow));
       resetHistory();
       resetSelectionPanels();
     },
-    [activateWorkflowDebugView, activateWorkflowSession, resetHistory, resetSelectionPanels],
+    [activateWorkflowDebugView, activateWorkflowSession, onWorkflowIdChange, resetHistory, resetSelectionPanels],
   );
 
   const applySavedWorkflowDto = useCallback(
@@ -192,9 +193,10 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
       moveActiveWorkflowDebugView(dto.id);
       setWorkflow(nextWorkflow);
       setWorkflowId(dto.id);
+      onWorkflowIdChange?.(dto.id);
       setSavedWorkflowSnapshot(workflowDirtySnapshot(nextWorkflow));
     },
-    [moveActiveWorkflowDebugView, moveActiveWorkflowSession],
+    [moveActiveWorkflowDebugView, moveActiveWorkflowSession, onWorkflowIdChange],
   );
 
   const errorMessage = useCallback((error: unknown) => {
@@ -241,7 +243,9 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
       setDebugState({ status: "loading" });
       try {
         const list = await workflowApi.listWorkflows();
-        const first = list.workflows[0];
+        const first =
+          (initialWorkflowId ? list.workflows.find((item) => item.id === initialWorkflowId) : undefined) ??
+          list.workflows[0];
 
         if (first) {
           const response = await workflowApi.getWorkflow(first.id);
@@ -259,6 +263,7 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
           activateWorkflowDebugView(DRAFT_WORKFLOW_SESSION_KEY);
           setWorkflow(nextWorkflow);
           setWorkflowId(undefined);
+          onWorkflowIdChange?.(undefined);
           setSavedWorkflowSnapshot(workflowDirtySnapshot(nextWorkflow));
           resetHistory();
           resetSelectionPanels();
@@ -287,6 +292,8 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
     errorMessage,
     bootstrapKey,
     isAnonymous,
+    initialWorkflowId,
+    onWorkflowIdChange,
     resetHistory,
     resetSelectionPanels,
     resetWorkflowSession,
@@ -568,10 +575,18 @@ function WorkbenchApp({ showDevModelProviders = false }: AppWorkbenchProps) {
       setWorkflow(next);
       resetSelectionPanels();
       setWorkflowId(undefined);
+      onWorkflowIdChange?.(undefined);
       setSavedWorkflowSnapshot(workflowDirtySnapshot(next));
       resetHistory();
     },
-    [activateWorkflowDebugView, activateWorkflowSession, resetHistory, resetSelectionPanels, resetWorkflowSession],
+    [
+      activateWorkflowDebugView,
+      activateWorkflowSession,
+      onWorkflowIdChange,
+      resetHistory,
+      resetSelectionPanels,
+      resetWorkflowSession,
+    ],
   );
 
   // Blank fallback (e.g. after deleting the last workflow) — no picker.
