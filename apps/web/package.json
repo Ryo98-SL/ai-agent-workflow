@@ -6,6 +6,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite --host 127.0.0.1",
+    "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
