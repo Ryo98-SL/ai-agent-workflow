@@ -61,7 +61,7 @@ export function HomepageShell({
         <div className="flex min-w-[11.5rem] shrink-0 items-center justify-end justify-self-end">{accountSlot}</div>
       </header>
 
-      <main className="px-4 py-8 sm:px-6 lg:px-10 xl:px-14">{children}</main>
+      <main className="min-h-[calc(100vh-72px)] bg-muted/30 px-4 py-8 sm:px-6 lg:px-10 xl:px-14">{children}</main>
     </div>
   );
 }

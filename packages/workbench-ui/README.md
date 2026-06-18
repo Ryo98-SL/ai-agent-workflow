@@ -94,7 +94,7 @@ surfaces show output variables so downstream prompt references can be authored
 from the same panel.
 
 The package also exports the shared data provider, session/workflow hooks,
-themed toaster, theme provider, theme menu, auth menu, shared workflow icon
-glyph, New Workflow template dialog, Knowledge Base creation dialog, and
-`workbenchI18nResources` so host apps can build product-level shells without
-duplicating workbench internals.
+themed toaster, theme provider, theme menu, auth menu, body-level `Popover`,
+shared workflow icon glyph, New Workflow template dialog, Knowledge Base
+creation dialog, and `workbenchI18nResources` so host apps can build
+product-level shells without duplicating workbench internals.

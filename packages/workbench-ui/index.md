@@ -7,8 +7,9 @@ workflow IO stays behind the injected API.
 
 ## Structure
 
-- `src/index.ts` exports the public workbench component, public data/account
-  hooks, provider-key store hook, auth client type, and workbench API types.
+- `src/index.ts` exports the public workbench component, shared `Popover`,
+  public data/account hooks, provider-key store hook, auth client type, and
+  workbench API types.
 - `src/styles.css` provides Tailwind plus the shadcn CSS-variable theme tokens
   (zinc base, light + dark) and token-based base document styles.
 - `src/components/ui/` holds the shadcn/ui primitives (new-york style); see its

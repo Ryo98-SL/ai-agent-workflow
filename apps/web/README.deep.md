@@ -21,12 +21,15 @@ shared workbench UI at `/workbench`, and injects a typed workflow client.
   workflow card grid, compact local workflow search, Product Locale switcher,
   the search review gallery, and the Studio New Workflow entry point. Its shell,
   cards, search field, header tabs, and primary accents follow the same
-  light/dark workbench tokens, workflow cards render the saved workflow metadata
-  icon in a compact responsive grid that reaches four columns on desktop, and
-  the top-left Studio card opens the shared New Workflow template dialog. The
-  header uses a three-column grid with a stable right utility slot for the
-  Product Locale switcher, shared theme switcher, and account menu so the
-  centered tabs do not shift across auth states.
+  light/dark workbench tokens; the header stays on `bg-card/95` while the
+  header-below canvas uses `bg-muted/30` for contrast. Workflow cards render the
+  saved workflow metadata icon in a compact responsive grid that reaches four
+  columns on desktop, and the top-left Studio card opens the shared New Workflow
+  template dialog. The header uses a three-column grid with a stable right
+  utility slot for the Product Locale switcher, shared theme switcher, and
+  account menu so the centered tabs do not shift across auth states. The Product
+  Locale switcher uses the shared workbench `Popover` instead of a native select
+  or custom floating implementation.
 - `src/i18n/` owns the app-level `web` namespace resources for `en-US` and
   `zh-CN` homepage Product Locale copy.
 - `src/pages/design/` hosts design-gallery pages for workbench UI surfaces,

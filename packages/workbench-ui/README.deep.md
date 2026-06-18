@@ -10,8 +10,9 @@ Core responsibilities:
 
 - `src/index.ts` exports the public component, data-provider hooks, account
   hooks, workflow hooks, provider-key store hook, theme/toast helpers, auth
-  menu, theme menu, shared workflow icon glyph, New Workflow template dialog,
-  Knowledge Base creation dialog, and API boundary types.
+  menu, theme menu, shared body-level `Popover`, shared workflow icon glyph, New
+  Workflow template dialog, Knowledge Base creation dialog, and API boundary
+  types.
 - `src/workbench/AppWorkbench.tsx` owns workflow state, panel visibility,
   initial source loading, local/remote API switching, persistence calls, graph
   undo/redo ownership, workflow-level run calls, Chat Mode sends, provider-key

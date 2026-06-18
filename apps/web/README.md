@@ -19,8 +19,9 @@ the preserved workbench route lives in `src/pages/workbench/index.tsx`, and
 design-only galleries live in `src/pages/design/`.
 
 The homepage follows the shared workbench light/dark theme tokens for its shell,
-cards, search field, header tabs, and primary accents. Its header places the
-Product Locale switcher beside the shared theme switcher and account menu.
+header-below canvas, cards, search field, header tabs, and primary accents. Its
+header places the Product Locale switcher beside the shared theme switcher and
+account menu; the language menu uses the shared workbench `Popover`.
 Studio workflow cards read each workflow's saved metadata icon, format edited
 dates with Product Locale, use a compact responsive grid that reaches four
 columns on desktop, the top-left card opens the shared New Workflow template

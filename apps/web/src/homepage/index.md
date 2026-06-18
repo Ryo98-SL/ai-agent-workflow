@@ -11,8 +11,10 @@ entry point.
 - `ProductHomepage.tsx` wraps the homepage runtime in `ThemeProvider`,
   `WorkbenchDataProvider`, and the shared toaster.
 - `HomepageShell.tsx` renders the product mark, centered `Studio`/`Knowledge`
-  tabs, and right utility slot using a three-column CSS grid. Its header and
-  root shell use the same `bg-background`, `bg-card`, `text-foreground`,
+  tabs, and right utility slot using a three-column CSS grid. Its header uses
+  `bg-card/95`, while the header-below canvas uses `bg-muted/30` so homepage
+  cards sit on a subtly grayer workbench-token background.
+  Text, borders, tabs, and accents use the same `text-foreground`,
   `text-muted-foreground`, `border-border`, and `brand` tokens as the workbench.
   The right slot reserves stable width for the theme switcher plus auth
   pending/signed-out/signed-in states so trigger changes do not shift the
@@ -21,8 +23,9 @@ entry point.
 - `ProductHomepage.tsx` provides the shared `ThemeProvider` and places the
   Product Locale `LanguageSwitcher`, workbench `ThemeMenu`, and `AuthMenu` in
   the homepage header.
-- `LanguageSwitcher.tsx` reads `useProductLocale` from the shared i18n package
-  and persists manual language selection through the shared localStorage key.
+- `LanguageSwitcher.tsx` reads `useProductLocale` from the shared i18n package,
+  opens the locale list through the shared workbench `Popover`, and persists
+  manual language selection through the shared localStorage key.
 - `StudioPanel.tsx` reads workflows with `useWorkflows`, filters them locally,
   renders compact theme-aware workflow cards with saved workflow metadata icons,
   and opens the shared `NewWorkflowDialog` from the create card. The responsive

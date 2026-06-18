@@ -14,6 +14,9 @@
 
 ## Gotchas
 
+- Before building complex UI components, check the existing shared components
+  and package exports first. Prefer reusing codebase primitives such as the
+  shared workbench `Popover` instead of duplicating behavior or styling.
 - The web homepage header must use a three-column CSS grid
   (`1fr auto 1fr`) so the center tabs are centered against the full viewport,
   not against the uneven left and right content widths.
