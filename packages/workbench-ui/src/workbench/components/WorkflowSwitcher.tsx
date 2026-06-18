@@ -1,7 +1,9 @@
 import { Check, ChevronsUpDown, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import type { WorkflowFile } from "@ai-agent-workflow/workflow-domain";
 import { useWorkflows } from "../../data/useWorkflows";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import { FIELD_SHELL_CLASS, FIELD_SHELL_INPUT_CLASS } from "./fieldStyles";
 import { Button } from "./Button";
 import { Popover } from "./Popover";
@@ -27,6 +29,7 @@ export function WorkflowSwitcher({
   onDelete,
   onSaveMeta,
 }: WorkflowSwitcherProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -70,7 +73,7 @@ export function WorkflowSwitcher({
           size="unstyled"
           className="-ml-1 flex min-w-0 max-w-[260px] items-center gap-2 rounded-md px-2 py-1 hover:bg-accent"
           onClick={() => setOpen((v) => !v)}
-          aria-label="Switch workflow"
+          aria-label={t("workflowSwitcher.switchWorkflow")}
         >
           <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-brand text-brand-foreground">
             <WorkflowIconGlyph icon={activeWorkflowMetadata.icon} size={15} />
@@ -78,7 +81,7 @@ export function WorkflowSwitcher({
           <span className="min-w-0 flex-1 text-left">
             <span className="flex items-center gap-1">
               <span className="truncate text-sm font-semibold">{workflow.metadata.name}</span>
-              {dirty && <span className="size-1.5 shrink-0 rounded-full bg-brand" title="Unsaved changes" />}
+              {dirty && <span className="size-1.5 shrink-0 rounded-full bg-brand" title={t("workflowSwitcher.unsavedChanges")} />}
             </span>
           </span>
           <ChevronsUpDown size={14} className="shrink-0 text-muted-foreground" aria-hidden />
@@ -92,7 +95,7 @@ export function WorkflowSwitcher({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search workflows"
+              placeholder={t("workflowSwitcher.search")}
               className={FIELD_SHELL_INPUT_CLASS}
             />
           </label>
@@ -101,10 +104,10 @@ export function WorkflowSwitcher({
         <div className="max-h-64 overflow-y-auto py-1">
           {isLoading ? (
             <div className="flex items-center justify-center gap-2 px-3 py-6 text-sm text-muted-foreground">
-              <Loader2 size={15} className="animate-spin" aria-hidden /> Loading…
+              <Loader2 size={15} className="animate-spin" aria-hidden /> {t("workflowSwitcher.loading")}
             </div>
           ) : workflows.length === 0 ? (
-            <p className="px-3 py-6 text-center text-sm text-muted-foreground">No workflows found.</p>
+            <p className="px-3 py-6 text-center text-sm text-muted-foreground">{t("workflowSwitcher.empty")}</p>
           ) : (
             workflows.map((item) => {
               const active = item.id === workflowId;
@@ -116,7 +119,7 @@ export function WorkflowSwitcher({
                 return (
                   <div key={item.id} className="flex h-11 items-center gap-2 px-3">
                     <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-                      Delete “{item.name}”?
+                      {t("workflowSwitcher.deleteConfirm", { name: item.name })}
                     </span>
                     <Button
                       variant="ghost"
@@ -127,10 +130,10 @@ export function WorkflowSwitcher({
                         setConfirmingId(null);
                       }}
                     >
-                      Delete
+                      {t("workflowSwitcher.delete")}
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setConfirmingId(null)}>
-                      Cancel
+                      {t("workflowSwitcher.cancel")}
                     </Button>
                   </div>
                 );
@@ -157,7 +160,7 @@ export function WorkflowSwitcher({
                   <Button
                     variant="ghost"
                     size="iconMd"
-                    aria-label={`Delete ${item.name}`}
+                    aria-label={t("workflowSwitcher.deleteAria", { name: item.name })}
                     className="opacity-0 group-hover/wf:opacity-100"
                     onClick={(event) => {
                       event.stopPropagation();
@@ -183,7 +186,7 @@ export function WorkflowSwitcher({
               setOpen(false);
             }}
           >
-            <Plus size={15} aria-hidden /> New workflow
+            <Plus size={15} aria-hidden /> {t("workflowSwitcher.newWorkflow")}
           </Button>
         </div>
       </div>

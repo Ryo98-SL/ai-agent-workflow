@@ -21,9 +21,11 @@ helpers shared by apps, server code, and future packages.
 - `src/conditions.ts` evaluates If/Else branches against runtime state.
 - `src/availableVariables.ts` computes upstream variable groups for prompt,
   condition, tool, and template authoring.
-- `src/workflowTemplates.ts` exports starter workflow metadata and factories for
-  the New Workflow picker, including RAG/HITL examples and Agent examples that
-  bind both built-in and MCP tools inline.
+- `src/workflowTemplates.ts` exports stable starter workflow manifests,
+  `getWorkflowTemplates(locale)`, `getWorkflowTemplate(id, locale)`, and
+  `buildWorkflowFromTemplate(id, locale)` for the New Workflow picker. It
+  localizes template summaries and generated starter copy without storing a
+  locale on created workflows.
 - `src/promptVariables.ts` extracts and resolves namespaced `{{nodeId.field}}`
   placeholders against workflow runtime state.
 - `src/index.ts` is the public package entrypoint.
@@ -55,4 +57,6 @@ keys into the provider keyring.
 Starter workflow factories create runnable examples for the New Workflow picker:
 blank, customer-support RAG, customer-support HITL, Agent tool routing, and a
 customer-support Agent that combines Knowledge retrieval with a built-in tool and
-a Built-in MCP Server tool.
+a Built-in MCP Server tool. Template Locale is an explicit input to the template
+registry; Product Locale changes after creation do not rewrite saved workflow
+content.

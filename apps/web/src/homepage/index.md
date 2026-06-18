@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Production web homepage for `/`. It owns the dark Studio/Knowledge shell,
+Production web homepage for `/`. It owns the theme-aware Studio/Knowledge shell,
 workflow card list, compact local workflow search, and the Studio New Workflow
 entry point.
 
@@ -11,18 +11,32 @@ entry point.
 - `ProductHomepage.tsx` wraps the homepage runtime in `ThemeProvider`,
   `WorkbenchDataProvider`, and the shared toaster.
 - `HomepageShell.tsx` renders the product mark, centered `Studio`/`Knowledge`
-  tabs, and account slot using a three-column CSS grid. The right account slot
-  reserves stable width so auth pending/signed-out/signed-in trigger changes do
-  not shift the header. Header tab buttons keep a transparent base border so
-  active and inactive states have the same box metrics.
+  tabs, and right utility slot using a three-column CSS grid. Its header and
+  root shell use the same `bg-background`, `bg-card`, `text-foreground`,
+  `text-muted-foreground`, `border-border`, and `brand` tokens as the workbench.
+  The right slot reserves stable width for the theme switcher plus auth
+  pending/signed-out/signed-in states so trigger changes do not shift the
+  header. Header tab buttons keep a transparent base border so active and
+  inactive states have the same box metrics.
+- `ProductHomepage.tsx` provides the shared `ThemeProvider` and places the
+  Product Locale `LanguageSwitcher`, workbench `ThemeMenu`, and `AuthMenu` in
+  the homepage header.
+- `LanguageSwitcher.tsx` reads `useProductLocale` from the shared i18n package
+  and persists manual language selection through the shared localStorage key.
 - `StudioPanel.tsx` reads workflows with `useWorkflows`, filters them locally,
-  renders workflow cards with saved workflow metadata icons, and opens the
-  shared `NewWorkflowDialog` from the create card. Creating a template workflow
-  refreshes the workflow list and navigates to `/workbench?workflowId=<id>`.
-- `KnowledgePanel.tsx` is the lightweight Knowledge tab surface and reuses the
-  same create dialog.
+  renders compact theme-aware workflow cards with saved workflow metadata icons,
+  and opens the shared `NewWorkflowDialog` from the create card. The responsive
+  grid uses 2 columns from `md`, 3 from `lg`, and 4 from `xl`. Creating a
+  template workflow refreshes the workflow list and navigates to
+  `/workbench?workflowId=<id>`.
+- `KnowledgePanel.tsx` is the lightweight Knowledge tab surface, reuses the same
+  compact responsive theme-aware card grid, and opens the Knowledge Base create
+  dialog.
 - `SearchTagFilter.tsx` is the reusable controlled single-line workflow search
-  input. Escape clears the query.
+  input. It follows the workbench field token pattern and Escape clears the
+  query.
+- `../i18n/` owns the homepage `web` namespace resources for `en-US` and
+  `zh-CN`.
 - `SearchTagFilterGallery.tsx` exposes the compact review surface at
   `/design/search-tag-filter`.
 - `types.ts` contains local contracts for homepage tabs, filter value, filter
@@ -35,3 +49,6 @@ the current workflow API. It does not show tag chips or suggested tags because
 workflow tags are not persisted. Workflow cards link to
 `/workbench?workflowId=<id>`, and the workbench route opens that workflow and
 keeps the URL synchronized when the header switcher changes workflows.
+Product Locale translates homepage chrome and date formatting only; workflow
+names, descriptions, icons, and other saved summary fields are rendered as
+stored.

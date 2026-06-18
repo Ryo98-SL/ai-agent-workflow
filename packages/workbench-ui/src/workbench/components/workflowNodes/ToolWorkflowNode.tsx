@@ -1,15 +1,19 @@
 import { resolveToolDescriptor, type ToolDescriptor, type ToolNode } from "@ai-agent-workflow/workflow-domain";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import { VariableText } from "../VariableTag";
+import { localizedToolDescriptor } from "../tools/localizedToolDescriptor";
 import { WorkflowNodeCardShell, type WorkflowNodeProps } from "./WorkflowNodeCardShell";
 import { resolveToolIcon } from "./workflowNodeVisuals";
 
 export function ToolWorkflowNode(props: WorkflowNodeProps) {
+  const { t } = useTranslation("workbench");
   const node = props.data.node;
   const descriptor = node.type === "tool" ? resolveToolDescriptor(node.config) : undefined;
-  const Icon = resolveToolIcon(descriptor?.icon);
+  const localizedDescriptor = descriptor ? localizedToolDescriptor(descriptor, t) : undefined;
+  const Icon = resolveToolIcon(localizedDescriptor?.icon);
   return (
     <WorkflowNodeCardShell {...props} Icon={Icon}>
-      {node.type === "tool" && descriptor ? <ToolCardSummary node={node} descriptor={descriptor} /> : undefined}
+      {node.type === "tool" && localizedDescriptor ? <ToolCardSummary node={node} descriptor={localizedDescriptor} /> : undefined}
     </WorkflowNodeCardShell>
   );
 }
@@ -20,6 +24,7 @@ export function ToolWorkflowNode(props: WorkflowNodeProps) {
  * per-tool hard-coding, so MCP/custom tools get a summary for free.
  */
 function ToolCardSummary({ node, descriptor }: { node: ToolNode; descriptor: ToolDescriptor }) {
+  const { t } = useTranslation("workbench");
   const primaries = descriptor.params.filter((param) => param.primary);
   const booleans = descriptor.params.filter((param) => param.type === "boolean");
 
@@ -43,7 +48,7 @@ function ToolCardSummary({ node, descriptor }: { node: ToolNode; descriptor: Too
               on ? "bg-amber-500/15 text-amber-700 dark:text-amber-300" : "bg-muted text-muted-foreground",
             ].join(" ")}
           >
-            {on ? param.label : `${param.label}: off`}
+            {on ? param.label : `${param.label}: ${t("tools.off")}`}
           </span>
         );
       })}

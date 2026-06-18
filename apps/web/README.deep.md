@@ -6,7 +6,8 @@
 React Router, renders the product homepage at the root route, preserves the
 shared workbench UI at `/workbench`, and injects a typed workflow client.
 
-- `src/main.tsx` creates the browser router and renders `RouterProvider`.
+- `src/main.tsx` creates the browser router, wraps it in the shared
+  `I18nProvider`, and renders `RouterProvider`.
 - `src/routes.tsx` builds routes from `src/pages/**/*.tsx` via
   `import.meta.glob`, mapping `pages/index.tsx` to `/` and bracketed segments to
   dynamic route params.
@@ -16,13 +17,18 @@ shared workbench UI at `/workbench`, and injects a typed workflow client.
   client, enables development model providers in dev mode, reads `workflowId`
   from the URL, and writes the active workflow id back to the URL when the
   workbench switches workflows.
-- `src/homepage/` owns the dark Studio/Knowledge homepage shell, the workflow
-  card grid, compact local workflow search, the search review gallery, and the
-  Studio New Workflow entry point. Its header tabs and primary accents use the
-  shared workbench `brand` color tokens, workflow cards render the saved
-  workflow metadata icon, and the top-left Studio card opens the shared New
-  Workflow template dialog. The header uses a three-column grid with a stable
-  account slot so the centered tabs do not shift across auth states.
+- `src/homepage/` owns the theme-aware Studio/Knowledge homepage shell, the
+  workflow card grid, compact local workflow search, Product Locale switcher,
+  the search review gallery, and the Studio New Workflow entry point. Its shell,
+  cards, search field, header tabs, and primary accents follow the same
+  light/dark workbench tokens, workflow cards render the saved workflow metadata
+  icon in a compact responsive grid that reaches four columns on desktop, and
+  the top-left Studio card opens the shared New Workflow template dialog. The
+  header uses a three-column grid with a stable right utility slot for the
+  Product Locale switcher, shared theme switcher, and account menu so the
+  centered tabs do not shift across auth states.
+- `src/i18n/` owns the app-level `web` namespace resources for `en-US` and
+  `zh-CN` homepage Product Locale copy.
 - `src/pages/design/` hosts design-gallery pages for workbench UI surfaces,
   including the archived homepage candidate at `/design/home-page` and the
   Search/tag variants at `/design/search-tag-filter`.
@@ -37,9 +43,14 @@ shared workbench UI at `/workbench`, and injects a typed workflow client.
 
 ## Integration Boundary
 
-The app depends on `@ai-agent-workflow/workbench-ui` for UI and
-`@ai-agent-workflow/workflow-client` for REST communication. It does not import
+The app depends on `@ai-agent-workflow/workbench-ui` for UI,
+`@ai-agent-workflow/workflow-client` for REST communication, and
+`@ai-agent-workflow/i18n` for Product Locale provider wiring. It does not import
 Electron code or the server implementation directly.
+
+Product Locale resolves locally from manual localStorage preference, browser
+language, then `en-US`. It translates app-owned UI chrome and date formatting
+without modifying workflow summaries returned by the API.
 
 ## Test Strategy
 

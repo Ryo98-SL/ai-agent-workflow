@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FileText, Loader2, RefreshCcw, Trash2, Upload } from "lucide-react";
+import { useProductLocale, useTranslation } from "@ai-agent-workflow/i18n";
 import type { KnowledgeBaseDto, KnowledgeDocumentDto } from "@ai-agent-workflow/api-contracts";
 import { Input } from "@workbench/components/ui/input";
 import { Textarea } from "@workbench/components/ui/textarea";
@@ -10,6 +11,7 @@ import {
   useKnowledgeBaseDocuments,
   useReindexKnowledgeDocument,
 } from "../../../data/useKnowledgeBases";
+import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 import { formatWorkbenchDate } from "../../dateFormat";
 import { Button } from "../Button";
 import { LoadingRow, errorMessage } from "./shared";
@@ -22,6 +24,7 @@ export function KnowledgeDocumentsSection({
   knowledgeBase: KnowledgeBaseDto;
   readOnly: boolean;
 }) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const documents = useKnowledgeBaseDocuments(knowledgeBase.id);
   const list = documents.data?.documents ?? [];
 
@@ -29,7 +32,9 @@ export function KnowledgeDocumentsSection({
     <div className="space-y-5">
       {!readOnly && <AddDocumentPanel knowledgeBase={knowledgeBase} />}
       <section>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Documents</h3>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("knowledge.documents.title")}
+        </h3>
         <div className="space-y-2">
           {documents.isLoading && <LoadingRow />}
           {list.map((document) => (
@@ -37,7 +42,7 @@ export function KnowledgeDocumentsSection({
           ))}
           {!documents.isLoading && list.length === 0 && (
             <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
-              {readOnly ? "No documents." : "No documents yet — paste text or upload a .txt/.md file."}
+              {readOnly ? t("knowledge.documents.emptyReadOnly") : t("knowledge.documents.emptyEditable")}
             </p>
           )}
         </div>
@@ -47,6 +52,7 @@ export function KnowledgeDocumentsSection({
 }
 
 function AddDocumentPanel({ knowledgeBase }: { knowledgeBase: KnowledgeBaseDto }) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const createText = useCreateTextKnowledgeDocument();
   const createFile = useCreateFileKnowledgeDocument();
   const [title, setTitle] = useState("");
@@ -67,12 +73,18 @@ function AddDocumentPanel({ knowledgeBase }: { knowledgeBase: KnowledgeBaseDto }
 
   return (
     <section className="space-y-2">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add Document</h3>
-      <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="标题" />
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {t("knowledge.documents.addTitle")}
+      </h3>
+      <Input
+        value={title}
+        onChange={(event) => setTitle(event.target.value)}
+        placeholder={t("knowledge.documents.titlePlaceholder")}
+      />
       <Textarea
         value={content}
         onChange={(event) => setContent(event.target.value)}
-        placeholder="粘贴文本…"
+        placeholder={t("knowledge.documents.contentPlaceholder")}
         className="min-h-24 resize-y"
       />
       <div className="flex flex-wrap items-center gap-2">
@@ -83,7 +95,7 @@ function AddDocumentPanel({ knowledgeBase }: { knowledgeBase: KnowledgeBaseDto }
           onClick={submitText}
         >
           {createText.isPending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <FileText size={14} aria-hidden />}
-          Add text
+          {t("knowledge.documents.addText")}
         </Button>
         <label className="inline-flex">
           <input
@@ -109,12 +121,14 @@ function AddDocumentPanel({ knowledgeBase }: { knowledgeBase: KnowledgeBaseDto }
           />
           <span className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground hover:bg-accent">
             {createFile.isPending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Upload size={14} aria-hidden />}
-            Upload
+            {t("knowledge.documents.upload")}
           </span>
         </label>
       </div>
       {(createText.error || createFile.error) && (
-        <p className="text-xs text-destructive">{errorMessage(createText.error ?? createFile.error)}</p>
+        <p className="text-xs text-destructive">
+          {errorMessage(createText.error ?? createFile.error, t("knowledge.requestFailed"))}
+        </p>
       )}
     </section>
   );
@@ -129,6 +143,8 @@ function DocumentRow({
   document: KnowledgeDocumentDto;
   readOnly: boolean;
 }) {
+  const { locale } = useProductLocale();
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const deleteDocument = useDeleteKnowledgeDocument(knowledgeBaseId);
   const reindexDocument = useReindexKnowledgeDocument(knowledgeBaseId);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -141,13 +157,16 @@ function DocumentRow({
           <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase">{document.status}</span>
         </div>
         <p className="mt-1 truncate text-xs text-muted-foreground">
-          {document.characterCount.toLocaleString()} chars · {formatWorkbenchDate(document.updatedAt)}
+          {t("dates.charsUpdated", {
+            count: document.characterCount.toLocaleString(locale),
+            date: formatWorkbenchDate(document.updatedAt, { locale }),
+          })}
         </p>
         {document.errorMessage && <p className="mt-1 text-xs text-destructive">{document.errorMessage}</p>}
       </div>
       {confirmingDelete ? (
         <>
-          <span className="text-xs text-muted-foreground">Delete?</span>
+          <span className="text-xs text-muted-foreground">{t("knowledge.documents.deleteConfirm")}</span>
           <Button
             variant="ghost"
             size="sm"
@@ -156,10 +175,10 @@ function DocumentRow({
             onClick={() => deleteDocument.mutate(document.id)}
           >
             {deleteDocument.isPending && <Loader2 size={14} className="animate-spin" aria-hidden />}
-            Delete
+            {t("knowledge.documents.delete")}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>
-            Cancel
+            {t("knowledge.documents.cancel")}
           </Button>
         </>
       ) : (
@@ -169,7 +188,7 @@ function DocumentRow({
             size="iconSm"
             disabled={readOnly || reindexDocument.isPending}
             onClick={() => reindexDocument.mutate(document.id)}
-            aria-label="Reindex document"
+            aria-label={t("knowledge.documents.reindex")}
           >
             <RefreshCcw size={14} aria-hidden />
           </Button>
@@ -178,7 +197,7 @@ function DocumentRow({
             size="iconSm"
             disabled={readOnly}
             onClick={() => setConfirmingDelete(true)}
-            aria-label="Delete document"
+            aria-label={t("knowledge.documents.deleteAria")}
           >
             <Trash2 size={14} aria-hidden />
           </Button>

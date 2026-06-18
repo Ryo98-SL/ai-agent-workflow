@@ -30,9 +30,11 @@ Electron, server, or runtime execution dependencies.
   exports shared operator labels.
 - `src/availableVariables.ts` computes upstream Available Variables for a
   consumer node, including Chat Mode's ambient `userInput` namespace.
-- `src/workflowTemplates.ts` defines the starter workflow registry used by the
-  New Workflow picker, including the RAG/HITL examples plus Agent templates that
-  demonstrate inline built-in and MCP tool bindings.
+- `src/workflowTemplates.ts` defines stable starter workflow manifests,
+  localized `en-US` / `zh-CN` template summaries, and explicit-locale factories
+  used by the New Workflow picker. It overlays localized starter copy after
+  building the stable base topology, preserving template ids, tools, model
+  defaults, and graph wiring.
 - `src/promptVariables.ts` defines namespaced prompt placeholder parsing,
   runtime-state resolution, and legacy variable value merging.
 - `src/index.ts` exports the stable public API used by app, runtime, and tests.
@@ -43,6 +45,9 @@ Electron, server, or runtime execution dependencies.
 Consumers import from `@ai-agent-workflow/workflow-domain`. They should not
 reach into package internals, because later API contracts and server code will
 share the same entrypoint.
+
+Product or Template Locale must be passed explicitly. The domain package does
+not read browser state, React context, localStorage, or routes.
 
 ## Test Strategy
 

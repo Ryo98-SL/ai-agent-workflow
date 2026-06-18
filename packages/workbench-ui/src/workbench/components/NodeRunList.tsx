@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, ChevronRight, Loader2 } from "lucide-react";
+import { useProductLocale, useTranslation } from "@ai-agent-workflow/i18n";
 import type { RunInput, WorkflowRun } from "@ai-agent-workflow/api-contracts";
 import type { WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import type { DebugState, NodeExecutionState } from "../types";
 import { formatWorkbenchDate } from "../dateFormat";
 import { useWorkflowRuns } from "../../data/useWorkflows";
@@ -37,6 +39,7 @@ type NodeRunListItem = {
 };
 
 export function NodeRunList({ workflow, workflowId, node, debugState, nodeStates }: NodeRunListProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const { data, isLoading } = useWorkflowRuns(workflowId);
   const items = useMemo(
     () => buildNodeRunListItems(workflow, node, debugState, nodeStates, data?.runs ?? []),
@@ -48,23 +51,47 @@ export function NodeRunList({ workflow, workflowId, node, debugState, nodeStates
   }
 
   if (isLoading && items.length === 0) {
-    return <RunEmptyState title="Loading" detail="Loading node history." loading />;
+    return (
+      <RunEmptyState
+        title={t("runOutput.loadingTitle", { defaultValue: "Loading" })}
+        detail={t("runOutput.loadingNodeHistoryDetail", { defaultValue: "Loading node history." })}
+        loading
+      />
+    );
   }
 
   if (debugState.status === "loading") {
-    return <RunEmptyState title="Loading" detail="Loading run output." loading />;
+    return (
+      <RunEmptyState
+        title={t("runOutput.loadingTitle", { defaultValue: "Loading" })}
+        detail={t("runOutput.loadingRunOutputDetail", { defaultValue: "Loading run output." })}
+        loading
+      />
+    );
   }
 
   if (debugState.status === "running" && items.length === 0) {
-    return <RunEmptyState title="Running" detail="Waiting for this node to start..." loading />;
+    return (
+      <RunEmptyState
+        title={t("runOutput.runningTitle", { defaultValue: "Running" })}
+        detail={t("runOutput.waitingThisNodeDetail", { defaultValue: "Waiting for this node to start..." })}
+        loading
+      />
+    );
   }
 
   if (items.length === 0) {
     const hasRuns = (data?.runs.length ?? 0) > 0;
     return hasRuns ? (
-      <RunEmptyState title="No history item" detail="No workflow run has recorded output for this node." />
+      <RunEmptyState
+        title={t("runOutput.noHistoryItemTitle", { defaultValue: "No history item" })}
+        detail={t("runOutput.noHistoryItemDetail", { defaultValue: "No workflow run has recorded output for this node." })}
+      />
     ) : (
-      <RunEmptyState title="No history" detail="Run the workflow to inspect this node's execution history." />
+      <RunEmptyState
+        title={t("runOutput.noHistoryTitle", { defaultValue: "No history" })}
+        detail={t("runOutput.noHistoryDetail", { defaultValue: "Run the workflow to inspect this node's execution history." })}
+      />
     );
   }
 
@@ -120,6 +147,7 @@ function buildNodeRunListItems(
 }
 
 function NodeRunListRow({ item, workflow, node }: { item: NodeRunListItem; workflow: WorkflowFile; node: WorkflowNode }) {
+  const { locale } = useProductLocale();
   const [open, setOpen] = useState(item.openByDefault || item.state.status === "running");
 
   useEffect(() => {
@@ -147,7 +175,7 @@ function NodeRunListRow({ item, workflow, node }: { item: NodeRunListItem; workf
       >
         <ChevronRight size={14} className={["shrink-0 transition-transform", open ? "rotate-90" : ""].join(" ")} aria-hidden />
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-          {formatWorkbenchDate(item.startedAt, { includeSeconds: true })}
+          {formatWorkbenchDate(item.startedAt, { includeSeconds: true, locale })}
         </span>
         {duration && <span className="shrink-0 text-xs text-muted-foreground">{duration}</span>}
         <NodeRunStatusIcon state={item.state} />

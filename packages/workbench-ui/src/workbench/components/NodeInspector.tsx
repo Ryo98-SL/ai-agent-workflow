@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import type { ResumeRunRequest } from "@ai-agent-workflow/api-contracts";
 import {
   resolveToolDescriptor,
@@ -8,6 +9,7 @@ import {
   type WorkflowNode,
 } from "@ai-agent-workflow/workflow-domain";
 import type { DebugState, NodeExecutionState } from "../types";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import { resolveToolIcon } from "./workflowNodes/workflowNodeVisuals";
 import { KnowledgeInspector } from "./knowledge/KnowledgeInspector";
 import { AgentInspector } from "./inspectors/AgentInspector";
@@ -44,17 +46,18 @@ type NodeInspectorPanelTitleProps = {
 type InspectorTab = "settings" | "history";
 
 export function NodeInspectorPanelTitle({ node, updateNode }: NodeInspectorPanelTitleProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   // Tool nodes show their bound tool's icon, not the generic wrench.
   const toolIcon = node.type === "tool" ? resolveToolIcon(resolveToolDescriptor(node.config)?.icon) : undefined;
   return (
     <div className="flex min-w-0 flex-1 items-center gap-3">
       <NodeTypeIcon type={node.type} size={32} iconSize={18} className="rounded-md" icon={toolIcon} />
       <input
-        aria-label="Node label"
+        aria-label={t("nodeInspector.nodeLabel", { defaultValue: "Node label" })}
         value={node.label}
         onChange={(event) => updateNode(node.id, (current) => ({ ...current, label: event.target.value }))}
         className="min-w-0 flex-1 truncate border-0 bg-transparent p-0 text-lg font-semibold leading-8 text-foreground outline-none placeholder:text-muted-foreground focus:ring-0"
-        placeholder="Untitled node"
+        placeholder={t("nodeInspector.untitledNode", { defaultValue: "Untitled node" })}
       />
     </div>
   );
@@ -73,6 +76,7 @@ export function NodeInspector({
   onResumeRun,
   updateNode,
 }: NodeInspectorProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const [activeTab, setActiveTab] = useState<InspectorTab>("settings");
 
   // True when the run is paused on this exact node, awaiting human review.
@@ -99,8 +103,10 @@ export function NodeInspector({
   if (!selectedNode) {
     return (
       <section className="p-4">
-        <h2 className="text-sm font-semibold">Inspector</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Select a node to configure it.</p>
+        <h2 className="text-sm font-semibold">{t("nodeInspector.title", { defaultValue: "Inspector" })}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {t("nodeInspector.empty", { defaultValue: "Select a node to configure it." })}
+        </p>
       </section>
     );
   }
@@ -109,12 +115,12 @@ export function NodeInspector({
     <section className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 px-4 py-4">
         <textarea
-          aria-label="Node description"
+          aria-label={t("nodeInspector.nodeDescription", { defaultValue: "Node description" })}
           value={selectedNode.description || ""}
           onChange={(event) =>
             updateNode(selectedNode.id, (current) => ({ ...current, description: event.target.value || undefined }))
           }
-          placeholder="Add description..."
+          placeholder={t("nodeInspector.descriptionPlaceholder", { defaultValue: "Add description..." })}
           rows={2}
           className="block min-h-14 w-full resize-none border-0 bg-transparent p-0 text-sm leading-6 text-muted-foreground outline-none placeholder:text-muted-foreground/70 focus:text-foreground focus:ring-0"
         />
@@ -126,13 +132,16 @@ export function NodeInspector({
           disabled={debugState.status === "running"}
           onClick={() => setActiveTab("settings")}
         >
-          Settings
+          {t("nodeInspector.settings", { defaultValue: "Settings" })}
         </InspectorTabButton>
         <InspectorTabButton active={activeTab === "history"} onClick={() => setActiveTab("history")}>
           <span className="flex items-center gap-1.5">
-            History
+            {t("nodeInspector.history", { defaultValue: "History" })}
             {isWaitingOnThisNode && (
-              <span className="size-2 rounded-full bg-amber-500" aria-label="Awaiting your review" />
+              <span
+                className="size-2 rounded-full bg-amber-500"
+                aria-label={t("nodeInspector.awaitingReview", { defaultValue: "Awaiting your review" })}
+              />
             )}
           </span>
         </InspectorTabButton>

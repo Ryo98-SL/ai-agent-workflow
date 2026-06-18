@@ -1,8 +1,10 @@
 import { Fragment } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { AlertCircle, CheckCircle2, GitBranch } from "lucide-react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import { conditionOperatorLabel, isValuelessOperator, type ConditionRow, type IfElseCase } from "@ai-agent-workflow/workflow-domain";
 import type { WorkflowNodePaletteHandleType } from "../../types";
+import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 import { VariableTag } from "../VariableTag";
 import { WorkflowNodeActionsMenu } from "../WorkflowNodeActionsMenu";
 import { InnerHandle, PlusNode, workflowHandleClassName, type WorkflowNodeProps } from "./WorkflowNodeCardShell";
@@ -20,6 +22,7 @@ function conditionPredicate(condition: ConditionRow): string {
 }
 
 export function IfElseWorkflowNode({ data, selected }: WorkflowNodeProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const node = data.node;
   if (node.type !== "ifElse") {
     return null;
@@ -81,7 +84,11 @@ export function IfElseWorkflowNode({ data, selected }: WorkflowNodeProps) {
             paddingBottom: ifElseLayout.casePadBottom,
           }}
         >
-          <BranchLabel>{index === 0 ? "IF" : "ELSE IF"}</BranchLabel>
+          <BranchLabel>
+            {index === 0
+              ? t("workflowNodes.ifBranch", { defaultValue: "IF" })
+              : t("workflowNodes.elseIfBranch", { defaultValue: "ELSE IF" })}
+          </BranchLabel>
           <CaseConditions branch={branch} />
         </div>
       ))}
@@ -91,7 +98,7 @@ export function IfElseWorkflowNode({ data, selected }: WorkflowNodeProps) {
         className="flex items-center justify-end border-t border-border px-3"
         style={{ height: ifElseLayout.elseHeight }}
       >
-        <BranchLabel>ELSE</BranchLabel>
+        <BranchLabel>{t("workflowNodes.elseBranch", { defaultValue: "ELSE" })}</BranchLabel>
       </div>
 
       {/* One source handle per branch, centered on its block */}
@@ -107,7 +114,11 @@ export function IfElseWorkflowNode({ data, selected }: WorkflowNodeProps) {
           style={{ top: row.centerY }}
         >
           <PlusNode
-            label={`Add node from ${node.label} ${row.label} branch`}
+            label={t("workflowNodes.addBranchFrom", {
+              defaultValue: "Add node from {{label}} {{branch}} branch",
+              label: node.label,
+              branch: rowLabel(t, row.label),
+            })}
             onClick={(anchor) => openPalette(anchor, row.id)}
           />
           <InnerHandle />
@@ -129,13 +140,14 @@ function BranchLabel({ children }: { children: string }) {
 }
 
 function CaseConditions({ branch }: { branch: IfElseCase }) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   if (branch.conditions.length === 0) {
     return (
       <div
         className="flex items-center text-xs italic text-muted-foreground/70"
         style={{ height: ifElseLayout.noConditionHeight }}
       >
-        No conditions
+        {t("workflowNodes.noConditions", { defaultValue: "No conditions" })}
       </div>
     );
   }
@@ -163,7 +175,7 @@ function CaseConditions({ branch }: { branch: IfElseCase }) {
                 <VariableTag reference={condition.variable} />
               ) : (
                 <span className="inline-flex items-center rounded border border-dashed border-border px-1 py-0.5 text-[11px] text-muted-foreground/70">
-                  未选择变量
+                  {t("workflowNodes.unselectedVariable", { defaultValue: "No variable selected" })}
                 </span>
               )}
             </div>
@@ -173,4 +185,10 @@ function CaseConditions({ branch }: { branch: IfElseCase }) {
       ))}
     </>
   );
+}
+
+function rowLabel(t: ReturnType<typeof useTranslation>["t"], label: string): string {
+  if (label === "IF") return t("workflowNodes.ifBranch", { defaultValue: "IF" });
+  if (label === "ELSE IF") return t("workflowNodes.elseIfBranch", { defaultValue: "ELSE IF" });
+  return t("workflowNodes.elseBranch", { defaultValue: "ELSE" });
 }

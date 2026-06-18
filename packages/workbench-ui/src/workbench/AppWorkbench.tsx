@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { I18nProvider, useTranslation } from "@ai-agent-workflow/i18n";
 import { toast } from "sonner";
 import { useWorkflowExecution } from "./hooks/useWorkflowExecution";
 import { useWorkflowGraphHistory } from "./hooks/useWorkflowGraphHistory";
@@ -39,6 +40,7 @@ import { useProviderKeyStore } from "../data/useProviderKeyStore";
 import { useQueryClient } from "@tanstack/react-query";
 import type { WorkflowMetaPatch } from "./components/WorkflowMetaEditor";
 import { ImportLocalDataPrompt } from "../auth/ImportLocalDataPrompt";
+import { workbenchI18nResources, WORKBENCH_I18N_NAMESPACE } from "../i18n";
 import type { AddNodeOptions, AppWorkbenchProps, ToolIdentity, WorkflowNodeAction } from "./types";
 import { workflowDirtySnapshot } from "./workflowDirtySnapshot";
 
@@ -71,17 +73,20 @@ function bindToolNode(node: WorkflowNode, tool?: ToolIdentity): WorkflowNode {
 
 export function AppWorkbench({ apiBaseUrl, ...props }: AppWorkbenchProps) {
   return (
-    <ThemeProvider>
-      <WorkbenchDataProvider workflowApi={props.workflowApi} apiBaseUrl={apiBaseUrl ?? DEFAULT_API_BASE_URL}>
-        <ImportLocalDataPrompt />
-        <WorkbenchApp {...props} />
-      </WorkbenchDataProvider>
-      <Toaster richColors closeButton position="bottom-right" />
-    </ThemeProvider>
+    <I18nProvider resources={workbenchI18nResources} defaultNamespace={WORKBENCH_I18N_NAMESPACE}>
+      <ThemeProvider>
+        <WorkbenchDataProvider workflowApi={props.workflowApi} apiBaseUrl={apiBaseUrl ?? DEFAULT_API_BASE_URL}>
+          <ImportLocalDataPrompt />
+          <WorkbenchApp {...props} />
+        </WorkbenchDataProvider>
+        <Toaster richColors closeButton position="bottom-right" />
+      </ThemeProvider>
+    </I18nProvider>
   );
 }
 
 function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWorkflowIdChange }: AppWorkbenchProps) {
+  const { t } = useTranslation("workbench");
   // Server-backed when signed in, localStorage-backed when anonymous.
   const workflowApi = useActiveWorkflowApi();
   const { data: sessionData, isPending: sessionPending } = useSession();
@@ -200,8 +205,8 @@ function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWork
   );
 
   const errorMessage = useCallback((error: unknown) => {
-    return error instanceof Error ? error.message : "Workflow API request failed.";
-  }, []);
+    return error instanceof Error ? error.message : t("app.workflowApiFailed");
+  }, [t]);
 
   const workflowForServer = useCallback((nextWorkflow: WorkflowFile) => {
     const parsed = parseWorkflowJson(serializeWorkflowFile(nextWorkflow));
@@ -985,19 +990,21 @@ function createConnectedNodeEdge(
 }
 
 function WorkbenchStartupState({ error }: { error?: string }) {
+  const { t } = useTranslation("workbench");
+
   return (
     <main className="flex h-full min-h-0 items-center justify-center bg-background p-6 text-foreground">
       <section className="w-full max-w-sm rounded-md border border-border bg-card p-5 text-center shadow-sm">
         {error ? (
           <>
-            <h1 className="text-sm font-semibold text-foreground">Workflow load failed</h1>
+            <h1 className="text-sm font-semibold text-foreground">{t("app.loadFailed")}</h1>
             <p className="mt-2 text-sm leading-5 text-destructive">{error}</p>
           </>
         ) : (
           <>
             <Loader2 size={22} className="mx-auto animate-spin text-muted-foreground" aria-hidden />
-            <h1 className="mt-3 text-sm font-semibold text-foreground">Loading workflow</h1>
-            <p className="mt-2 text-sm leading-5 text-muted-foreground">Syncing workflow state with the server.</p>
+            <h1 className="mt-3 text-sm font-semibold text-foreground">{t("app.loadingWorkflow")}</h1>
+            <p className="mt-2 text-sm leading-5 text-muted-foreground">{t("app.syncingWorkflow")}</p>
           </>
         )}
       </section>

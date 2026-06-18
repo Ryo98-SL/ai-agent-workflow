@@ -1,0 +1,41 @@
+export const webEnUs = {
+  homepage: {
+    brandAria: "AI Agent Workflow home",
+    sectionsAria: "Product sections",
+    tabs: {
+      studio: "Studio",
+      knowledge: "Knowledge",
+    },
+    language: {
+      label: "Product language",
+      english: "English",
+      chinese: "中文",
+    },
+    studio: {
+      title: "Studio",
+      description: "Build workflows, connect knowledge, and return to the editor when a card needs deeper work.",
+      searchPlaceholder: "Search workflows",
+      searchLabel: "Search workflows",
+      clearSearch: "Clear search",
+      createTitle: "New workflow",
+      createDescription: "Choose a starter workflow or begin from a blank canvas.",
+      loading: "Loading workflows",
+      loadError: "Workflow list could not load",
+      empty: "No workflows yet",
+      noMatches: "No matching workflows",
+      createError: "Workflow could not be created.",
+      edited: "Edited {{date}}",
+      nodeCount_one: "{{count}} node",
+      nodeCount_other: "{{count}} nodes",
+      edgeCount_one: "{{count}} edge",
+      edgeCount_other: "{{count}} edges",
+    },
+    knowledge: {
+      title: "Knowledge",
+      description: "Create reusable retrieval sources for workflow knowledge nodes.",
+      createTitle: "New knowledge base",
+      createDescription: "Name the source, tune retrieval, and attach text or Markdown documents.",
+      created: "Knowledge base created. ID: {{id}}",
+    },
+  },
+} as const;

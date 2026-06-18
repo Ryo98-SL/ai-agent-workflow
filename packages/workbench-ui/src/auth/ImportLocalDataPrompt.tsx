@@ -1,6 +1,7 @@
 import { WorkflowFileSchema } from "@ai-agent-workflow/workflow-domain";
 import { Loader2, UploadCloud, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import { Button } from "../workbench/components/Button";
 import { useWorkbenchData } from "../data/WorkbenchDataProvider";
 import { useSession } from "../data/useAccount";
@@ -15,6 +16,7 @@ type Phase = "idle" | "importing" | "done" | "error";
  * along inside their workflows.
  */
 export function ImportLocalDataPrompt() {
+  const { t } = useTranslation("workbench");
   const { data } = useSession();
   const { workflowApi, requestWorkflowRefresh } = useWorkbenchData();
   const isAuthed = Boolean(data?.user);
@@ -82,7 +84,7 @@ export function ImportLocalDataPrompt() {
 
     setCount(kept);
     setPhase("error");
-    setError(`Imported ${imported}. ${kept} could not be imported — try again.`);
+    setError(t("auth.import.partial", { imported, kept }));
   };
 
   return (
@@ -91,14 +93,14 @@ export function ImportLocalDataPrompt() {
         <UploadCloud size={18} className="shrink-0 text-brand" aria-hidden />
         <div className="min-w-0 flex-1 text-sm">
           {phase === "done" ? (
-            <span className="text-foreground">Imported {count} workflow(s). Reloading…</span>
+            <span className="text-foreground">{t("auth.import.done", { count })}</span>
           ) : (
             <>
               <p className="font-medium text-foreground">
-                Import {count} local workflow{count > 1 ? "s" : ""} into your account?
+                {t("auth.import.question", { count })}
               </p>
               <p className="text-xs text-muted-foreground">
-                API keys aren’t imported — re-enter them to store securely.
+                {t("auth.import.note")}
               </p>
               {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
             </>
@@ -107,12 +109,12 @@ export function ImportLocalDataPrompt() {
         {phase !== "done" && (
           <div className="flex shrink-0 items-center gap-2">
             <Button variant="success" size="sm" disabled={phase === "importing"} onClick={runImport}>
-              {phase === "importing" ? <Loader2 size={14} className="animate-spin" aria-hidden /> : "Import"}
+              {phase === "importing" ? <Loader2 size={14} className="animate-spin" aria-hidden /> : t("auth.import.import")}
             </Button>
             <Button
               variant="ghost"
               size="iconMd"
-              aria-label="Dismiss import prompt"
+              aria-label={t("auth.import.dismiss")}
               disabled={phase === "importing"}
               onClick={() => setDismissed(true)}
             >

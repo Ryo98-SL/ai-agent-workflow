@@ -1,6 +1,8 @@
 import { AlertTriangle, CheckCircle2, Loader2, UserCheck } from "lucide-react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import type { ResumeRunRequest } from "@ai-agent-workflow/api-contracts";
 import type { WorkflowFile, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import type { DebugState, NodeExecutionState } from "../types";
 import { RunNodeCardList, RunWaitingNodeCard } from "./RunNodeCard";
 import { RunEmptyState, RunErrorBox } from "./RunOutputPrimitives";
@@ -31,6 +33,7 @@ export function RunOutput({
   resumeSubmitting,
   resumeError,
 }: RunOutputProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const resolvedNodeStates = nodeStates.size > 0 ? nodeStates : nodeStatesFromRun(workflow, debugState);
   const hasWorkflowRun = resolvedNodeStates.size > 0 || Boolean(debugState.result);
   const visibleNodeStates = nodeId ? filterNodeStates(resolvedNodeStates, nodeId) : resolvedNodeStates;
@@ -44,18 +47,35 @@ export function RunOutput({
     : undefined;
 
   if (debugState.status === "idle" && !hasWorkflowRun) {
-    return <RunEmptyState title="Ready to run" detail="Run the workflow to inspect server output and events." />;
+    return (
+      <RunEmptyState
+        title={t("runOutput.readyTitle", { defaultValue: "Ready to run" })}
+        detail={t("runOutput.readyDetail", { defaultValue: "Run the workflow to inspect server output and events." })}
+      />
+    );
   }
 
   if (debugState.status === "loading") {
-    return <RunEmptyState title="Loading" detail="The workbench is syncing workflow state with the server API." loading />;
+    return (
+      <RunEmptyState
+        title={t("runOutput.loadingTitle", { defaultValue: "Loading" })}
+        detail={t("runOutput.loadingWorkflowDetail", {
+          defaultValue: "The workbench is syncing workflow state with the server API.",
+        })}
+        loading
+      />
+    );
   }
 
   if (debugState.status === "running" && !hasWorkflowRun) {
     return (
       <div className="space-y-3">
         <RunStatusHeader debugState={debugState} />
-        <RunEmptyState title="Running" detail="Waiting for the first node to start..." loading />
+        <RunEmptyState
+          title={t("runOutput.runningTitle", { defaultValue: "Running" })}
+          detail={t("runOutput.waitingFirstNodeDetail", { defaultValue: "Waiting for the first node to start..." })}
+          loading
+        />
       </div>
     );
   }
@@ -66,16 +86,28 @@ export function RunOutput({
       {hasWorkflowRun && <RunStatusHeader debugState={debugState} />}
       {debugState.status === "running" && !hasVisibleNodeRun ? (
         <RunEmptyState
-          title="Running"
-          detail={nodeId ? "Waiting for this node to start..." : "Waiting for the first node to start..."}
+          title={t("runOutput.runningTitle", { defaultValue: "Running" })}
+          detail={
+            nodeId
+              ? t("runOutput.waitingThisNodeDetail", { defaultValue: "Waiting for this node to start..." })
+              : t("runOutput.waitingFirstNodeDetail", { defaultValue: "Waiting for the first node to start..." })
+          }
           loading
         />
       ) : hasVisibleNodeRun ? (
         <RunNodeCardList workflow={workflow} nodeStates={visibleNodeStates} debugState={debugState} />
       ) : !waiting ? (
         <RunEmptyState
-          title={nodeId ? "No node output" : "No run output"}
-          detail={nodeId ? "The latest run has no recorded output for this node." : "Run the workflow to inspect node output."}
+          title={
+            nodeId
+              ? t("runOutput.noNodeOutputTitle", { defaultValue: "No node output" })
+              : t("runOutput.noRunOutputTitle", { defaultValue: "No run output" })
+          }
+          detail={
+            nodeId
+              ? t("runOutput.noNodeOutputDetail", { defaultValue: "The latest run has no recorded output for this node." })
+              : t("runOutput.noRunOutputDetail", { defaultValue: "Run the workflow to inspect node output." })
+          }
         />
       ) : null}
       {waiting && onResumeRun && (
@@ -133,13 +165,16 @@ function fallbackWorkflowNode(nodeId: string): WorkflowNode {
 }
 
 function RunStatusHeader({ debugState }: { debugState: DebugState }) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const run = debugState.result?.run;
 
   if (debugState.status === "running") {
     return (
       <div className="flex items-center gap-2 rounded-md border border-brand/30 bg-brand/10 px-3 py-2">
         <Loader2 size={16} className="shrink-0 animate-spin text-brand" aria-hidden />
-        <span className="text-sm font-semibold text-brand">Running workflow...</span>
+        <span className="text-sm font-semibold text-brand">
+          {t("runOutput.runningWorkflow", { defaultValue: "Running workflow..." })}
+        </span>
       </div>
     );
   }
@@ -148,7 +183,9 @@ function RunStatusHeader({ debugState }: { debugState: DebugState }) {
     return (
       <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
         <UserCheck size={16} className="shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
-        <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">Awaiting human review…</span>
+        <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+          {t("runOutput.awaitingHumanReview", { defaultValue: "Awaiting human review..." })}
+        </span>
       </div>
     );
   }
@@ -168,7 +205,9 @@ function RunStatusHeader({ debugState }: { debugState: DebugState }) {
           <CheckCircle2 size={16} className="shrink-0 text-brand" aria-hidden />
         )}
         <span className={["text-sm font-semibold", failed ? "text-destructive" : "text-brand"].join(" ")}>
-          {failed ? "Run failed" : "Run succeeded"}
+          {failed
+            ? t("runOutput.runFailed", { defaultValue: "Run failed" })
+            : t("runOutput.runSucceeded", { defaultValue: "Run succeeded" })}
         </span>
       </div>
     );
@@ -177,7 +216,9 @@ function RunStatusHeader({ debugState }: { debugState: DebugState }) {
   return (
     <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2">
       <CheckCircle2 size={16} className="shrink-0 text-muted-foreground" aria-hidden />
-      <span className="text-sm font-semibold text-muted-foreground">Run complete</span>
+      <span className="text-sm font-semibold text-muted-foreground">
+        {t("runOutput.runComplete", { defaultValue: "Run complete" })}
+      </span>
     </div>
   );
 }

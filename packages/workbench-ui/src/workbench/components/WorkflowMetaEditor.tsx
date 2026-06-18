@@ -1,8 +1,10 @@
 import { Pencil, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import { Input } from "@workbench/components/ui/input";
 import { Textarea } from "@workbench/components/ui/textarea";
 import { Label } from "@workbench/components/ui/label";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import { Button } from "./Button";
 import { Popover } from "./Popover";
 import { WORKFLOW_ICON_KEYS, WorkflowIconGlyph } from "./workflowIcons";
@@ -24,6 +26,7 @@ function workflowMetaDraft(metadata: WorkflowMetaEditorValue): Required<Workflow
 }
 
 export function WorkflowMetaEditor({ metadata, onSaveMeta }: WorkflowMetaEditorProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<Required<WorkflowMetaPatch>>(() => workflowMetaDraft(metadata));
@@ -81,8 +84,8 @@ export function WorkflowMetaEditor({ metadata, onSaveMeta }: WorkflowMetaEditorP
           variant="ghost"
           size="iconMd"
           className="size-7"
-          aria-label={`Edit ${metadata.name} workflow details`}
-          title="Edit workflow details"
+          aria-label={t("workflowMeta.editNamedDetails", { name: metadata.name })}
+          title={t("workflowMeta.editDetails")}
           onClick={(event) => {
             event.stopPropagation();
             setEditorOpen(!open);
@@ -94,7 +97,7 @@ export function WorkflowMetaEditor({ metadata, onSaveMeta }: WorkflowMetaEditorP
     >
       <div className="w-[320px] space-y-3 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl">
         <div className="space-y-1.5">
-          <Label>Icon</Label>
+          <Label>{t("workflowMeta.icon")}</Label>
           <div className="grid grid-cols-6 gap-1">
             {WORKFLOW_ICON_KEYS.map((key) => {
               const selected = draft.icon === key;
@@ -103,7 +106,7 @@ export function WorkflowMetaEditor({ metadata, onSaveMeta }: WorkflowMetaEditorP
                   key={key}
                   type="button"
                   onClick={() => setDraft((current) => ({ ...current, icon: key }))}
-                  aria-label={`Use ${key} workflow icon`}
+                  aria-label={t("workflowMeta.useIcon", { icon: key })}
                   title={key}
                   className={`flex aspect-square items-center justify-center rounded-md border ${
                     selected
@@ -119,23 +122,23 @@ export function WorkflowMetaEditor({ metadata, onSaveMeta }: WorkflowMetaEditorP
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="workflow-meta-name">Name</Label>
+          <Label htmlFor="workflow-meta-name">{t("workflowMeta.name")}</Label>
           <Input
             id="workflow-meta-name"
             value={draft.name}
             onChange={(e) => setDraft((current) => ({ ...current, name: e.target.value }))}
-            placeholder="Workflow name"
+            placeholder={t("workflowMeta.namePlaceholder")}
           />
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="workflow-meta-desc">Description</Label>
+          <Label htmlFor="workflow-meta-desc">{t("workflowMeta.description")}</Label>
           <Textarea
             id="workflow-meta-desc"
             rows={3}
             value={draft.description}
             onChange={(e) => setDraft((current) => ({ ...current, description: e.target.value }))}
-            placeholder="What does this workflow do?"
+            placeholder={t("workflowMeta.descriptionPlaceholder")}
           />
         </div>
 
@@ -145,10 +148,10 @@ export function WorkflowMetaEditor({ metadata, onSaveMeta }: WorkflowMetaEditorP
             size="sm"
             onClick={saveMeta}
             disabled={!dirty || saving}
-            aria-label="Save workflow details"
+            aria-label={t("workflowMeta.saveDetails")}
           >
             <Save size={14} aria-hidden />
-            {saving ? "Saving..." : "Save"}
+            {saving ? t("workflowMeta.saving") : t("workflowMeta.save")}
           </Button>
         </div>
       </div>

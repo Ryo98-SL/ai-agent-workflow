@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@ai-agent-workflow/api-contracts": "workspace:*",
+    "@ai-agent-workflow/i18n": "workspace:*",
     "@ai-agent-workflow/workflow-domain": "workspace:*",
     "@floating-ui/react": "^0.27.19",
     "@lexical/react": "^0.45.0",

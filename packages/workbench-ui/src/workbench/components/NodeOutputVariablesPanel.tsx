@@ -1,3 +1,4 @@
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import {
   nodeOutputFields,
   workflowNodeOutputFields,
@@ -5,12 +6,14 @@ import {
   type WorkflowNodeOutputField,
   type WorkflowNodeType,
 } from "@ai-agent-workflow/workflow-domain";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 
 // Pass `node` for per-node resolution (Tool nodes resolve outputs from their bound
 // descriptor); `nodeType` stays for inspectors keyed only by type.
 type NodeOutputVariablesPanelProps = { node: WorkflowNode } | { nodeType: WorkflowNodeType };
 
 export function NodeOutputVariablesPanel(props: NodeOutputVariablesPanelProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const fields = "node" in props ? nodeOutputFields(props.node) : workflowNodeOutputFields(props.nodeType);
   if (fields.length === 0) {
     return null;
@@ -18,7 +21,9 @@ export function NodeOutputVariablesPanel(props: NodeOutputVariablesPanelProps) {
 
   return (
     <section className="space-y-2">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Output Variables</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {t("nodeOutputs.title", { defaultValue: "Output Variables" })}
+      </h3>
       <div className="space-y-3 rounded-md border border-border bg-card p-3">
         {fields.map((field) => (
           <OutputField key={field.name} field={field} />

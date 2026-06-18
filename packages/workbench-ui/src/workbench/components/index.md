@@ -24,7 +24,8 @@ Focused React components for the server-backed workbench shell.
 - `ChatPanel.tsx` owns Chat Mode transcript, once-per-conversation Start input
   gate, memory summary controls, and in-chat Human Input resume forms.
 - `NewWorkflowDialog.tsx` renders the starter-template picker from
-  workflow-domain `WORKFLOW_TEMPLATES`.
+  workflow-domain `getWorkflowTemplates(locale)` and uses Product Locale as
+  Template Locale for newly created workflow defaults.
 - `knowledge/` owns Knowledge Base management and Knowledge node inspector UI;
   see `knowledge/index.md`.
 - `tools/` owns the Tool Browser and descriptor-driven Tool param form; see
@@ -43,9 +44,11 @@ Focused React components for the server-backed workbench shell.
   the trigger down to the viewport edge, recomputed on every reposition).
 - `InlineNodePalettePopover.tsx` anchors node creation to a ReactFlow handle.
 - `ModelSettingsPanel.tsx` is the unified provider/model/endpoint/Advanced
-  settings surface used by both workflow defaults and LLM node overrides.
-  API-key selection stays in the provider groups through
-  `ProviderApiKeyControl`, not as an inline editor field.
+  settings surface used by both workflow defaults and LLM node overrides. Its
+  labels, selector chrome, custom-model flow, provider-key popover, and credits
+  copy come from the `workbench` Product Locale namespace. API-key selection
+  stays in the provider groups through `ProviderApiKeyControl`, not as an inline
+  editor field.
 - `ModelSelectorField.tsx` is a combobox over the catalog: presets are
   pick-only, and an "Add custom model" footer opens an inline form (provider +
   free-text model name) so users can run an off-catalog model through a preset
@@ -86,6 +89,8 @@ Focused React components for the server-backed workbench shell.
   `NodeRunList.tsx` for the active node. LLM and Knowledge settings render
   output variable shapes for downstream prompt authoring. Workflow runs force
   History active and disable Settings until the run leaves the running state.
+  Inspector chrome, node form copy, and output variable headings read from the
+  package `workbench` Product Locale namespace.
 - `NodePalette.tsx` lists creatable schema nodes, prevents duplicate Start, and
   drills into `ToolBrowser` before adding a Tool node.
 - `ModelSelectorField.tsx` renders the provider/model picker. Each provider group
@@ -118,16 +123,19 @@ Focused React components for the server-backed workbench shell.
   with unsaved changes. It offers "Save & switch" (persist then switch) and
   "Cancel", built from the shared `Button`. State (`pendingSwitch`/`switching`)
   lives in `AppWorkbench`.
-- `ProjectFileActions.tsx` contains file controls.
+- `ProjectFileActions.tsx` contains the localized header Save workflow control.
 - `NodeOutputVariablesPanel.tsx` renders shared field/type descriptions for
-  model-output node types.
+  model-output node types with localized panel chrome.
 - `VariablePicker.tsx`, `VariablePickerButton.tsx`, `VariableTag.tsx`, and
   `VariableText` render available-variable selection/status and read-only chip
   presentation.
 - `HumanReviewForm.tsx` and `HumanReviewPrompt.tsx` render Human Input pause
   forms used by the debug panel, chat panel, and selected-node inspector.
 - `Button.tsx`, `inspectors/`, `knowledge/`, and `workflowNodes/` contain
-  focused controls, forms, and node renderers.
+  focused controls, forms, and node renderers. `workflowNodes/` keeps
+  display-only fallbacks such as global-model labels, Human Input defaults,
+  Agent tool counts, and connection affordance aria labels localized without
+  mutating workflow config.
 
 ## Constraints
 

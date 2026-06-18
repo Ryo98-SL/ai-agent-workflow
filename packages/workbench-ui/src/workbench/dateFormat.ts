@@ -1,22 +1,16 @@
-const WORKBENCH_DATE_LOCALE = "en-US";
+import type { SupportedLocale } from "@ai-agent-workflow/i18n";
 
-const minuteDateFormatter = new Intl.DateTimeFormat(WORKBENCH_DATE_LOCALE, {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-const secondDateFormatter = new Intl.DateTimeFormat(WORKBENCH_DATE_LOCALE, {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-});
-
-export function formatWorkbenchDate(value: string | number | Date, options: { includeSeconds?: boolean } = {}): string {
+export function formatWorkbenchDate(
+  value: string | number | Date,
+  options: { includeSeconds?: boolean; locale?: SupportedLocale } = {},
+): string {
   const date = value instanceof Date ? value : new Date(value);
-  return (options.includeSeconds ? secondDateFormatter : minuteDateFormatter).format(date);
+  return new Intl.DateTimeFormat(options.locale ?? "en-US", {
+    ...(options.includeSeconds ? {} : { year: "numeric" as const }),
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(options.includeSeconds ? { second: "2-digit" as const } : {}),
+  }).format(date);
 }

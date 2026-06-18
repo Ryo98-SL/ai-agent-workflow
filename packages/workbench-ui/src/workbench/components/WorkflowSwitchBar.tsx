@@ -1,4 +1,6 @@
 import { AlertTriangle, Loader2 } from "lucide-react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import { Button } from "./Button";
 
 type WorkflowSwitchBarProps = {
@@ -13,6 +15,8 @@ type WorkflowSwitchBarProps = {
  * workflows with unsaved changes. Offers "Save & switch" or "Cancel".
  */
 export function WorkflowSwitchBar({ targetName, busy, onSaveAndSwitch, onCancel }: WorkflowSwitchBarProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
+
   return (
     <div className="pointer-events-none absolute inset-x-0 top-16 z-50 flex justify-center px-4">
       <div
@@ -21,14 +25,14 @@ export function WorkflowSwitchBar({ targetName, busy, onSaveAndSwitch, onCancel 
       >
         <AlertTriangle size={15} className="shrink-0 text-brand" aria-hidden />
         <span className="min-w-0 truncate text-foreground">
-          Unsaved changes — save before switching to “{targetName}”?
+          {t("workflowSwitcher.unsavedSwitchPrompt", { name: targetName })}
         </span>
         <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>
-          Cancel
+          {t("workflowSwitcher.cancel")}
         </Button>
         <Button variant="success" size="sm" onClick={onSaveAndSwitch} disabled={busy}>
           {busy && <Loader2 size={14} className="animate-spin" aria-hidden />}
-          Save &amp; switch
+          {t("workflowSwitcher.saveAndSwitch")}
         </Button>
       </div>
     </div>

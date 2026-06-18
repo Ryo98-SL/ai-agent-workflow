@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Check, ChevronDown, ChevronRight, Loader2, Plus, SlidersHorizontal } from "lucide-react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import type { KnowledgeBaseDto } from "@ai-agent-workflow/api-contracts";
 import {
   Dialog,
@@ -10,6 +11,7 @@ import {
   DialogTitle,
 } from "@workbench/components/ui/dialog";
 import { useCreateKnowledgeBase, useKnowledgeBaseDocuments } from "../../../data/useKnowledgeBases";
+import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 import { Button } from "../Button";
 import { KnowledgeDocumentsSection } from "./KnowledgeDocumentsSection";
 import { KnowledgeMetadataFields } from "./KnowledgeMetadataFields";
@@ -32,6 +34,7 @@ type CreateKnowledgeBaseDialogProps = {
  * KnowledgeBasesDialog via an elevated overlay/content z-index.
  */
 export function CreateKnowledgeBaseDialog({ open, onOpenChange, onCreated }: CreateKnowledgeBaseDialogProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const createBase = useCreateKnowledgeBase();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -88,20 +91,20 @@ export function CreateKnowledgeBaseDialog({ open, onOpenChange, onCreated }: Cre
         <DialogHeader className="shrink-0 border-b border-border px-5 py-4">
           <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             <StepDot active={step === 1} done={step > 1} label="1" />
-            <span className={step === 1 ? "text-brand" : ""}>Details</span>
+            <span className={step === 1 ? "text-brand" : ""}>{t("knowledge.create.steps.details")}</span>
             <span className="h-px w-4 bg-border" aria-hidden />
             <StepDot active={step === 2} done={false} label="2" />
-            <span className={step === 2 ? "text-brand" : ""}>Documents</span>
+            <span className={step === 2 ? "text-brand" : ""}>{t("knowledge.create.steps.documents")}</span>
           </div>
           {step === 1 ? (
             <>
-              <DialogTitle>New knowledge base</DialogTitle>
-              <DialogDescription>Name it and tune retrieval, then add documents.</DialogDescription>
+              <DialogTitle>{t("knowledge.create.title")}</DialogTitle>
+              <DialogDescription>{t("knowledge.create.description")}</DialogDescription>
             </>
           ) : (
             <>
               <DialogTitle className="truncate">{createdBase?.name}</DialogTitle>
-              <DialogDescription>Add documents now, or finish and add them later.</DialogDescription>
+              <DialogDescription>{t("knowledge.create.documentsDescription")}</DialogDescription>
             </>
           )}
         </DialogHeader>
@@ -126,7 +129,7 @@ export function CreateKnowledgeBaseDialog({ open, onOpenChange, onCreated }: Cre
                 >
                   {advancedOpen ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
                   <SlidersHorizontal size={14} aria-hidden />
-                  Advanced settings
+                  {t("knowledge.create.advancedSettings")}
                 </button>
                 {advancedOpen && (
                   <div className="border-t border-border p-3">
@@ -134,11 +137,13 @@ export function CreateKnowledgeBaseDialog({ open, onOpenChange, onCreated }: Cre
                   </div>
                 )}
               </div>
-              {createBase.error && <p className="text-xs text-destructive">{errorMessage(createBase.error)}</p>}
+              {createBase.error && (
+                <p className="text-xs text-destructive">{errorMessage(createBase.error, t("knowledge.requestFailed"))}</p>
+              )}
             </div>
             <DialogFooter className="shrink-0 border-t border-border p-4">
               <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
-                Cancel
+                {t("knowledge.create.cancel")}
               </Button>
               <Button type="submit" variant="success" size="sm" disabled={!name.trim() || createBase.isPending}>
                 {createBase.isPending ? (
@@ -146,7 +151,7 @@ export function CreateKnowledgeBaseDialog({ open, onOpenChange, onCreated }: Cre
                 ) : (
                   <Plus size={15} aria-hidden />
                 )}
-                Create &amp; continue
+                {t("knowledge.create.submit")}
               </Button>
             </DialogFooter>
           </form>
@@ -157,7 +162,7 @@ export function CreateKnowledgeBaseDialog({ open, onOpenChange, onCreated }: Cre
             </div>
             <DialogFooter className="shrink-0 items-center border-t border-border p-4 sm:justify-between">
               <span className="text-xs text-muted-foreground">
-                {hasDocuments ? "" : "Add at least one document to finish."}
+                {hasDocuments ? "" : t("knowledge.create.finishRequirement")}
               </span>
               <Button
                 type="button"
@@ -167,7 +172,7 @@ export function CreateKnowledgeBaseDialog({ open, onOpenChange, onCreated }: Cre
                 onClick={() => createdBase && onCreated(createdBase.id)}
               >
                 <Check size={15} aria-hidden />
-                Done
+                {t("knowledge.create.done")}
               </Button>
             </DialogFooter>
           </div>

@@ -1,5 +1,7 @@
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import { Input } from "@workbench/components/ui/input";
 import { Textarea } from "@workbench/components/ui/textarea";
+import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 import { Field } from "./shared";
 
 type KnowledgeMetadataFieldsProps = {
@@ -22,25 +24,27 @@ export function KnowledgeMetadataFields({
   disabled = false,
   autoFocus = false,
 }: KnowledgeMetadataFieldsProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
+
   return (
     <>
-      <Field label="Name" htmlFor={`${idPrefix}-name`}>
+      <Field label={t("knowledge.metadata.name")} htmlFor={`${idPrefix}-name`}>
         <Input
           id={`${idPrefix}-name`}
           value={name}
           onChange={(event) => onNameChange(event.target.value)}
           disabled={disabled}
-          placeholder="新知识库"
+          placeholder={t("knowledge.metadata.namePlaceholder")}
           autoFocus={autoFocus}
         />
       </Field>
-      <Field label="Description" htmlFor={`${idPrefix}-description`}>
+      <Field label={t("knowledge.metadata.description")} htmlFor={`${idPrefix}-description`}>
         <Textarea
           id={`${idPrefix}-description`}
           value={description}
           onChange={(event) => onDescriptionChange(event.target.value)}
           disabled={disabled}
-          placeholder="描述（可选）"
+          placeholder={t("knowledge.metadata.descriptionPlaceholder")}
           className="min-h-16 resize-y"
         />
       </Field>

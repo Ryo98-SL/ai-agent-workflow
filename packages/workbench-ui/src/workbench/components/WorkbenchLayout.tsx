@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import { Database, Loader2, Play, Plus, Server, Settings } from "lucide-react";
 import type {
   MemorySummarySettings,
@@ -144,6 +145,7 @@ export function WorkbenchLayout({
   onUpdateProviderKeyPreference,
   onUpdateNode,
 }: WorkbenchLayoutProps) {
+  const { t } = useTranslation("workbench");
   const hasStartNode = workflow.graph.nodes.some((node) => node.type === "start");
   const [knowledgeBasesOpen, setKnowledgeBasesOpen] = useState(false);
   const [mcpServersOpen, setMcpServersOpen] = useState(false);
@@ -196,17 +198,17 @@ export function WorkbenchLayout({
                     variant="secondary"
                     size="iconMd"
                     onClick={onToggleSettings}
-                    aria-label="Open model settings"
-                    title="Model settings"
+                    aria-label={t("layout.openModelSettings")}
+                    title={t("layout.modelSettings")}
                 >
                   <Settings size={16} aria-hidden />
                 </Button>
             )}
         >
           <FloatingPanel
-              title="Model Settings"
-              description="Configure the default model provider."
-              closeLabel="Close model settings"
+              title={t("layout.modelSettings")}
+              description={t("layout.modelSettingsDescription")}
+              closeLabel={t("layout.closeModelSettings")}
               onClose={onCloseSettings}
               className="w-[360px]"
           >
@@ -227,7 +229,7 @@ export function WorkbenchLayout({
                 onClick={() => setKnowledgeBasesOpen(true)}
               >
                 <Database size={15} aria-hidden />
-                Knowledge Bases
+                {t("layout.knowledgeBases")}
               </Button>
               <Button
                 variant="secondary"
@@ -237,7 +239,7 @@ export function WorkbenchLayout({
                 onClick={() => setMcpServersOpen(true)}
               >
                 <Server size={15} aria-hidden />
-                MCP Servers
+                {t("layout.mcpServers")}
               </Button>
             </div>
           </FloatingPanel>

@@ -12,8 +12,8 @@ Reusable workbench state, layout, and canvas runtime.
   workflow-scoped Debug Session selection, active workflow id sync callbacks,
   and floating panel visibility.
 - `types.ts` defines workbench UI state and the injected workflow API contract.
-- `dateFormat.ts` owns shared English date formatting for user-visible
-  workbench timestamps.
+- `dateFormat.ts` owns shared Product Locale-aware date formatting for
+  user-visible workbench timestamps.
 - `components/` contains the layout shell, ReactFlow canvas, popovers, palette,
   inspectors, Knowledge Base management, Tool Browser, variable-rich text
   editor, model settings, project actions, Chat Panel, and run panel.
@@ -67,3 +67,6 @@ Lexical chips but store the canonical template string.
 
 Host applications may pass `initialWorkflowId` and `onWorkflowIdChange` to keep
 their own URL or navigation state aligned with the workbench's active workflow.
+Template creation uses Product Locale as Template Locale for new workflow
+defaults only; after creation, workflow names, node labels, prompts, and field
+defaults are ordinary User-authored Content.

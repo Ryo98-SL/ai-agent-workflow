@@ -33,23 +33,26 @@ Principles:
 - Keep node inspection focused: the panel header edits the node label, the body
   edits the description without a framed field, and Settings / History tabs
   separate configuration from run output. History queries all runs for the open
-  workflow and filters them to the selected node, using compact English-format
+  workflow and filters them to the selected node, using compact Product Locale
   date/duration rows instead of repeating the selected node header. While a
   workflow is running, Settings is locked and History opens the latest row.
 - Keep historical run viewing isolated: the header history button opens a
   backdrop-protected right drawer with read-only run output on the left and the
   run list on the right. The drawer is a body-level portal, inset from the
   viewport with rounded corners, and separates detail/list panes with real gap
-  spacing. Rows use shared English-format date labels, hide raw run IDs, support
+  spacing. Rows use Product Locale date labels, hide raw run IDs, support
   same-height inline delete confirmation, and do not replace live debug state or
   mutate the workflow.
 - Keep model configuration consistent: global settings and LLM node overrides
   share the same provider/model/endpoint/Advanced panel. Provider API keys are
   selected from model groups instead of inline model-setting fields. API-key add
   flows use the shared product-themed dialog without modal entrance animation.
+  Model selector, custom-model, provider-key, credits, and save controls use
+  Product Locale copy from the `workbench` namespace.
 - Keep Knowledge Base management in the global settings surface: the dialog
   lists the anonymous Chinese example KB, manages authenticated private KBs and
-  text documents, and the Knowledge node inspector selects one reusable KB for
+  text documents, the creation wizard uses Product Locale for wizard chrome and
+  field labels, and the Knowledge node inspector selects one reusable KB for
   semantic retrieval.
 - Keep Chat Mode separate from one-shot workflow runs: Start fields are collected
   once per conversation, each message is sent as `query`, and Human Input pauses
@@ -64,6 +67,11 @@ Principles:
 - Keep Tool nodes descriptor-driven: the Tool Browser selects a registry entry
   and the inspector renders params from the tool descriptor instead of hard-coded
   per-tool forms.
+- Keep Product Locale copy in the package-owned `workbench` namespace. Display
+  localization for Tool descriptors is applied in the rendering layer and does
+  not mutate stored tool identity or workflow config. Node Inspector forms,
+  workflow node card fallbacks, output variable chrome, and Workbench timestamps
+  use Product Locale through the shared workbench i18n/date helpers.
 
 ```tsx
 import { AppWorkbench, WorkbenchDataProvider } from "@ai-agent-workflow/workbench-ui";
@@ -86,6 +94,7 @@ surfaces show output variables so downstream prompt references can be authored
 from the same panel.
 
 The package also exports the shared data provider, session/workflow hooks,
-themed toaster, theme provider, auth menu, shared workflow icon glyph, New
-Workflow template dialog, and Knowledge Base creation dialog so host apps can
-build product-level shells without duplicating workbench internals.
+themed toaster, theme provider, theme menu, auth menu, shared workflow icon
+glyph, New Workflow template dialog, Knowledge Base creation dialog, and
+`workbenchI18nResources` so host apps can build product-level shells without
+duplicating workbench internals.

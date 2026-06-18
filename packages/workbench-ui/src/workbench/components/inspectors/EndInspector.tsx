@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import type { EndNode, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 import { VariableRichTextEditor } from "../richtext/VariableRichTextEditor";
+import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 
 type EndInspectorProps = {
   node: EndNode;
@@ -13,6 +15,7 @@ type EndInspectorProps = {
  * runtime resolves into this node's final output when a run reaches it.
  */
 export function EndInspector({ node, updateNode }: EndInspectorProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const updateConfig = (patch: Partial<EndNode["config"]>) => {
     updateNode(node.id, (current) =>
       current.type === "end" ? { ...current, config: { ...current.config, ...patch } } : current,
@@ -21,13 +24,15 @@ export function EndInspector({ node, updateNode }: EndInspectorProps) {
 
   return (
     <div className="space-y-4">
-      <Field label="Answer">
+      <Field label={t("inspectors.common.answer", { defaultValue: "Answer" })}>
         <VariableRichTextEditor
           nodeId={node.id}
-          ariaLabel="Answer"
+          ariaLabel={t("inspectors.common.answer", { defaultValue: "Answer" })}
           value={node.config.answer ?? ""}
           onChange={(answer) => updateConfig({ answer })}
-          placeholder="输入工作流的输出内容，/ 引用上游变量"
+          placeholder={t("inspectors.end.answerPlaceholder", {
+            defaultValue: "Enter the workflow output, type / to reference variables",
+          })}
           className="min-h-24"
         />
       </Field>

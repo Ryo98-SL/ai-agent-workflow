@@ -37,4 +37,7 @@ Inspectors only mutate workflow draft state through callbacks. Server
 persistence and workflow-level run creation stay in `AppWorkbench`. Node label
 and description editing lives in `NodeInspector.tsx` so the Settings tab only
 contains node-type configuration fields. Variable-bearing fields use the shared
-rich-text editor but persist plain template strings.
+rich-text editor but persist plain template strings. User-visible inspector
+copy, including labels, placeholders, empty states, warnings, action buttons,
+and per-node model-setting chrome, is sourced from the package `workbench`
+Product Locale namespace.

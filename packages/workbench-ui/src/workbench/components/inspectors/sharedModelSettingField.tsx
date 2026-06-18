@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import { resolveLLMModelSettings } from "@ai-agent-workflow/workflow-domain";
 import type {
   LLMModelSettings,
@@ -13,6 +14,7 @@ import { DEFAULT_MODEL_SETTINGS, ModelSettingsPanel } from "../ModelSettingsPane
 import { getModelCapabilities } from "../modelCatalog";
 import { ModelProviderLogo } from "../modelProviderVisuals";
 import { Popover } from "../Popover";
+import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 
 /**
  * Minimal node shape the model field reads. LLM and Agent nodes both carry these
@@ -71,12 +73,15 @@ export function NodeModelSettingField({
   onChange: (settings: LLMModelSettings) => void;
   onReset: () => void;
 }) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const [open, setOpen] = useState(false);
   const capabilities = getModelCapabilities(modelSettings.model, modelSettings.provider);
 
   return (
     <div>
-      <span className="mb-1 block text-xs font-medium text-muted-foreground">Model Setting</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">
+        {t("nodeModelSetting.label", { defaultValue: "Model Setting" })}
+      </span>
       <Popover
         id={`node-model-setting-${nodeId}`}
         open={open}
@@ -90,7 +95,7 @@ export function NodeModelSettingField({
             size="unstyled"
             className={`!px-2 !h-10`}
             onClick={() => setOpen((current) => !current)}
-            aria-label="Open model setting"
+            aria-label={t("nodeModelSetting.open", { defaultValue: "Open model setting" })}
           >
             <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background">
               <ModelProviderLogo provider={modelSettings.provider} />
@@ -104,9 +109,11 @@ export function NodeModelSettingField({
       >
         <div className="w-[360px] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl shadow-black/20">
           <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-            <h3 className="text-sm font-semibold">Model Setting</h3>
+            <h3 className="text-sm font-semibold">
+              {t("nodeModelSetting.label", { defaultValue: "Model Setting" })}
+            </h3>
             <Button variant="ghost" size="sm" onClick={onReset} disabled={!hasModelOverride}>
-              Use workflow default
+              {t("nodeModelSetting.useWorkflowDefault", { defaultValue: "Use workflow default" })}
             </Button>
           </div>
           <div>

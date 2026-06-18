@@ -1,5 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import type {
   ModelProvider,
   OpenAICompatibleSettings,
@@ -7,6 +8,7 @@ import type {
   ProviderKeyPrefs,
 } from "@ai-agent-workflow/workflow-domain";
 import { Input } from "@workbench/components/ui/input";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import { Button } from "./Button";
 import { FIELD_INPUT_CLASS } from "./fieldStyles";
 import { ModelSelectorField } from "./ModelSelectorField";
@@ -50,6 +52,7 @@ export function ModelSettingsEditor({
   providerKeyPrefs,
   onProviderKeyPreferenceChange,
 }: ModelSettingsEditorProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const availableProviders = useMemo(
     () => PROVIDER_OPTIONS.filter((option) => showDevModelProviders || !option.devOnly),
@@ -87,7 +90,7 @@ export function ModelSettingsEditor({
         onProviderKeyPreferenceChange={onProviderKeyPreferenceChange}
       />
 
-      <Field label="Custom API endpoint URL (optional)">
+      <Field label={t("modelSettings.customApiEndpoint")}>
         <Input
           value={settings.baseURL}
           onChange={(event) => update({ baseURL: event.target.value })}
@@ -105,7 +108,7 @@ export function ModelSettingsEditor({
             onClick={() => setAdvancedOpen((current) => !current)}
             aria-expanded={advancedOpen}
           >
-            <span>Advanced</span>
+            <span>{t("modelSettings.advanced")}</span>
             <ChevronDown
               size={16}
               className={["text-muted-foreground transition-transform", advancedOpen ? "rotate-180" : ""].join(" ")}
@@ -114,7 +117,7 @@ export function ModelSettingsEditor({
           </Button>
           {advancedOpen && (
             <div className="grid grid-cols-2 gap-3 border-t border-border p-3">
-              <Field label="Temperature">
+              <Field label={t("modelSettings.temperature")}>
                 <Input
                   value={settings.temperature ?? 0.7}
                   onChange={(event) => update({ temperature: Number(event.target.value) })}
@@ -125,7 +128,7 @@ export function ModelSettingsEditor({
                   type="number"
                 />
               </Field>
-              <Field label="Max tokens">
+              <Field label={t("modelSettings.maxTokens")}>
                 <Input
                   value={settings.maxTokens ?? 800}
                   onChange={(event) => update({ maxTokens: Number(event.target.value) })}

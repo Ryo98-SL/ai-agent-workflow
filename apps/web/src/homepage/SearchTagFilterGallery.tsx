@@ -16,7 +16,13 @@ export function SearchTagFilterGallery() {
               Production search stays compact and only filters against workflow metadata that exists.
             </p>
           </div>
-          <SearchTagFilter value={value} onChange={setValue} />
+          <SearchTagFilter
+            value={value}
+            onChange={setValue}
+            label="Search workflows"
+            placeholder="Search workflows"
+            clearLabel="Clear search"
+          />
         </section>
       </div>
     </div>

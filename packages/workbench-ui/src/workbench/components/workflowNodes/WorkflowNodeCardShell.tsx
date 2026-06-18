@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { ModelProvider, WorkflowNode, WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
 import { AlertCircle, CheckCircle2, PauseCircle, type LucideIcon, Plus } from "lucide-react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import type { WorkflowNodeActionHandler, WorkflowNodePaletteHandleType } from "../../types";
+import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 import { VariableText } from "../VariableTag";
 import { WorkflowNodeActionsMenu } from "../WorkflowNodeActionsMenu";
 import { getWorkflowNodeCardClassName } from "./workflowNodeLayout";
@@ -38,6 +40,7 @@ type WorkflowNodeCardShellProps = WorkflowNodeProps & {
 };
 
 export function WorkflowNodeCardShell({ children, noSourceHandle, noTargetHandle, data, selected, Icon }: WorkflowNodeCardShellProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const node = data.node;
   const executionStatus = data.executionStatus;
   const openNodePalette = (handleType: WorkflowNodePaletteHandleType, anchorElement: HTMLElement) => {
@@ -62,7 +65,7 @@ export function WorkflowNodeCardShell({ children, noSourceHandle, noTargetHandle
         <PauseCircle
           size={15}
           className="absolute -right-1.5 -top-1.5 rounded-full bg-card text-amber-500"
-          aria-label="Awaiting human input"
+          aria-label={t("workflowNodes.awaitingHumanInput", { defaultValue: "Awaiting human input" })}
         />
       )}
       {executionStatus === "succeeded" && (
@@ -73,7 +76,13 @@ export function WorkflowNodeCardShell({ children, noSourceHandle, noTargetHandle
       )}
       {!noTargetHandle && (
         <Handle type="target" position={Position.Left} className={handleClassName}>
-          <PlusNode label={`Add connected node into ${node.label}`} onClick={(anchor) => openNodePalette("target", anchor)} />
+          <PlusNode
+            label={t("workflowNodes.addConnectedInto", {
+              defaultValue: "Add connected node into {{label}}",
+              label: node.label,
+            })}
+            onClick={(anchor) => openNodePalette("target", anchor)}
+          />
           <InnerHandle />
         </Handle>
       )}
@@ -100,7 +109,13 @@ export function WorkflowNodeCardShell({ children, noSourceHandle, noTargetHandle
       )}
       {!noSourceHandle && (
         <Handle type="source" position={Position.Right} className={handleClassName}>
-          <PlusNode label={`Add connected node from ${node.label}`} onClick={(anchor) => openNodePalette("source", anchor)} />
+          <PlusNode
+            label={t("workflowNodes.addConnectedFrom", {
+              defaultValue: "Add connected node from {{label}}",
+              label: node.label,
+            })}
+            onClick={(anchor) => openNodePalette("source", anchor)}
+          />
           <InnerHandle />
         </Handle>
       )}

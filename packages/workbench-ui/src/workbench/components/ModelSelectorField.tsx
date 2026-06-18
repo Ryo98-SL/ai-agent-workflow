@@ -1,5 +1,6 @@
 import { ArrowLeft, Check, ChevronDown, ChevronRight, Plus, Search, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import type {
   ModelProvider,
   OpenAICompatibleSettings,
@@ -8,6 +9,7 @@ import type {
 } from "@ai-agent-workflow/workflow-domain";
 import { Badge } from "@workbench/components/ui/badge";
 import { Input } from "@workbench/components/ui/input";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import { Button } from "./Button";
 import { FIELD_INPUT_CLASS, FIELD_SHELL_CLASS, FIELD_SHELL_INPUT_CLASS } from "./fieldStyles";
 import { ModelCapabilityTags } from "./ModelCapabilityTags";
@@ -51,6 +53,7 @@ export function ModelSelectorField({
   providerKeyPrefs,
   onProviderKeyPreferenceChange,
 }: ModelSelectorFieldProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [mode, setMode] = useState<"list" | "add">("list");
   const [collapsedProviders, setCollapsedProviders] = useState<ReadonlySet<string>>(new Set());
@@ -123,7 +126,7 @@ export function ModelSelectorField({
   };
 
   return (
-    <Field label="Model">
+    <Field label={t("modelSettings.model")}>
       <Popover
         id={selectorId}
         open={selectorOpen}
@@ -137,7 +140,7 @@ export function ModelSelectorField({
             variant="modelTrigger"
             size="unstyled"
             onClick={() => setSelectorOpen((current) => !current)}
-            aria-label="Choose model provider and model"
+            aria-label={t("modelSettings.chooseModel")}
           >
             <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background">
               <ModelProviderLogo provider={value.provider} />
@@ -164,7 +167,7 @@ export function ModelSelectorField({
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     className={FIELD_SHELL_INPUT_CLASS}
-                    placeholder="Search model"
+                    placeholder={t("modelSettings.searchModel")}
                   />
                 </label>
               </div>
@@ -175,6 +178,7 @@ export function ModelSelectorField({
                     value={value}
                     onSelect={selectSavedModel}
                     onRemove={onRemoveCustomModel}
+                    removeLabel={(model) => t("modelSettings.removeModel", { model })}
                   />
                 )}
                 {filteredProviders.map((provider) => (
@@ -194,7 +198,7 @@ export function ModelSelectorField({
                   />
                 ))}
                 {filteredProviders.length === 0 && filteredSavedModels.length === 0 && (
-                  <p className="px-4 py-6 text-sm text-muted-foreground">No models found.</p>
+                  <p className="px-4 py-6 text-sm text-muted-foreground">{t("modelSettings.noModelsFound")}</p>
                 )}
               </div>
               <div className="border-t border-border p-2">
@@ -204,7 +208,7 @@ export function ModelSelectorField({
                   className="h-9 w-full justify-start gap-2 px-2 text-sm text-brand"
                   onClick={openAddMode}
                 >
-                  <Plus size={16} aria-hidden /> Add custom model
+                  <Plus size={16} aria-hidden /> {t("modelSettings.addCustomModel")}
                 </Button>
               </div>
             </>
@@ -217,11 +221,11 @@ export function ModelSelectorField({
                   className="h-7 px-2 text-xs text-muted-foreground"
                   onClick={() => setMode("list")}
                 >
-                  <ArrowLeft size={14} aria-hidden /> Back
+                  <ArrowLeft size={14} aria-hidden /> {t("modelSettings.back")}
                 </Button>
-                <span className="text-sm font-semibold">Custom model</span>
+                <span className="text-sm font-semibold">{t("modelSettings.customModel")}</span>
               </div>
-              <Field label="Based on provider">
+              <Field label={t("modelSettings.basedOnProvider")}>
                 <ProviderPicker
                   id={`${selectorId}-custom-provider`}
                   providers={providers}
@@ -229,12 +233,12 @@ export function ModelSelectorField({
                   onChange={setCustomProvider}
                 />
               </Field>
-              <Field label="Model name">
+              <Field label={t("modelSettings.modelName")}>
                 <Input
                   value={customModel}
                   onChange={(event) => setCustomModel(event.target.value)}
                   className={FIELD_INPUT_CLASS}
-                  placeholder={`e.g. ${customProvider.defaultModel}`}
+                  placeholder={t("modelSettings.modelNamePlaceholder", { model: customProvider.defaultModel })}
                   autoFocus
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
@@ -244,9 +248,11 @@ export function ModelSelectorField({
                   }}
                 />
               </Field>
-              <p className="text-[11px] text-muted-foreground">Routed through the {customProvider.label} API.</p>
+              <p className="text-[11px] text-muted-foreground">
+                {t("modelSettings.routedThroughProvider", { provider: customProvider.label })}
+              </p>
               <Button variant="success" fullWidth disabled={!customModel.trim()} onClick={addCustom}>
-                Add &amp; use
+                {t("modelSettings.addAndUse")}
               </Button>
             </div>
           )}
@@ -326,16 +332,20 @@ function SavedModelGroup({
   value,
   onSelect,
   onRemove,
+  removeLabel,
 }: {
   models: SelectorCustomModel[];
   value: OpenAICompatibleSettings;
   onSelect: (model: SelectorCustomModel) => void;
   onRemove?: (id: string) => void;
+  removeLabel: (model: string) => string;
 }) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
+
   return (
     <div className="pb-2">
       <div className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-muted-foreground">
-        <span>Your models</span>
+        <span>{t("modelSettings.yourModels")}</span>
       </div>
       <div className="space-y-1 px-2">
         {models.map((saved) => {
@@ -359,7 +369,7 @@ function SavedModelGroup({
                 <Button
                   variant="ghost"
                   size="iconMd"
-                  aria-label={`Remove ${saved.model}`}
+                  aria-label={removeLabel(saved.model)}
                   className="opacity-0 group-hover/saved:opacity-100"
                   onClick={() => onRemove(saved.id)}
                 >
@@ -375,9 +385,11 @@ function SavedModelGroup({
 }
 
 function CustomBadge() {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
+
   return (
     <Badge variant="outline" className="shrink-0 border-brand/40 px-1.5 py-0 text-[10px] font-medium text-brand">
-      Custom
+      {t("modelSettings.customBadge")}
     </Badge>
   );
 }

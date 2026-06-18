@@ -16,6 +16,10 @@ over the seeded example KB (`EXAMPLE_KNOWLEDGE_BASE_ID`), an Agent tool-routing
 demo with a built-in tool plus a Built-in MCP Server tool, and a customer-support
 Agent demo that combines Knowledge retrieval with the same built-in/MCP Agent
 Tool List.
+Template summaries and generated starter copy are localized through explicit
+Template Locale APIs: `getWorkflowTemplates(locale)` and
+`buildWorkflowFromTemplate(id, locale)`. Created workflows do not store a locale
+binding and become ordinary user-authored workflow content after creation.
 
 Model settings are provider-aware. Persisted workflow settings support
 `deepseek`, `openai`, `anthropic`, and `ollama`, defaulting to DeepSeek
@@ -44,5 +48,11 @@ pnpm --filter @ai-agent-workflow/workflow-domain build
 Import from the package root:
 
 ```ts
-import { createDefaultWorkflow, parseWorkflowJson, resolvePromptWithRuntimeState } from "@ai-agent-workflow/workflow-domain";
+import {
+  buildWorkflowFromTemplate,
+  createDefaultWorkflow,
+  getWorkflowTemplates,
+  parseWorkflowJson,
+  resolvePromptWithRuntimeState,
+} from "@ai-agent-workflow/workflow-domain";
 ```

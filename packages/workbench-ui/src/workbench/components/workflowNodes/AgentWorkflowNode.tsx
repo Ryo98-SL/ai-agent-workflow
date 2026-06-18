@@ -1,5 +1,7 @@
 import { Bot } from "lucide-react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import { resolveToolDescriptor, type AgentNode } from "@ai-agent-workflow/workflow-domain";
+import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 import { ModelProviderLogo } from "../modelProviderVisuals";
 import { WorkflowNodeCardShell, type WorkflowNodeProps } from "./WorkflowNodeCardShell";
 import { resolveToolIcon } from "./workflowNodeVisuals";
@@ -9,9 +11,10 @@ import { resolveToolIcon } from "./workflowNodeVisuals";
  * first few tool icons) + a strategy badge. Mirrors the LLM card's chrome.
  */
 export function AgentWorkflowNode(props: WorkflowNodeProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const { activeModelProvider, activeModel, node } = props.data;
   const config = node.type === "agent" ? (node as AgentNode).config : undefined;
-  const modelLabel = activeModel || "Use global model";
+  const modelLabel = activeModel || t("workflowNodes.useGlobalModel", { defaultValue: "Use global model" });
   const tools = config?.tools ?? [];
   const iconTools = tools.slice(0, 4);
 
@@ -20,7 +23,7 @@ export function AgentWorkflowNode(props: WorkflowNodeProps) {
       <div className="mt-3 space-y-2">
         <div
           className="flex h-9 items-center gap-2 rounded-md border border-border bg-muted px-2"
-          title={`Model: ${modelLabel}`}
+          title={t("workflowNodes.modelTitle", { defaultValue: "Model: {{model}}", model: modelLabel })}
         >
           <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-background">
             <ModelProviderLogo provider={activeModelProvider} />
@@ -33,7 +36,9 @@ export function AgentWorkflowNode(props: WorkflowNodeProps) {
           )}
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="shrink-0">{tools.length} 个工具</span>
+          <span className="shrink-0">
+            {t("workflowNodes.toolCount", { defaultValue: "{{count}} tools", count: tools.length })}
+          </span>
           {iconTools.length > 0 && (
             <span className="flex items-center gap-1">
               {iconTools.map((tool, index) => {

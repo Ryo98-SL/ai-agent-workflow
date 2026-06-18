@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useState, type FormEvent, type SVGProps } from "react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import { toast } from "sonner";
 import { Input } from "@workbench/components/ui/input";
 import { Label } from "@workbench/components/ui/label";
@@ -13,11 +14,11 @@ type AuthFormProps = {
   onAuthenticated?: () => void;
 };
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
     return error.message;
   }
-  return "Something went wrong. Please try again.";
+  return fallback;
 }
 
 /** Google's multicolor "G" mark — lucide ships no brand icons, so inline the SVG. */
@@ -42,6 +43,7 @@ function GoogleIcon(props: SVGProps<SVGSVGElement>) {
 }
 
 export function AuthForm({ onAuthenticated }: AuthFormProps) {
+  const { t } = useTranslation("workbench");
   const authClient = useWorkbenchAuthClient();
   const [mode, setMode] = useState<Mode>("sign-in");
   const [name, setName] = useState("");
@@ -59,12 +61,12 @@ export function AuthForm({ onAuthenticated }: AuthFormProps) {
           ? await authClient.signIn.email({ email, password })
           : await authClient.signUp.email({ email, password, name: name || email });
       if (result.error) {
-        toast.error(errorMessage(result.error));
+        toast.error(errorMessage(result.error, t("auth.genericError")));
         return;
       }
       onAuthenticated?.();
     } catch (caught) {
-      toast.error(errorMessage(caught));
+      toast.error(errorMessage(caught, t("auth.genericError")));
     } finally {
       setPending(false);
     }
@@ -75,12 +77,12 @@ export function AuthForm({ onAuthenticated }: AuthFormProps) {
     try {
       const result = await authClient.signIn.social({ provider: "google", callbackURL: window.location.href });
       if (result.error) {
-        toast.error(errorMessage(result.error));
+        toast.error(errorMessage(result.error, t("auth.genericError")));
         setGooglePending(false);
       }
       // On success the browser redirects to Google, so keep the pending state.
     } catch (caught) {
-      toast.error(errorMessage(caught));
+      toast.error(errorMessage(caught, t("auth.genericError")));
       setGooglePending(false);
     }
   };
@@ -99,39 +101,39 @@ export function AuthForm({ onAuthenticated }: AuthFormProps) {
               mode === value ? "bg-brand text-brand-foreground" : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {value === "sign-in" ? "Sign in" : "Sign up"}
+            {value === "sign-in" ? t("auth.signIn") : t("auth.signUp")}
           </button>
         ))}
       </div>
 
       {mode === "sign-up" && (
         <div className="space-y-1.5">
-          <Label htmlFor="auth-name">Name</Label>
+          <Label htmlFor="auth-name">{t("auth.name")}</Label>
           <Input
             id="auth-name"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Your name"
+            placeholder={t("auth.namePlaceholder")}
             autoComplete="name"
           />
         </div>
       )}
 
       <div className="space-y-1.5">
-        <Label htmlFor="auth-email">Email</Label>
+        <Label htmlFor="auth-email">{t("auth.email")}</Label>
         <Input
           id="auth-email"
           type="email"
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="you@example.com"
+          placeholder={t("auth.emailPlaceholder")}
           autoComplete="email"
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="auth-password">Password</Label>
+        <Label htmlFor="auth-password">{t("auth.password")}</Label>
         <Input
           id="auth-password"
           type="password"
@@ -139,19 +141,19 @@ export function AuthForm({ onAuthenticated }: AuthFormProps) {
           minLength={8}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          placeholder="At least 8 characters"
+          placeholder={t("auth.passwordPlaceholder")}
           autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
         />
       </div>
 
       <Button type="submit" variant="success" fullWidth disabled={busy}>
         {pending && <Loader2 size={16} className="animate-spin" aria-hidden />}
-        {mode === "sign-in" ? "Sign in" : "Create account"}
+        {mode === "sign-in" ? t("auth.signIn") : t("auth.createAccount")}
       </Button>
 
       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
         <span className="h-px flex-1 bg-border" />
-        or
+        {t("auth.divider")}
         <span className="h-px flex-1 bg-border" />
       </div>
 
@@ -164,7 +166,7 @@ export function AuthForm({ onAuthenticated }: AuthFormProps) {
         disabled={busy}
       >
         {googlePending ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <GoogleIcon />}
-        Continue with Google
+        {t("auth.google")}
       </Button>
     </form>
   );

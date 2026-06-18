@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Repeat } from "lucide-react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import {
   resolveToolDescriptor,
   type JsonValue,
@@ -7,6 +8,7 @@ import {
   type ToolNode,
   type WorkflowNode,
 } from "@ai-agent-workflow/workflow-domain";
+import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 import { NodeOutputVariablesPanel } from "../NodeOutputVariablesPanel";
 import { Popover } from "../Popover";
 import { resolveToolIcon } from "../workflowNodes/workflowNodeVisuals";
@@ -25,6 +27,7 @@ type ToolInspectorProps = {
  * param-spec, and "更换工具" reopens the Tool Browser to rebind in place.
  */
 export function ToolInspector({ node, onOpenMcpServers, updateNode }: ToolInspectorProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const [browsing, setBrowsing] = useState(false);
   const descriptor = resolveToolDescriptor(node.config);
   const Icon = resolveToolIcon(descriptor?.icon);
@@ -64,7 +67,9 @@ export function ToolInspector({ node, onOpenMcpServers, updateNode }: ToolInspec
           <Icon size={16} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">{descriptor?.label ?? "未知工具"}</p>
+          <p className="truncate text-sm font-medium text-foreground">
+            {descriptor?.label ?? t("inspectors.tool.unknown", { defaultValue: "Unknown tool" })}
+          </p>
           <p className="truncate text-xs text-muted-foreground">
             {node.config.provider} · {node.config.toolName}
           </p>
@@ -83,7 +88,7 @@ export function ToolInspector({ node, onOpenMcpServers, updateNode }: ToolInspec
               className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <Repeat size={13} aria-hidden />
-              更换工具
+              {t("inspectors.tool.change", { defaultValue: "Change tool" })}
             </button>
           )}
         >
@@ -97,7 +102,9 @@ export function ToolInspector({ node, onOpenMcpServers, updateNode }: ToolInspec
         <ToolParamForm nodeId={node.id} descriptor={descriptor} params={node.config.params} onChange={setParams} />
       ) : (
         <p className="rounded-md bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-300">
-          此节点绑定的工具不可用，请点击「更换工具」重新选择。
+          {t("inspectors.tool.unavailable", {
+            defaultValue: "This node's bound tool is unavailable. Click \"Change tool\" to choose another one.",
+          })}
         </p>
       )}
 

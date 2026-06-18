@@ -18,9 +18,13 @@ to register a route. The production homepage lives in `src/pages/index.tsx`,
 the preserved workbench route lives in `src/pages/workbench/index.tsx`, and
 design-only galleries live in `src/pages/design/`.
 
-The homepage uses the shared workbench `brand` tokens for header tabs and
-primary accents. Studio workflow cards read each workflow's saved metadata icon,
-the top-left card opens the shared New Workflow template dialog, and the compact
-search field filters only real workflow summary fields.
-The browser favicon is served from `public/favicon.png` and matches the
-homepage header `AIW` mark.
+The homepage follows the shared workbench light/dark theme tokens for its shell,
+cards, search field, header tabs, and primary accents. Its header places the
+Product Locale switcher beside the shared theme switcher and account menu.
+Studio workflow cards read each workflow's saved metadata icon, format edited
+dates with Product Locale, use a compact responsive grid that reaches four
+columns on desktop, the top-left card opens the shared New Workflow template
+dialog, and the compact search field filters only real workflow summary fields.
+Product Locale is local to the browser; it translates app-owned homepage chrome
+without rewriting workflow summaries returned by the API. The browser favicon is
+served from `public/favicon.png` and matches the homepage header `AIW` mark.

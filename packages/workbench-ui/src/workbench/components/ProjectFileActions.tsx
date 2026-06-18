@@ -1,4 +1,6 @@
 import { Save } from "lucide-react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import { Button } from "./Button";
 
 type ProjectFileActionsProps = {
@@ -9,16 +11,18 @@ type ProjectFileActionsProps = {
 
 // New / Open / Save-as live in the workflow switcher now; only Save remains here.
 export function ProjectFileActions({ dirty, filePath, onSave }: ProjectFileActionsProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
+
   return (
     <Button
       variant="primary"
       size="md"
       onClick={onSave}
       disabled={!dirty && Boolean(filePath)}
-      title="Save workflow"
+      title={t("projectFileActions.saveWorkflow")}
     >
       <Save size={16} aria-hidden />
-      Save
+      {t("projectFileActions.save")}
     </Button>
   );
 }

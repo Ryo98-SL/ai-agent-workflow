@@ -17,6 +17,8 @@ workflow IO stays behind the injected API.
   alias maps to `src/*` (wired in tsconfig, vitest, and the consuming Vite apps).
 - `src/auth/` contains Better Auth UI and the anonymous-local-data import prompt.
 - `src/theme/` contains theme provider/menu state.
+- `src/i18n/` contains the package-owned `workbench` namespace resources for
+  Product Locale copy.
 - `src/data/` contains the workbench data provider, Better Auth client,
   anonymous IndexedDB workflow storage, session-scoped anonymous run tracking,
   and React Query hooks for account/workflow/Knowledge Base resources.
@@ -46,3 +48,8 @@ through the Tool Browser and configured through descriptor-driven param forms.
 Canvas structure edits have local undo/redo for node/edge creation, deletion,
 and movement; form-based inspector changes and model settings stay outside that
 history.
+
+Workbench UI uses `@ai-agent-workflow/i18n` for Product Locale copy, locale-aware
+dates, and rendering-only Tool descriptor display localization. The package
+exports `workbenchI18nResources` for host apps that provide a top-level
+`I18nProvider`; `AppWorkbench` also wraps itself for standalone hosts.

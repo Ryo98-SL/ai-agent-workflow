@@ -6,6 +6,24 @@ for *node variables* — how upstream outputs are referenced, displayed, and edi
 
 ## Language
 
+### Localization
+
+**Product Locale**:
+The language used for product-owned interface text such as navigation, buttons,
+empty states, errors, and date formatting.
+_Avoid_: app language, UI language
+
+**Template Locale**:
+The language used when code-defined workflow templates generate default workflow
+content such as node labels, descriptions, starter prompts, and example input.
+_Avoid_: workflow language, template language
+
+**User-authored Content**:
+Content a user has saved into a workflow, including workflow names, node labels,
+descriptions, prompts, and default field values. Product Locale changes must not
+rewrite or auto-translate this content.
+_Avoid_: translated workflow data, localized saved workflow
+
 ### Variables
 
 **Variable Reference**:

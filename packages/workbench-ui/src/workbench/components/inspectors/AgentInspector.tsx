@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ChevronDown, Info, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import {
   AGENT_STRATEGIES,
   resolveToolDescriptor,
@@ -20,6 +21,7 @@ import { resolveToolIcon } from "../workflowNodes/workflowNodeVisuals";
 import { ToolBrowser } from "../tools/ToolBrowser";
 import { ToolParamForm } from "../tools/ToolParamForm";
 import { NodeModelSettingField, modelSettingsForEditor, sanitizeNodeModelSettings } from "./sharedModelSettingField";
+import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 
 type AgentInspectorProps = {
   workflow: WorkflowFile;
@@ -28,11 +30,6 @@ type AgentInspectorProps = {
   onProviderKeyPreferenceChange?: (provider: ModelProvider, preference: ProviderKeyPreference) => void;
   onOpenMcpServers?: () => void;
   updateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
-};
-
-const STRATEGY_LABELS: Record<AgentStrategy, string> = {
-  functionCalling: "Function Calling",
-  react: "ReAct",
 };
 
 /**
@@ -48,6 +45,7 @@ export function AgentInspector({
   onOpenMcpServers,
   updateNode,
 }: AgentInspectorProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const modelSettings = modelSettingsForEditor(workflow, node);
   const hasModelOverride = Boolean(node.config.modelSettings || node.config.model);
 
@@ -79,32 +77,41 @@ export function AgentInspector({
       <AgentToolList nodeId={node.id} tools={node.config.tools} onChange={setTools} onOpenMcpServers={onOpenMcpServers} />
 
       <div>
-        <span className="mb-1 block text-xs font-medium text-muted-foreground">Instruction (System)</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">
+          {t("inspectors.agent.instruction", { defaultValue: "Instruction (System)" })}
+        </span>
         <VariableRichTextEditor
           nodeId={node.id}
-          ariaLabel="Agent instruction"
+          ariaLabel={t("inspectors.agent.instructionAria", { defaultValue: "Agent instruction" })}
           value={node.config.instruction}
           onChange={(instruction) => updateConfig({ instruction })}
-          placeholder="设定 Agent 的角色与目标，/ 引用上游变量"
+          placeholder={t("inspectors.agent.instructionPlaceholder", {
+            defaultValue: "Set the Agent role and goal, type / to reference variables",
+          })}
           className="min-h-24"
         />
       </div>
 
       <div>
         <span className="mb-1 block text-xs font-medium text-muted-foreground">
-          Query (User)
+          {t("inspectors.agent.query", { defaultValue: "Query (User)" })}
           <span className="text-destructive"> *</span>
         </span>
         <VariableRichTextEditor
           nodeId={node.id}
-          ariaLabel="Agent query"
+          ariaLabel={t("inspectors.agent.queryAria", { defaultValue: "Agent query" })}
           value={node.config.query}
           onChange={(query) => updateConfig({ query })}
-          placeholder="本轮用户输入，默认 {{userInput.query}}，/ 引用上游变量"
+          placeholder={t("inspectors.agent.queryPlaceholder", {
+            defaultValue: "Current user input, defaults to {{defaultQuery}}, type / to reference variables",
+            defaultQuery: "{{userInput.query}}",
+          })}
           className="min-h-16"
         />
         {node.config.query.trim().length === 0 && (
-          <span className="mt-1 block text-xs text-destructive">Query 不能为空。</span>
+          <span className="mt-1 block text-xs text-destructive">
+            {t("inspectors.agent.queryRequired", { defaultValue: "Query is required." })}
+          </span>
         )}
       </div>
 
@@ -115,9 +122,13 @@ export function AgentInspector({
 
       <label className="flex items-start justify-between gap-3 rounded-md border border-border bg-card p-3">
         <span className="min-w-0">
-          <span className="block text-sm font-medium text-foreground">Conversation memory</span>
+          <span className="block text-sm font-medium text-foreground">
+            {t("inspectors.common.conversationMemory", { defaultValue: "Conversation memory" })}
+          </span>
           <span className="mt-0.5 block text-xs text-muted-foreground">
-            Remember prior turns across runs in the same conversation (multi-turn chat).
+            {t("inspectors.common.conversationMemoryDescription", {
+              defaultValue: "Remember prior turns across runs in the same conversation (multi-turn chat).",
+            })}
           </span>
         </span>
         <input
@@ -134,9 +145,16 @@ export function AgentInspector({
 }
 
 function StrategyPicker({ strategy, onChange }: { strategy: AgentStrategy; onChange: (strategy: AgentStrategy) => void }) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
+  const strategyLabels: Record<AgentStrategy, string> = {
+    functionCalling: t("inspectors.agent.functionCalling", { defaultValue: "Function Calling" }),
+    react: t("inspectors.agent.react", { defaultValue: "ReAct" }),
+  };
   return (
     <div>
-      <span className="mb-1 block text-xs font-medium text-muted-foreground">Agentic Strategy</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">
+        {t("inspectors.agent.strategy", { defaultValue: "Agentic Strategy" })}
+      </span>
       <div className="flex gap-1 rounded-md border border-border bg-muted/40 p-1">
         {AGENT_STRATEGIES.map((option) => (
           <button
@@ -148,14 +166,16 @@ function StrategyPicker({ strategy, onChange }: { strategy: AgentStrategy; onCha
               strategy === option ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
             ].join(" ")}
           >
-            {STRATEGY_LABELS[option]}
+            {strategyLabels[option]}
           </button>
         ))}
       </div>
       {strategy === "react" && (
         <p className="mt-1.5 flex items-start gap-1.5 rounded-md bg-amber-500/10 p-2 text-xs leading-5 text-amber-700 dark:text-amber-300">
           <Info size={13} className="mt-0.5 shrink-0" aria-hidden />
-          ReAct 策略暂未实现，运行时会报错。请使用 Function Calling。
+          {t("inspectors.agent.reactWarning", {
+            defaultValue: "ReAct strategy is not implemented yet and will fail at runtime. Use Function Calling.",
+          })}
         </p>
       )}
     </div>
@@ -173,6 +193,7 @@ function AgentToolList({
   onChange: (tools: AgentToolBinding[]) => void;
   onOpenMcpServers?: () => void;
 }) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const [browsing, setBrowsing] = useState(false);
   const selectedKeys = new Set(tools.map((tool) => toolDescriptorKey(tool.provider, tool.providerId, tool.toolName)));
 
@@ -195,7 +216,9 @@ function AgentToolList({
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">工具 ({tools.length})</span>
+        <span className="text-xs font-medium text-muted-foreground">
+          {t("inspectors.agent.tools", { defaultValue: "Tools ({{count}})", count: tools.length })}
+        </span>
         <Popover
           id={`agent-tools-${nodeId}`}
           open={browsing}
@@ -210,7 +233,7 @@ function AgentToolList({
               className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <Plus size={13} aria-hidden />
-              添加工具
+              {t("inspectors.agent.addTool", { defaultValue: "Add tool" })}
             </button>
           )}
         >
@@ -222,7 +245,9 @@ function AgentToolList({
 
       {tools.length === 0 ? (
         <p className="rounded-md border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
-          还没有工具。点击「添加工具」从工具浏览器选择内置工具或 MCP 工具。
+          {t("inspectors.agent.emptyTools", {
+            defaultValue: "No tools yet. Click \"Add tool\" to choose built-in or MCP tools from the tool browser.",
+          })}
         </p>
       ) : (
         <div className="space-y-2">
@@ -252,6 +277,7 @@ function AgentToolRow({
   onRemove: () => void;
   onParamsChange: (params: Record<string, JsonValue>) => void;
 }) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const [expanded, setExpanded] = useState(false);
   const descriptor = resolveToolDescriptor(tool);
   const Icon = resolveToolIcon(descriptor?.icon);
@@ -274,7 +300,7 @@ function AgentToolRow({
           <button
             type="button"
             onClick={() => setExpanded((value) => !value)}
-            aria-label="配置参数"
+            aria-label={t("inspectors.agent.configureParams", { defaultValue: "Configure params" })}
             aria-expanded={expanded}
             className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
@@ -284,7 +310,7 @@ function AgentToolRow({
         <button
           type="button"
           onClick={onRemove}
-          aria-label="移除工具"
+          aria-label={t("inspectors.agent.removeTool", { defaultValue: "Remove tool" })}
           className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
         >
           <Trash2 size={14} aria-hidden />
@@ -293,14 +319,18 @@ function AgentToolRow({
       {isMcp && (
         <p className="flex items-center gap-1.5 border-t border-border px-2 py-1.5 text-[11px] text-muted-foreground">
           <Info size={11} className="shrink-0" aria-hidden />
-          参数由 Agent 在调用时自动填充。
+          {t("inspectors.agent.mcpParamsAuto", {
+            defaultValue: "Params are filled automatically by the Agent when it calls the tool.",
+          })}
         </p>
       )}
       {expanded && hasConfigurableParams && descriptor && (
         <div className="space-y-3 border-t border-border p-3">
           <p className="flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
             <Info size={11} className="mt-0.5 shrink-0" aria-hidden />
-            填写的参数将被固定；留空的参数由 Agent 自动填充。
+            {t("inspectors.agent.fixedParamsHint", {
+              defaultValue: "Filled params are fixed; empty params are filled automatically by the Agent.",
+            })}
           </p>
           <ToolParamForm nodeId={nodeId} descriptor={descriptor} params={tool.params} onChange={onParamsChange} />
         </div>
@@ -310,11 +340,14 @@ function AgentToolRow({
 }
 
 function MaxIterationsField({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const clamp = (next: number) => Math.min(50, Math.max(1, Math.round(next)));
   return (
     <div>
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">Maximum Iterations</span>
+        <span className="text-xs font-medium text-muted-foreground">
+          {t("inspectors.agent.maxIterations", { defaultValue: "Maximum Iterations" })}
+        </span>
         <span className="text-xs font-semibold text-foreground">{value}</span>
       </div>
       <input
@@ -325,9 +358,13 @@ function MaxIterationsField({ value, onChange }: { value: number; onChange: (val
         value={value}
         onChange={(event) => onChange(clamp(Number(event.target.value)))}
         className="w-full accent-[hsl(var(--brand))]"
-        aria-label="Maximum iterations"
+        aria-label={t("inspectors.agent.maxIterationsAria", { defaultValue: "Maximum iterations" })}
       />
-      <p className="mt-1 text-xs text-muted-foreground">Agent 调用工具的最大轮数（超出会中止）。</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {t("inspectors.agent.maxIterationsHelp", {
+          defaultValue: "Maximum number of tool-call rounds before the Agent stops.",
+        })}
+      </p>
     </div>
   );
 }

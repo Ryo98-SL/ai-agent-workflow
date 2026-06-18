@@ -2,6 +2,7 @@ import { CheckCircle2, History, Loader2, PauseCircle, Trash2, X, XCircle } from 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { useProductLocale, useTranslation } from "@ai-agent-workflow/i18n";
 import {
   RunSseEventSchema,
   type RunEvent,
@@ -26,9 +27,9 @@ type RunHistoryMenuProps = {
   nodeStates: Map<string, NodeExecutionState>;
 };
 
-function runDuration(run: WorkflowRun): string {
-  if (run.status === "waiting_human") return "Waiting";
-  if (!run.startedAt || !run.completedAt) return "In progress";
+function runDuration(run: WorkflowRun, t: (key: string, options?: { defaultValue?: string }) => string): string {
+  if (run.status === "waiting_human") return t("runHistory.waiting", { defaultValue: "Waiting" });
+  if (!run.startedAt || !run.completedAt) return t("runHistory.inProgress", { defaultValue: "In progress" });
   const durationMs = new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime();
   if (durationMs < 1000) return "<1s";
   return `${Math.round(durationMs / 1000)}s`;
@@ -62,6 +63,11 @@ function nodeStatesFromRun(workflow: WorkflowFile, run: WorkflowRun, events: Run
 }
 
 export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }: RunHistoryMenuProps) {
+  const { locale } = useProductLocale();
+  const { t } = useTranslation("workbench");
+  const title = t("runHistory.title", { defaultValue: "Run history" });
+  const drawerLabel = t("runHistory.drawer", { defaultValue: "Run history drawer" });
+  const closeLabel = t("runHistory.close", { defaultValue: "Close run history" });
   const [open, setOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [historyDebugState, setHistoryDebugState] = useState<DebugState>(EMPTY_HISTORY_STATE);
@@ -156,7 +162,7 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
         if (cancelled) return;
         setHistoryDebugState({
           status: "error",
-          error: error instanceof Error ? error.message : "Run history failed to load.",
+          error: error instanceof Error ? error.message : t("runHistory.loadError"),
         });
       });
 
@@ -190,7 +196,7 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
         .catch((error: unknown) => {
           setResumeNodeStates(null);
           setResumeSubmitting(false);
-          setResumeError(error instanceof Error ? error.message : "Run refresh failed.");
+          setResumeError(error instanceof Error ? error.message : t("runHistory.refreshError"));
         });
     },
     [queryClient, workflowApi, workflowId],
@@ -232,10 +238,10 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
         resumeStreamRef.current = null;
         setResumeNodeStates(null);
         setResumeSubmitting(false);
-        setResumeError("连接中断，请重试。");
+        setResumeError(t("runHistory.streamDisconnected"));
       };
     },
-    [refreshAfterResume, workflowApi],
+    [refreshAfterResume, t, workflowApi],
   );
 
   // Resume a paused (waiting_human) run straight from history. The HTTP response
@@ -259,10 +265,10 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
         .catch((error: unknown) => {
           // Keep the waiting state so the form stays available to retry.
           setResumeSubmitting(false);
-          setResumeError(error instanceof Error ? error.message : "Resume failed.");
+          setResumeError(error instanceof Error ? error.message : t("runHistory.resumeFailed"));
         });
     },
-    [closeResumeStream, subscribeResumeStream, workflow, workflowApi],
+    [closeResumeStream, subscribeResumeStream, t, workflow, workflowApi],
   );
 
   const confirmDeleteRun = async (runId: string) => {
@@ -270,7 +276,7 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
     try {
       await deleteRun.mutateAsync(runId);
     } catch (error) {
-      setDeleteError(error instanceof Error ? error.message : "Run deletion failed.");
+      setDeleteError(error instanceof Error ? error.message : t("runHistory.deleteFailed"));
       return;
     }
 
@@ -290,26 +296,31 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
         <button
           type="button"
           className="absolute inset-0 cursor-default bg-black/30"
-          aria-label="Close run history"
+          aria-label={closeLabel}
           onClick={closeDrawer}
         />
         <aside
-          aria-label="Run history drawer"
+          aria-label={drawerLabel}
           className="relative ml-auto flex h-full w-[50vw] min-w-[640px] max-w-full flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-2xl shadow-black/30 max-md:min-w-[520px] max-sm:w-full max-sm:min-w-0"
         >
           <div className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border px-4">
             <div className="min-w-0">
-              <h2 className="truncate text-sm font-semibold text-foreground">Run history</h2>
+              <h2 className="truncate text-sm font-semibold text-foreground">{title}</h2>
               <p className="truncate text-xs text-muted-foreground">
-                {selectedRun ? `Historical run from ${formatWorkbenchDate(selectedRun.createdAt)}` : "Current run output"}
+                {selectedRun
+                  ? t("runHistory.historicalRun", {
+                      date: formatWorkbenchDate(selectedRun.createdAt, { locale }),
+                      defaultValue: `Historical run from ${formatWorkbenchDate(selectedRun.createdAt, { locale })}`,
+                    })
+                  : t("runHistory.currentRun", { defaultValue: "Current run output" })}
               </p>
             </div>
             <Button
               variant="ghost"
               size="iconSm"
               onClick={closeDrawer}
-              aria-label="Close run history"
-              title="Close run history"
+              aria-label={closeLabel}
+              title={closeLabel}
             >
               <X size={16} aria-hidden />
             </Button>
@@ -331,29 +342,29 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
 
             <section className="flex w-[260px] shrink-0 flex-col overflow-hidden rounded-md border border-border bg-card max-sm:w-[230px]">
               <div className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Runs
+                {t("runHistory.runs")}
               </div>
 
               {!workflowId ? (
                 <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                  Run this workflow to see its history.
+                  {t("runHistory.runToSeeHistory")}
                 </p>
               ) : isLoading ? (
                 <div className="flex items-center justify-center gap-2 px-3 py-6 text-sm text-muted-foreground">
-                  <Loader2 size={15} className="animate-spin" aria-hidden /> Loading…
+                  <Loader2 size={15} className="animate-spin" aria-hidden /> {t("runHistory.loading")}
                 </div>
               ) : runs.length === 0 ? (
-                <p className="px-3 py-6 text-center text-sm text-muted-foreground">No runs yet.</p>
+                <p className="px-3 py-6 text-center text-sm text-muted-foreground">{t("runHistory.empty")}</p>
               ) : (
                 <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-2">
                   {runs.map((run) => {
-                    const date = formatWorkbenchDate(run.createdAt);
+                    const date = formatWorkbenchDate(run.createdAt, { locale });
                     const selected = run.id === selectedRunId;
 
                     if (confirmingRunId === run.id) {
                       return (
                         <div key={run.id} className="flex h-14 items-center gap-2 rounded-md bg-accent px-2">
-                          <span className="min-w-0 flex-1 text-sm text-muted-foreground">Delete this run?</span>
+                          <span className="min-w-0 flex-1 text-sm text-muted-foreground">{t("runHistory.deleteConfirm")}</span>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -363,7 +374,7 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
                               void confirmDeleteRun(run.id);
                             }}
                           >
-                            Delete
+                            {t("runHistory.delete")}
                           </Button>
                           <Button
                             variant="ghost"
@@ -374,7 +385,7 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
                               setDeleteError(null);
                             }}
                           >
-                            Cancel
+                            {t("runHistory.cancel")}
                           </Button>
                         </div>
                       );
@@ -389,7 +400,7 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
                             "h-full min-w-0 flex-1 justify-start gap-2 rounded-md px-2 py-2 text-sm hover:bg-accent",
                             selected ? "bg-accent text-accent-foreground" : "",
                           ].join(" ")}
-                          aria-label={`Open run from ${date}`}
+                          aria-label={t("runHistory.openRun", { date })}
                           onClick={() => {
                             setSelectedRunId(run.id);
                             setConfirmingRunId(null);
@@ -399,14 +410,14 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
                           <StatusIcon status={run.status} />
                           <span className="min-w-0 flex-1 text-left">
                             <span className="block truncate font-medium text-foreground">{date}</span>
-                            <span className="block truncate text-[11px] text-muted-foreground">{runDuration(run)}</span>
+                            <span className="block truncate text-[11px] text-muted-foreground">{runDuration(run, t)}</span>
                           </span>
                         </Button>
                         <Button
                           variant="dangerGhost"
                           size="iconSm"
-                          aria-label={`Delete run from ${date}`}
-                          title="Delete run"
+                          aria-label={t("runHistory.deleteRun", { date })}
+                          title={t("runHistory.delete")}
                           className="opacity-0 group-hover/run:opacity-100 focus-visible:opacity-100"
                           onClick={() => setConfirmingRunId(run.id)}
                         >
@@ -420,7 +431,7 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
 
               {!isAuthed && workflowId && (
                 <p className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
-                  Runs are kept for this session only. Sign in to save your history.
+                  {t("runHistory.sessionOnly")}
                 </p>
               )}
               {deleteError && (
@@ -437,8 +448,8 @@ export function RunHistoryMenu({ workflow, workflowId, debugState, nodeStates }:
       <Button
         variant="secondary"
         size="iconMd"
-        aria-label="Run history"
-        title="Run history"
+        aria-label={title}
+        title={title}
         onClick={() => setOpen((v) => !v)}
       >
         <History size={16} aria-hidden />

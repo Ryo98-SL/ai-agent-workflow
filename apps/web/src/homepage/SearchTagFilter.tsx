@@ -6,13 +6,17 @@ type SearchTagFilterProps = {
   value: SearchTagFilterValue;
   onChange: (value: SearchTagFilterValue) => void;
   placeholder?: string;
+  label: string;
+  clearLabel: string;
   variant?: SearchTagFilterVariant;
 };
 
 export function SearchTagFilter({
   value,
   onChange,
-  placeholder = "Search workflows",
+  placeholder,
+  label,
+  clearLabel,
 }: SearchTagFilterProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -32,16 +36,16 @@ export function SearchTagFilter({
   return (
     <div
       className={[
-        "min-w-0 rounded-lg border bg-white/[0.055] transition-colors",
-        focused ? "border-brand/70 shadow-[0_0_0_3px_hsl(var(--brand)/0.18)]" : "border-white/10",
+        "min-w-0 rounded-lg border bg-card transition-colors",
+        focused ? "border-brand/70 shadow-[0_0_0_3px_hsl(var(--brand)/0.18)]" : "border-border",
       ].join(" ")}
       onClick={() => inputRef.current?.focus()}
     >
       <label className="sr-only" htmlFor={inputId}>
-        Search workflows
+        {label}
       </label>
       <div className="flex h-11 min-w-0 items-center gap-2 px-3">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-white/8 text-white/55">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
           <Search size={17} aria-hidden />
         </span>
 
@@ -53,19 +57,19 @@ export function SearchTagFilter({
           onKeyDown={onKeyDown}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium text-white outline-none placeholder:text-white/30"
+          className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/60"
           placeholder={placeholder}
         />
 
         {value.query && (
           <button
             type="button"
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-white/45 hover:bg-white/8 hover:text-white"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             onClick={(event) => {
               event.stopPropagation();
               clearAll();
             }}
-            aria-label="Clear search"
+            aria-label={clearLabel}
           >
             <X size={16} aria-hidden />
           </button>

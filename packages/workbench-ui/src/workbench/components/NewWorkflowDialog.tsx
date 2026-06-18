@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "@ai-agent-workflow/workflow-domain";
+import { useProductLocale, useTranslation } from "@ai-agent-workflow/i18n";
+import { getWorkflowTemplates, type WorkflowTemplate } from "@ai-agent-workflow/workflow-domain";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@workbench/components/ui/dialog";
 import { Badge } from "@workbench/components/ui/badge";
 import { Button } from "./Button";
@@ -11,21 +12,23 @@ type NewWorkflowDialogProps = {
   onSelect: (template: WorkflowTemplate) => void;
 };
 
-/** The flagship example is the most useful default to preview. */
-const DEFAULT_TEMPLATE_ID = WORKFLOW_TEMPLATES[WORKFLOW_TEMPLATES.length - 1]?.id;
-
 export function NewWorkflowDialog({ open, onOpenChange, onSelect }: NewWorkflowDialogProps) {
-  const [selectedId, setSelectedId] = useState(DEFAULT_TEMPLATE_ID);
+  const { locale } = useProductLocale();
+  const { t } = useTranslation("workbench");
+  const templates = getWorkflowTemplates(locale);
+  /** The flagship example is the most useful default to preview. */
+  const defaultTemplateId = templates[templates.length - 1]?.id;
+  const [selectedId, setSelectedId] = useState(defaultTemplateId);
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   // Reset the preview to the default each time the dialog opens.
   useEffect(() => {
     if (open) {
-      setSelectedId(DEFAULT_TEMPLATE_ID);
+      setSelectedId(defaultTemplateId);
     }
-  }, [open]);
+  }, [defaultTemplateId, open]);
 
-  const selected = WORKFLOW_TEMPLATES.find((template) => template.id === selectedId) ?? WORKFLOW_TEMPLATES[0];
+  const selected = templates.find((template) => template.id === selectedId) ?? templates[0];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -39,13 +42,13 @@ export function NewWorkflowDialog({ open, onOpenChange, onSelect }: NewWorkflowD
         }}
       >
         <DialogHeader>
-          <DialogTitle>新建工作流</DialogTitle>
-          <DialogDescription>选择一个示例开始，或从空白搭建。</DialogDescription>
+          <DialogTitle>{t("newWorkflow.title")}</DialogTitle>
+          <DialogDescription>{t("newWorkflow.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex h-[320px] gap-4">
           <div className="w-56 shrink-0 space-y-1 overflow-y-auto border-r border-border pr-3">
-            {WORKFLOW_TEMPLATES.map((template) => {
+            {templates.map((template) => {
               const active = template.id === selected.id;
               return (
                 <button
@@ -76,7 +79,7 @@ export function NewWorkflowDialog({ open, onOpenChange, onSelect }: NewWorkflowD
             <p className="mt-3 text-sm leading-6 text-muted-foreground">{selected.description}</p>
 
             <div className="mt-4 space-y-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">流程</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("newWorkflow.flow")}</span>
               <FlowPills flow={selected.flow} />
             </div>
 
@@ -92,10 +95,10 @@ export function NewWorkflowDialog({ open, onOpenChange, onSelect }: NewWorkflowD
 
             <div className="mt-auto flex items-center justify-end gap-2 pt-4">
               <Button variant="secondary" size="md" onClick={() => onOpenChange(false)}>
-                取消
+                {t("newWorkflow.cancel")}
               </Button>
               <Button ref={confirmRef} variant="success" size="md" onClick={() => onSelect(selected)}>
-                {selected.id === "blank" ? "从空白开始" : "使用此示例"}
+                {selected.id === "blank" ? t("newWorkflow.startBlank") : t("newWorkflow.useExample")}
               </Button>
             </div>
           </div>
@@ -114,16 +117,18 @@ function IconTile({ icon }: { icon: string }) {
 }
 
 function RequiresBadge({ requires }: { requires: WorkflowTemplate["requires"] }) {
+  const { t } = useTranslation("workbench");
+
   if (requires.includes("credits")) {
     return (
       <Badge variant="secondary" className="shrink-0">
-        需登录 · credits
+        {t("newWorkflow.requiresCredits")}
       </Badge>
     );
   }
   return (
     <Badge variant="outline" className="shrink-0 border-brand/40 text-brand">
-      可直接运行
+      {t("newWorkflow.runnable")}
     </Badge>
   );
 }

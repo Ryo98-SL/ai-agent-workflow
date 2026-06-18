@@ -1,7 +1,9 @@
 import type { JsonValue, ToolDescriptor, ToolParamSpec } from "@ai-agent-workflow/workflow-domain";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import { Input } from "@workbench/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workbench/components/ui/select";
 import { VariableRichTextEditor } from "../richtext/VariableRichTextEditor";
+import { localizedToolDescriptor } from "./localizedToolDescriptor";
 
 type ToolParamFormProps = {
   /** Consumer node id — scopes the `/` variable typeahead in string fields. */
@@ -18,11 +20,13 @@ type ToolParamFormProps = {
  * and (future) MCP tools, so no tool needs a hand-written inspector.
  */
 export function ToolParamForm({ nodeId, descriptor, params, onChange }: ToolParamFormProps) {
+  const { t } = useTranslation("workbench");
+  const localizedDescriptor = localizedToolDescriptor(descriptor, t);
   const setParam = (name: string, value: JsonValue) => onChange({ ...params, [name]: value });
 
   return (
     <div className="space-y-4">
-      {descriptor.params.map((spec) => (
+      {localizedDescriptor.params.map((spec) => (
         <ParamField
           key={spec.name}
           nodeId={nodeId}

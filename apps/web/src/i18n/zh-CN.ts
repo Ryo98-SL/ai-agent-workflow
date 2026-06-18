@@ -1,0 +1,41 @@
+export const webZhCn = {
+  homepage: {
+    brandAria: "AI Agent Workflow 首页",
+    sectionsAria: "产品分区",
+    tabs: {
+      studio: "工作台",
+      knowledge: "知识库",
+    },
+    language: {
+      label: "产品语言",
+      english: "English",
+      chinese: "中文",
+    },
+    studio: {
+      title: "工作台",
+      description: "构建工作流、连接知识，并在需要深入调整时回到编辑器。",
+      searchPlaceholder: "搜索工作流",
+      searchLabel: "搜索工作流",
+      clearSearch: "清除搜索",
+      createTitle: "新建工作流",
+      createDescription: "选择一个 starter 工作流，或从空白画布开始。",
+      loading: "正在加载工作流",
+      loadError: "工作流列表加载失败",
+      empty: "还没有工作流",
+      noMatches: "没有匹配的工作流",
+      createError: "无法创建工作流。",
+      edited: "{{date}} 编辑",
+      nodeCount_one: "{{count}} 个节点",
+      nodeCount_other: "{{count}} 个节点",
+      edgeCount_one: "{{count}} 条连线",
+      edgeCount_other: "{{count}} 条连线",
+    },
+    knowledge: {
+      title: "知识库",
+      description: "创建可复用的检索来源，供工作流知识节点使用。",
+      createTitle: "新建知识库",
+      createDescription: "命名来源、调整检索设置，并添加文本或 Markdown 文档。",
+      created: "知识库已创建。ID：{{id}}",
+    },
+  },
+} as const;

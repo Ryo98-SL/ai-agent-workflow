@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildWorkflowFromTemplate,
+  getWorkflowTemplates,
   IFELSE_ELSE_HANDLE_ID,
   WORKFLOW_TEMPLATES,
   getWorkflowTemplate,
   validateWorkflowFile,
 } from "@ai-agent-workflow/workflow-domain";
+import type { SupportedLocale } from "@ai-agent-workflow/i18n/locale-contract";
 
 describe("workflow templates registry", () => {
   it("exposes the blank, RAG, human-review, and Agent starters", () => {
@@ -18,15 +21,18 @@ describe("workflow templates registry", () => {
   });
 
   it("every template builds a valid workflow", () => {
-    for (const template of WORKFLOW_TEMPLATES) {
-      const result = validateWorkflowFile(template.build());
-      expect(result.ok, `${template.id} should validate`).toBe(true);
+    for (const locale of ["en-US", "zh-CN"] satisfies SupportedLocale[]) {
+      for (const template of getWorkflowTemplates(locale)) {
+        const result = validateWorkflowFile(template.build());
+        expect(result.ok, `${template.id} should validate in ${locale}`).toBe(true);
+      }
     }
   });
 
-  it("looks templates up by id", () => {
-    expect(getWorkflowTemplate("support-hitl")?.name).toBe("客服机器人（含人工复核）");
-    expect(getWorkflowTemplate("support-agent")?.name).toBe("客服 Agent（工具 + MCP）");
+  it("looks templates up by id and locale", () => {
+    expect(getWorkflowTemplate("support-hitl", "en-US")?.name).toBe("Support bot with human review");
+    expect(getWorkflowTemplate("support-hitl", "zh-CN")?.name).toBe("客服机器人（含人工复核）");
+    expect(getWorkflowTemplate("support-agent", "zh-CN")?.name).toBe("客服 Agent（工具 + MCP）");
     expect(getWorkflowTemplate("missing")).toBeUndefined();
   });
 
@@ -39,7 +45,7 @@ describe("workflow templates registry", () => {
   });
 
   it("wires the human-review flagship with knowledge, branch, and HITL", () => {
-    const workflow = getWorkflowTemplate("support-hitl")!.build();
+    const workflow = buildWorkflowFromTemplate("support-hitl", "zh-CN");
     const types = new Set(workflow.graph.nodes.map((node) => node.type));
     expect(types).toContain("knowledge");
     expect(types).toContain("llm");
@@ -62,7 +68,7 @@ describe("workflow templates registry", () => {
   });
 
   it("wires the Agent tool-routing starter with built-in and MCP tools", () => {
-    const workflow = getWorkflowTemplate("agent-tools-demo")!.build();
+    const workflow = buildWorkflowFromTemplate("agent-tools-demo", "en-US");
     const agent = workflow.graph.nodes.find((node) => node.type === "agent");
 
     expect(agent?.type).toBe("agent");
@@ -86,7 +92,7 @@ describe("workflow templates registry", () => {
   });
 
   it("wires the support Agent starter with Knowledge plus built-in and MCP tools", () => {
-    const workflow = getWorkflowTemplate("support-agent")!.build();
+    const workflow = buildWorkflowFromTemplate("support-agent", "en-US");
     const types = new Set(workflow.graph.nodes.map((node) => node.type));
     expect(types).toContain("knowledge");
     expect(types).toContain("agent");
@@ -110,5 +116,22 @@ describe("workflow templates registry", () => {
       "knowledge1->agent1",
       "agent1->end1",
     ]);
+  });
+
+  it("localizes generated workflow defaults without storing a locale binding", () => {
+    const english = buildWorkflowFromTemplate("support-hitl", "en-US");
+    const chinese = buildWorkflowFromTemplate("support-hitl", "zh-CN");
+    const englishStart = english.graph.nodes.find((node) => node.id === "start1");
+    const chineseStart = chinese.graph.nodes.find((node) => node.id === "start1");
+    const englishHuman = english.graph.nodes.find((node) => node.id === "humanInput1");
+    const chineseHuman = chinese.graph.nodes.find((node) => node.id === "humanInput1");
+
+    expect(english.metadata.name).toBe("Support bot with human review");
+    expect(chinese.metadata.name).toBe("客服机器人（含人工复核）");
+    expect(englishStart?.type === "start" && englishStart.config.fields[0].label).toBe("Customer question");
+    expect(chineseStart?.type === "start" && chineseStart.config.fields[0].label).toBe("客户问题");
+    expect(englishHuman?.type === "humanInput" && englishHuman.config.actions[0].label).toBe("Approve");
+    expect(chineseHuman?.type === "humanInput" && chineseHuman.config.actions[0].label).toBe("通过");
+    expect("locale" in english.metadata).toBe(false);
   });
 });

@@ -1,4 +1,6 @@
 import { Brain } from "lucide-react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
+import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 import { ModelCapabilityTags } from "../ModelCapabilityTags";
 import { getModelCapabilities } from "../modelCatalog";
 import { ModelProviderLogo } from "../modelProviderVisuals";
@@ -6,9 +8,10 @@ import { VariableText } from "../VariableTag";
 import { WorkflowNodeCardShell, type WorkflowNodeProps } from "./WorkflowNodeCardShell";
 
 export function LlmWorkflowNode(props: WorkflowNodeProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const { activeModel, activeModelProvider, node } = props.data;
   const model = activeModel;
-  const modelLabel = model || "Use global model";
+  const modelLabel = model || t("workflowNodes.useGlobalModel", { defaultValue: "Use global model" });
   const capabilities = getModelCapabilities(model, activeModelProvider);
 
   return (
@@ -16,7 +19,7 @@ export function LlmWorkflowNode(props: WorkflowNodeProps) {
       <div className="mt-3 space-y-2">
         <div
           className="flex h-9 items-center gap-2 rounded-md border border-border bg-muted px-2"
-          title={`Model: ${modelLabel}`}
+          title={t("workflowNodes.modelTitle", { defaultValue: "Model: {{model}}", model: modelLabel })}
         >
           <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-background">
             <ModelProviderLogo provider={activeModelProvider} />

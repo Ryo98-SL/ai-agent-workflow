@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { ArrowLeft, Check, Search, Settings2 } from "lucide-react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import { getToolDescriptors, toolDescriptorKey, type ToolDescriptor } from "@ai-agent-workflow/workflow-domain";
 import { resolveToolIcon } from "../workflowNodes/workflowNodeVisuals";
+import { localizedToolDescriptor } from "./localizedToolDescriptor";
 
 /**
  * Dify-style Tool Browser (CONTEXT.md — Tool Browser). Lists Tool Registry entries
@@ -11,12 +13,12 @@ import { resolveToolIcon } from "../workflowNodes/workflowNodeVisuals";
  * The Plugin / Custom / Workflow tabs are reserved placeholders.
  */
 const TABS = [
-  { id: "all", label: "All" },
-  { id: "builtin", label: "Built-in" },
-  { id: "mcp", label: "MCP" },
-  { id: "plugin", label: "Plugin" },
-  { id: "custom", label: "Custom" },
-  { id: "workflow", label: "Workflow" },
+  { id: "all", labelKey: "tools.tabs.all" },
+  { id: "builtin", labelKey: "tools.tabs.builtin" },
+  { id: "mcp", labelKey: "tools.tabs.mcp" },
+  { id: "plugin", labelKey: "tools.tabs.plugin" },
+  { id: "custom", labelKey: "tools.tabs.custom" },
+  { id: "workflow", labelKey: "tools.tabs.workflow" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -36,13 +38,14 @@ type ToolBrowserProps = {
 };
 
 export function ToolBrowser({ onSelect, onBack, selectedKey, selectedKeys, onToggle, onOpenMcpServers }: ToolBrowserProps) {
+  const { t } = useTranslation("workbench");
   const [tab, setTab] = useState<TabId>("all");
   const [query, setQuery] = useState("");
   const multiSelect = Boolean(onToggle);
 
   const tools = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return getToolDescriptors().filter((descriptor) => {
+    return getToolDescriptors().map((descriptor) => localizedToolDescriptor(descriptor, t)).filter((descriptor) => {
       const matchesTab = tab === "all" || descriptor.category === tab;
       const matchesQuery =
         needle === "" ||
@@ -50,7 +53,7 @@ export function ToolBrowser({ onSelect, onBack, selectedKey, selectedKeys, onTog
         descriptor.toolName.toLowerCase().includes(needle);
       return matchesTab && matchesQuery;
     });
-  }, [tab, query]);
+  }, [tab, query, t]);
 
   const isSelected = (key: string) => (multiSelect ? Boolean(selectedKeys?.has(key)) : key === selectedKey);
   const handlePick = (descriptor: ToolDescriptor) => (multiSelect ? onToggle?.(descriptor) : onSelect?.(descriptor));
@@ -63,7 +66,7 @@ export function ToolBrowser({ onSelect, onBack, selectedKey, selectedKeys, onTog
             <button
               type="button"
               onClick={onBack}
-              aria-label="Back to node palette"
+              aria-label={t("tools.back")}
               className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <ArrowLeft size={15} aria-hidden />
@@ -74,8 +77,8 @@ export function ToolBrowser({ onSelect, onBack, selectedKey, selectedKeys, onTog
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索工具"
-              aria-label="搜索工具"
+              placeholder={t("tools.search")}
+              aria-label={t("tools.search")}
               className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
             />
           </div>
@@ -91,7 +94,7 @@ export function ToolBrowser({ onSelect, onBack, selectedKey, selectedKeys, onTog
                 tab === item.id ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
               ].join(" ")}
             >
-              {item.label}
+              {t(item.labelKey)}
             </button>
           ))}
         </div>
@@ -102,7 +105,7 @@ export function ToolBrowser({ onSelect, onBack, selectedKey, selectedKeys, onTog
             className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <Settings2 size={13} aria-hidden />
-            管理 MCP 服务器
+            {t("tools.manageMcp")}
           </button>
         )}
       </div>
@@ -164,13 +167,15 @@ function ToolBrowserEmpty({
   hasQuery: boolean;
   onOpenMcpServers?: () => void;
 }) {
+  const { t } = useTranslation("workbench");
+
   if (hasQuery) {
-    return <p className="px-3 py-10 text-center text-xs text-muted-foreground">无匹配工具</p>;
+    return <p className="px-3 py-10 text-center text-xs text-muted-foreground">{t("tools.noMatches")}</p>;
   }
   if (tab === "mcp") {
     return (
       <div className="flex flex-col items-center gap-2 px-3 py-10 text-center">
-        <p className="text-xs text-muted-foreground">还没有 MCP 工具。注册一个 HTTP MCP 服务器后，其工具会显示在这里。</p>
+        <p className="text-xs text-muted-foreground">{t("tools.noMcp")}</p>
         {onOpenMcpServers && (
           <button
             type="button"
@@ -178,11 +183,11 @@ function ToolBrowserEmpty({
             className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
           >
             <Settings2 size={13} aria-hidden />
-            管理 MCP 服务器
+            {t("tools.manageMcp")}
           </button>
         )}
       </div>
     );
   }
-  return <p className="px-3 py-10 text-center text-xs text-muted-foreground">敬请期待</p>;
+  return <p className="px-3 py-10 text-center text-xs text-muted-foreground">{t("tools.comingSoon")}</p>;
 }

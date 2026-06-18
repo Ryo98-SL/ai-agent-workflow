@@ -26,5 +26,7 @@ export { NewWorkflowDialog } from "./workbench/components/NewWorkflowDialog";
 export { CreateKnowledgeBaseDialog } from "./workbench/components/knowledge/CreateKnowledgeBaseDialog";
 export { ThemeProvider, useTheme } from "./theme/ThemeProvider";
 export type { ResolvedTheme, ThemeMode } from "./theme/ThemeProvider";
+export { ThemeMenu } from "./theme/ThemeMenu";
 export { Toaster } from "./components/ui/sonner";
 export { WorkflowIconGlyph } from "./workbench/components/workflowIcons";
+export { workbenchI18nResources, WORKBENCH_I18N_NAMESPACE } from "./i18n";

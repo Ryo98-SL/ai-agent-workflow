@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import { CreateKnowledgeBaseDialog } from "@ai-agent-workflow/workbench-ui";
 import { Plus, type LucideIcon } from "lucide-react";
 
@@ -7,40 +8,41 @@ type KnowledgePanelProps = {
 };
 
 export function KnowledgePanel({ icon: Icon }: KnowledgePanelProps) {
+  const { t } = useTranslation("web");
   const [createOpen, setCreateOpen] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
 
   return (
     <section className="mx-auto max-w-[1680px]">
       <div className="min-w-0">
-        <h1 className="text-2xl font-bold tracking-normal text-white sm:text-3xl">Knowledge</h1>
-        <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-white/42">
-          Create reusable retrieval sources for workflow knowledge nodes.
+        <h1 className="text-2xl font-bold tracking-normal text-foreground sm:text-3xl">{t("homepage.knowledge.title")}</h1>
+        <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-muted-foreground">
+          {t("homepage.knowledge.description")}
         </p>
       </div>
 
-      <div className="mt-8 grid min-w-0 gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-6 grid min-w-0 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <button
           type="button"
-          className="group flex min-h-[226px] min-w-0 flex-col rounded-xl border border-white/10 bg-white/[0.04] p-6 text-left transition-colors hover:border-sky-300/45 hover:bg-white/[0.065]"
+          className="group flex min-h-[178px] min-w-0 flex-col rounded-xl border border-border bg-card p-5 text-left shadow-sm transition-colors hover:border-brand/45 hover:bg-brand/5"
           onClick={() => setCreateOpen(true)}
         >
-          <span className="flex size-14 items-center justify-center rounded-xl bg-white/8 text-white/70">
-            <Icon size={27} aria-hidden />
+          <span className="flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            <Icon size={23} aria-hidden />
           </span>
-          <span className="mt-6 flex items-center gap-2 text-lg font-bold text-white">
-            <Plus size={20} aria-hidden />
-            New knowledge base
+          <span className="mt-5 flex items-center gap-2 text-base font-bold text-foreground">
+            <Plus size={18} aria-hidden />
+            {t("homepage.knowledge.createTitle")}
           </span>
-          <span className="mt-2 max-w-sm text-sm font-medium leading-6 text-white/45">
-            Name the source, tune retrieval, and attach text or Markdown documents.
+          <span className="mt-2 max-w-sm text-sm font-medium leading-6 text-muted-foreground">
+            {t("homepage.knowledge.createDescription")}
           </span>
         </button>
       </div>
 
       {createdId && (
-        <div className="mt-5 rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm font-medium text-emerald-100">
-          Knowledge base created. ID: {createdId}
+        <div className="mt-5 rounded-lg border border-brand/30 bg-brand/10 px-4 py-3 text-sm font-medium text-brand">
+          {t("homepage.knowledge.created", { id: createdId })}
         </div>
       )}
 

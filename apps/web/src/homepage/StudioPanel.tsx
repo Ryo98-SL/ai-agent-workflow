@@ -1,4 +1,5 @@
 import { type ComponentProps, useMemo, useState } from "react";
+import { formatDateForLocale, useProductLocale, useTranslation, type SupportedLocale } from "@ai-agent-workflow/i18n";
 import { NewWorkflowDialog, useCreateWorkflow, useWorkflows, WorkflowIconGlyph } from "@ai-agent-workflow/workbench-ui";
 import { Database, GitBranch, Loader2, Plus, TriangleAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -9,6 +10,8 @@ type WorkflowTemplateSelection = Parameters<ComponentProps<typeof NewWorkflowDia
 
 export function StudioPanel() {
   const navigate = useNavigate();
+  const { locale } = useProductLocale();
+  const { t } = useTranslation("web");
   const workflowsQuery = useWorkflows();
   const createWorkflow = useCreateWorkflow();
   const [filter, setFilter] = useState<SearchTagFilterValue>({ query: "" });
@@ -41,7 +44,7 @@ export function StudioPanel() {
       setCreateOpen(false);
       navigate(`/workbench?workflowId=${encodeURIComponent(workflow.id)}`);
     } catch (error) {
-      setCreateWorkflowError(error instanceof Error ? error.message : "Workflow could not be created.");
+      setCreateWorkflowError(error instanceof Error ? error.message : t("homepage.studio.createError"));
     }
   }
 
@@ -49,36 +52,44 @@ export function StudioPanel() {
     <section className="mx-auto max-w-[1680px]">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-normal text-white sm:text-3xl">Studio</h1>
-          <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-white/42">
-            Build workflows, connect knowledge, and return to the editor when a card needs deeper work.
+          <h1 className="text-2xl font-bold tracking-normal text-foreground sm:text-3xl">{t("homepage.studio.title")}</h1>
+          <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-muted-foreground">
+            {t("homepage.studio.description")}
           </p>
         </div>
         <div className="w-full min-w-0 lg:max-w-md">
-          <SearchTagFilter value={filter} onChange={setFilter} />
+          <SearchTagFilter
+            value={filter}
+            onChange={setFilter}
+            label={t("homepage.studio.searchLabel")}
+            placeholder={t("homepage.studio.searchPlaceholder")}
+            clearLabel={t("homepage.studio.clearSearch")}
+          />
         </div>
       </div>
 
       {createWorkflowError && (
-        <div className="mt-5 rounded-lg border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm font-medium text-red-100">
+        <div className="mt-5 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
           {createWorkflowError}
         </div>
       )}
 
-      <div className="mt-8 grid min-w-0 gap-5 md:grid-cols-2 2xl:grid-cols-4">
+      <div className="mt-6 grid min-w-0 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <CreateWorkflowCard
+          title={t("homepage.studio.createTitle")}
+          description={t("homepage.studio.createDescription")}
           onOpen={() => {
             setCreateWorkflowError(null);
             setCreateOpen(true);
           }}
         />
-        {workflowsQuery.isLoading && <StateCard icon={Loader2} title="Loading workflows" spinning />}
-        {workflowsQuery.isError && <StateCard icon={TriangleAlert} title="Workflow list could not load" />}
+        {workflowsQuery.isLoading && <StateCard icon={Loader2} title={t("homepage.studio.loading")} spinning />}
+        {workflowsQuery.isError && <StateCard icon={TriangleAlert} title={t("homepage.studio.loadError")} />}
         {!workflowsQuery.isLoading && !workflowsQuery.isError && filteredWorkflows.length === 0 && (
-          <StateCard icon={GitBranch} title={workflows.length === 0 ? "No workflows yet" : "No matching workflows"} />
+          <StateCard icon={GitBranch} title={workflows.length === 0 ? t("homepage.studio.empty") : t("homepage.studio.noMatches")} />
         )}
         {filteredWorkflows.map((workflow) => (
-          <WorkflowCard key={workflow.id} workflow={workflow} />
+          <WorkflowCard key={workflow.id} workflow={workflow} locale={locale} />
         ))}
       </div>
 
@@ -100,52 +111,57 @@ function filterWorkflows(workflows: StudioWorkflowCard[], filter: SearchTagFilte
   });
 }
 
-function CreateWorkflowCard({ onOpen }: { onOpen: () => void }) {
+function CreateWorkflowCard({ title, description, onOpen }: { title: string; description: string; onOpen: () => void }) {
   return (
     <button
       type="button"
-      className="group flex min-h-[226px] min-w-0 flex-col rounded-xl border border-white/10 bg-white/[0.04] p-6 text-left transition-colors hover:border-brand/45 hover:bg-white/[0.065]"
+      className="group flex min-h-[178px] min-w-0 flex-col rounded-xl border border-border bg-card p-5 text-left shadow-sm transition-colors hover:border-brand/45 hover:bg-brand/5"
       onClick={onOpen}
     >
-      <span className="flex size-16 items-center justify-center rounded-2xl bg-brand text-brand-foreground transition-transform group-hover:scale-105">
-        <Plus size={36} strokeWidth={2.4} aria-hidden />
+      <span className="flex size-12 items-center justify-center rounded-xl bg-brand text-brand-foreground transition-transform group-hover:scale-105">
+        <Plus size={28} strokeWidth={2.4} aria-hidden />
       </span>
-      <span className="mt-6 block text-lg font-bold text-white">New workflow</span>
-      <span className="mt-2 block max-w-sm text-sm font-medium leading-6 text-white/45">
-        Choose a starter workflow or begin from a blank canvas.
-      </span>
+      <span className="mt-5 block text-base font-bold text-foreground">{title}</span>
+      <span className="mt-2 block max-w-sm text-sm font-medium leading-6 text-muted-foreground">{description}</span>
     </button>
   );
 }
 
-function WorkflowCard({ workflow }: { workflow: StudioWorkflowCard }) {
-  const updated = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(
-    new Date(workflow.updatedAt),
-  );
+function WorkflowCard({ workflow, locale }: { workflow: StudioWorkflowCard; locale: SupportedLocale }) {
+  const { t } = useTranslation("web");
+  const updated = formatDateForLocale(locale, workflow.updatedAt, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   return (
     <a
       href={`/workbench?workflowId=${encodeURIComponent(workflow.id)}`}
-      className="flex min-h-[226px] min-w-0 flex-col rounded-xl border border-white/10 bg-white/[0.035] p-6 transition-colors hover:border-white/22 hover:bg-white/[0.06]"
+      className="flex min-h-[178px] min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-brand/35 hover:bg-accent"
     >
-      <div className="flex min-w-0 items-start gap-4">
-        <span className="relative flex size-14 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-foreground">
-          <WorkflowIconGlyph icon={workflow.icon} size={27} />
-          <span className="absolute -bottom-1 -right-1 flex size-6 items-center justify-center rounded-lg border-2 border-[#202024] bg-brand text-[10px] font-bold text-brand-foreground">
-            W
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-foreground">
+          <WorkflowIconGlyph icon={workflow.icon} size={23} />
+        </span>
+          <span className="min-w-0">
+            <span className="block truncate text-base font-bold tracking-normal text-foreground">{workflow.name}</span>
+          <span className="mt-1 block truncate text-sm font-semibold text-muted-foreground">
+            {t("homepage.studio.edited", { date: updated })}
           </span>
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate text-lg font-bold tracking-normal text-white/86">{workflow.name}</span>
-          <span className="mt-1 block truncate text-sm font-semibold text-white/38">Edited {updated}</span>
-        </span>
+          </span>
       </div>
 
-      {workflow.description && <p className="mt-5 line-clamp-2 text-sm font-medium leading-6 text-white/45">{workflow.description}</p>}
+      {workflow.description && <p className="mt-4 line-clamp-2 text-sm font-medium leading-6 text-muted-foreground">{workflow.description}</p>}
 
-      <span className="mt-auto flex min-w-0 flex-wrap items-center gap-2 pt-5 text-xs font-bold uppercase text-white/38">
-        <span className="rounded-md border border-white/10 px-2 py-1">{workflow.nodeCount} nodes</span>
-        <span className="rounded-md border border-white/10 px-2 py-1">{workflow.edgeCount} edges</span>
+      <span className="mt-auto flex min-w-0 flex-wrap items-center gap-2 pt-4 text-xs font-bold uppercase text-muted-foreground">
+        <span className="rounded-md border border-border bg-muted/40 px-2 py-1">
+          {t("homepage.studio.nodeCount", { count: workflow.nodeCount })}
+        </span>
+        <span className="rounded-md border border-border bg-muted/40 px-2 py-1">
+          {t("homepage.studio.edgeCount", { count: workflow.edgeCount })}
+        </span>
       </span>
     </a>
   );
@@ -153,9 +169,9 @@ function WorkflowCard({ workflow }: { workflow: StudioWorkflowCard }) {
 
 function StateCard({ icon: Icon, title, spinning = false }: { icon: typeof Database; title: string; spinning?: boolean }) {
   return (
-    <div className="flex min-h-[226px] min-w-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/12 bg-white/[0.025] p-6 text-center">
-      <Icon size={26} className={spinning ? "animate-spin text-white/50" : "text-white/45"} aria-hidden />
-      <p className="mt-3 text-sm font-semibold text-white/55">{title}</p>
+    <div className="flex min-h-[178px] min-w-0 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 p-5 text-center">
+      <Icon size={26} className={spinning ? "animate-spin text-muted-foreground" : "text-muted-foreground"} aria-hidden />
+      <p className="mt-3 text-sm font-semibold text-muted-foreground">{title}</p>
     </div>
   );
 }

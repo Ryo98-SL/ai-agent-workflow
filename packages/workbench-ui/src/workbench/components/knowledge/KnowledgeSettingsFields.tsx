@@ -1,5 +1,7 @@
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import type { KnowledgeBaseSettings } from "@ai-agent-workflow/api-contracts";
 import { Input } from "@workbench/components/ui/input";
+import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 
 /** Tuning params editable at creation. Embedding provider/model stay platform defaults (MVP). */
 export type EditableKnowledgeSettings = {
@@ -49,46 +51,59 @@ type ReadProps = {
  * provider/model are always read-only (platform-managed in the MVP).
  */
 export function KnowledgeSettingsFields(props: EditProps | ReadProps) {
-  const embedding = props.mode === "read" ? props.settings.embedding : { provider: "openai", model: "text-embedding-3-small" };
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
+  const embedding =
+    props.mode === "read" ? props.settings.embedding : { provider: "openai", model: "text-embedding-3-small" };
 
   return (
     <section className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
-        <ReadOnlyField label="Embedding Provider" value={embedding.provider} hint="Platform-managed" />
-        <ReadOnlyField label="Embedding Model" value={embedding.model} hint="Platform-managed" />
+        <ReadOnlyField
+          label={t("knowledge.settings.embeddingProvider")}
+          value={embedding.provider}
+          hint={t("knowledge.settings.platformManaged")}
+        />
+        <ReadOnlyField
+          label={t("knowledge.settings.embeddingModel")}
+          value={embedding.model}
+          hint={t("knowledge.settings.platformManaged")}
+        />
       </div>
       {props.mode === "read" ? (
         <div className="grid grid-cols-2 gap-3">
-          <ReadOnlyField label="Chunk Size" value={String(props.settings.chunking.chunkSize)} />
-          <ReadOnlyField label="Chunk Overlap" value={String(props.settings.chunking.chunkOverlap)} />
-          <ReadOnlyField label="Top K" value={String(props.settings.retrieval.topK)} />
-          <ReadOnlyField label="Score Threshold" value={String(props.settings.retrieval.scoreThreshold ?? "—")} />
+          <ReadOnlyField label={t("knowledge.settings.chunkSize")} value={String(props.settings.chunking.chunkSize)} />
+          <ReadOnlyField label={t("knowledge.settings.chunkOverlap")} value={String(props.settings.chunking.chunkOverlap)} />
+          <ReadOnlyField label={t("knowledge.settings.topK")} value={String(props.settings.retrieval.topK)} />
+          <ReadOnlyField
+            label={t("knowledge.settings.scoreThreshold")}
+            value={String(props.settings.retrieval.scoreThreshold ?? "—")}
+          />
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
           <NumberField
-            label="Chunk Size"
+            label={t("knowledge.settings.chunkSize")}
             id="kb-settings-chunk-size"
             value={props.value.chunkSize}
             bounds={BOUNDS.chunkSize}
             onChange={(chunkSize) => props.onChange({ ...props.value, chunkSize })}
           />
           <NumberField
-            label="Chunk Overlap"
+            label={t("knowledge.settings.chunkOverlap")}
             id="kb-settings-chunk-overlap"
             value={props.value.chunkOverlap}
             bounds={BOUNDS.chunkOverlap}
             onChange={(chunkOverlap) => props.onChange({ ...props.value, chunkOverlap })}
           />
           <NumberField
-            label="Top K"
+            label={t("knowledge.settings.topK")}
             id="kb-settings-top-k"
             value={props.value.topK}
             bounds={BOUNDS.topK}
             onChange={(topK) => props.onChange({ ...props.value, topK })}
           />
           <NumberField
-            label="Score Threshold"
+            label={t("knowledge.settings.scoreThreshold")}
             id="kb-settings-score-threshold"
             value={props.value.scoreThreshold}
             bounds={BOUNDS.scoreThreshold}

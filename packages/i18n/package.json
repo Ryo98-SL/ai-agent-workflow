@@ -1,0 +1,37 @@
+{
+  "name": "@ai-agent-workflow/i18n",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./locale-contract": {
+      "types": "./src/localeContract.ts",
+      "default": "./src/localeContract.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "i18next": "^25.6.3",
+    "react-i18next": "^16.3.5"
+  },
+  "devDependencies": {
+    "@ai-agent-workflow/tsconfig": "workspace:*",
+    "@types/react": "^18.3.25",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  }
+}

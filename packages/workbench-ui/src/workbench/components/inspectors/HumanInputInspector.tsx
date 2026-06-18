@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import type { HumanInputAction, HumanInputNode, WorkflowNode } from "@ai-agent-workflow/workflow-domain";
 import { Input } from "@workbench/components/ui/input";
+import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 import { NodeOutputVariablesPanel } from "../NodeOutputVariablesPanel";
 import { VariableRichTextEditor } from "../richtext/VariableRichTextEditor";
 
@@ -20,6 +22,7 @@ function nextActionId(actions: HumanInputAction[]): string {
 }
 
 export function HumanInputInspector({ node, updateNode }: HumanInputInspectorProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const updateConfig = (patch: Partial<HumanInputNode["config"]>) => {
     updateNode(node.id, (current) =>
       current.type === "humanInput" ? { ...current, config: { ...current.config, ...patch } } : current,
@@ -32,38 +35,49 @@ export function HumanInputInspector({ node, updateNode }: HumanInputInspectorPro
 
   return (
     <div className="space-y-4">
-      <Field label="Prompt">
+      <Field label={t("inspectors.common.prompt", { defaultValue: "Prompt" })}>
         <VariableRichTextEditor
           nodeId={node.id}
-          ariaLabel="Prompt"
+          ariaLabel={t("inspectors.common.prompt", { defaultValue: "Prompt" })}
           value={node.config.prompt}
           onChange={(next) => updateConfig({ prompt: next })}
-          placeholder="请审核以下内容…  输入 / 引用变量"
+          placeholder={t("inspectors.humanInput.promptPlaceholder", {
+            defaultValue: "Ask the reviewer to inspect content... type / to reference variables",
+          })}
           className="min-h-16"
         />
       </Field>
 
       <section className="space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Action buttons</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("inspectors.humanInput.actionButtons", { defaultValue: "Action buttons" })}
+          </h3>
         </div>
         <div className="space-y-2">
           {node.config.actions.map((action, index) => (
             <div key={action.id} className="space-y-2 rounded-md border border-border bg-card p-2">
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <Field label="Label">
-                    <Input value={action.label} onChange={(event) => patchAction(index, { label: event.target.value })} placeholder="通过" />
+                  <Field label={t("inspectors.common.label", { defaultValue: "Label" })}>
+                    <Input
+                      value={action.label}
+                      onChange={(event) => patchAction(index, { label: event.target.value })}
+                      placeholder={t("inspectors.humanInput.labelPlaceholder", { defaultValue: "Approve" })}
+                    />
                   </Field>
                 </div>
                 <div className="flex-1">
-                  <Field label="Value">
+                  <Field label={t("inspectors.common.value", { defaultValue: "Value" })}>
                     <Input value={action.value} onChange={(event) => patchAction(index, { value: event.target.value })} placeholder="approved" />
                   </Field>
                 </div>
                 <button
                   type="button"
-                  aria-label={`Remove action ${action.label || action.id}`}
+                  aria-label={t("inspectors.humanInput.removeAction", {
+                    defaultValue: "Remove action {{name}}",
+                    name: action.label || action.id,
+                  })}
                   className="mt-5 h-8 shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                   onClick={() => updateConfig({ actions: node.config.actions.filter((_, i) => i !== index) })}
                 >
@@ -71,7 +85,8 @@ export function HumanInputInspector({ node, updateNode }: HumanInputInspectorPro
                 </button>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                outputs <code className="text-foreground">action_id={action.id}</code>
+                {t("inspectors.humanInput.outputs", { defaultValue: "outputs" })}{" "}
+                <code className="text-foreground">action_id={action.id}</code>
               </p>
             </div>
           ))}
@@ -81,17 +96,26 @@ export function HumanInputInspector({ node, updateNode }: HumanInputInspectorPro
           className="flex items-center gap-1 text-xs font-medium text-brand transition-colors hover:text-brand/80"
           onClick={() =>
             updateConfig({
-              actions: [...node.config.actions, { id: nextActionId(node.config.actions), label: "新操作", value: "" }],
+              actions: [
+                ...node.config.actions,
+                {
+                  id: nextActionId(node.config.actions),
+                  label: t("inspectors.humanInput.newAction", { defaultValue: "New action" }),
+                  value: "",
+                },
+              ],
             })
           }
         >
-          <Plus size={12} aria-hidden /> Add action
+          <Plus size={12} aria-hidden /> {t("inspectors.humanInput.addAction", { defaultValue: "Add action" })}
         </button>
       </section>
 
       <section className="space-y-2 rounded-md border border-border bg-card p-3">
         <label className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium text-foreground">Allow free-text reply</span>
+          <span className="text-sm font-medium text-foreground">
+            {t("inspectors.humanInput.allowText", { defaultValue: "Allow free-text reply" })}
+          </span>
           <input
             type="checkbox"
             checked={node.config.allowTextInput}
@@ -100,26 +124,31 @@ export function HumanInputInspector({ node, updateNode }: HumanInputInspectorPro
           />
         </label>
         <p className="text-xs text-muted-foreground">
-          When on, the reviewer can submit edited text — it arrives as
-          <code className="mx-1 text-foreground">action_id="__input__"</code>with the text in
+          {t("inspectors.humanInput.allowTextDescription", {
+            defaultValue: "When on, the reviewer can submit edited text. It arrives as",
+          })}
+          <code className="mx-1 text-foreground">action_id="__input__"</code>
+          {t("inspectors.humanInput.allowTextDescriptionSuffix", { defaultValue: "with the text in" })}
           <code className="ml-1 text-foreground">action_value</code>.
         </p>
         {node.config.allowTextInput && (
           <div className="space-y-2 pt-1">
-            <Field label="Input label">
+            <Field label={t("inspectors.humanInput.inputLabel", { defaultValue: "Input label" })}>
               <Input
                 value={node.config.inputLabel ?? ""}
                 onChange={(event) => updateConfig({ inputLabel: event.target.value || undefined })}
-                placeholder="回复内容"
+                placeholder={t("inspectors.humanInput.inputLabelPlaceholder", { defaultValue: "Reply content" })}
               />
             </Field>
-            <Field label="Default text">
+            <Field label={t("inspectors.humanInput.defaultText", { defaultValue: "Default text" })}>
               <VariableRichTextEditor
                 nodeId={node.id}
-                ariaLabel="Default text"
+                ariaLabel={t("inspectors.humanInput.defaultText", { defaultValue: "Default text" })}
                 value={node.config.defaultText ?? ""}
                 onChange={(next) => updateConfig({ defaultText: next || undefined })}
-                placeholder="预填文本，输入 / 引用变量"
+                placeholder={t("inspectors.humanInput.defaultTextPlaceholder", {
+                  defaultValue: "Prefilled text, type / to reference variables",
+                })}
                 className="min-h-12"
               />
             </Field>

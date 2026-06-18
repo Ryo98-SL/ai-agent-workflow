@@ -1,6 +1,7 @@
 import type { ProviderKeyPreference, UsagePriority } from "@ai-agent-workflow/workflow-domain";
 import { Check, ChevronDown, Coins, KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { useProductLocale, useTranslation } from "@ai-agent-workflow/i18n";
 import { cn } from "@workbench/lib/utils";
 import { Input } from "@workbench/components/ui/input";
 import {
@@ -13,6 +14,7 @@ import {
 } from "@workbench/components/ui/dialog";
 import { useApplyCredits, useCredits } from "../../data/useAccount";
 import { useProviderKeyStore } from "../../data/useProviderKeyStore";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import { Button } from "./Button";
 import { FIELD_SHELL_CLASS, FIELD_SHELL_INPUT_CLASS } from "./fieldStyles";
 import { Popover } from "./Popover";
@@ -29,6 +31,7 @@ type ProviderApiKeyControlProps = {
  * stored keys for that provider.
  */
 export function ProviderApiKeyControl({ provider, preference, onPreferenceChange }: ProviderApiKeyControlProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const store = useProviderKeyStore();
   const keys = store.keysForProvider(provider);
   const [open, setOpen] = useState(false);
@@ -70,7 +73,7 @@ export function ProviderApiKeyControl({ provider, preference, onPreferenceChange
             size="unstyled"
             className="h-6 gap-1.5 rounded-md px-2 text-[11px] font-medium"
             onClick={() => setOpen((current) => !current)}
-            aria-label={`Manage ${provider} API keys`}
+            aria-label={t("providerKeys.manage", { provider })}
           >
             {usingApiKey ? (
               selectedKey ? (
@@ -81,13 +84,13 @@ export function ProviderApiKeyControl({ provider, preference, onPreferenceChange
               ) : (
                 <>
                   <KeyRound size={12} className="text-muted-foreground" aria-hidden />
-                  <span>API Key</span>
+                  <span>{t("providerKeys.apiKey")}</span>
                 </>
               )
             ) : (
               <>
                 <Coins size={12} className="text-muted-foreground" aria-hidden />
-                <span>AI credits</span>
+                <span>{t("providerKeys.aiCredits")}</span>
               </>
             )}
             <ChevronDown size={12} className="text-muted-foreground" aria-hidden />
@@ -96,19 +99,19 @@ export function ProviderApiKeyControl({ provider, preference, onPreferenceChange
       >
         <div className="w-64 overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl shadow-black/20">
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-            <span className="text-xs font-semibold text-muted-foreground">Usage Priority</span>
+            <span className="text-xs font-semibold text-muted-foreground">{t("providerKeys.usagePriority")}</span>
             <div className="flex rounded-md border border-border p-0.5">
               <UsagePriorityTab active={!usingApiKey} onClick={() => setUsagePriority("credits")}>
-                AI credits
+                {t("providerKeys.aiCredits")}
               </UsagePriorityTab>
               <UsagePriorityTab active={usingApiKey} onClick={() => setUsagePriority("apiKey")}>
-                API Key
+                {t("providerKeys.apiKey")}
               </UsagePriorityTab>
             </div>
           </div>
 
           {usingApiKey ? (
-            <p className="px-3 pt-2 text-[11px] text-muted-foreground">Runs use the API key selected below.</p>
+            <p className="px-3 pt-2 text-[11px] text-muted-foreground">{t("providerKeys.apiKeyHint")}</p>
           ) : (
             <CreditsPanel isAnon={store.isAnon} />
           )}
@@ -116,10 +119,10 @@ export function ProviderApiKeyControl({ provider, preference, onPreferenceChange
           <div className="max-h-56 overflow-y-auto py-1">
             {store.isLoading ? (
               <div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
-                <Loader2 size={14} className="animate-spin" aria-hidden /> Loading…
+                <Loader2 size={14} className="animate-spin" aria-hidden /> {t("providerKeys.loading")}
               </div>
             ) : keys.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-muted-foreground">No keys yet for this provider.</p>
+              <p className="px-3 py-3 text-xs text-muted-foreground">{t("providerKeys.noKeys")}</p>
             ) : (
               keys.map((key) => {
                 const selected = key.id === preference?.providerKeyId;
@@ -139,7 +142,7 @@ export function ProviderApiKeyControl({ provider, preference, onPreferenceChange
                     <Button
                       variant="ghost"
                       size="iconMd"
-                      aria-label={`Remove ${key.label}`}
+                      aria-label={t("providerKeys.remove", { label: key.label })}
                       className="opacity-0 group-hover/key:opacity-100"
                       disabled={store.isMutating}
                       onClick={() => handleDelete(key.id)}
@@ -154,7 +157,7 @@ export function ProviderApiKeyControl({ provider, preference, onPreferenceChange
 
           {!store.isPersisted && (
             <p className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
-              Keys are kept only for this session. Sign in to save them.
+              {t("providerKeys.sessionOnly")}
             </p>
           )}
 
@@ -168,7 +171,7 @@ export function ProviderApiKeyControl({ provider, preference, onPreferenceChange
                 setDialogOpen(true);
               }}
             >
-              <Plus size={15} aria-hidden /> Add API Key
+              <Plus size={15} aria-hidden /> {t("providerKeys.addApiKey")}
             </Button>
           </div>
         </div>
@@ -185,17 +188,19 @@ export function ProviderApiKeyControl({ provider, preference, onPreferenceChange
 }
 
 function CreditsPanel({ isAnon }: { isAnon: boolean }) {
+  const { locale } = useProductLocale();
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const { data, isLoading } = useCredits();
   const apply = useApplyCredits();
 
   if (isAnon) {
-    return <p className="px-3 pt-2 text-[11px] text-muted-foreground">Sign in to use AI credits.</p>;
+    return <p className="px-3 pt-2 text-[11px] text-muted-foreground">{t("providerKeys.signInForCredits")}</p>;
   }
 
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 px-3 pt-2 text-[11px] text-muted-foreground">
-        <Loader2 size={12} className="animate-spin" aria-hidden /> Loading credits…
+        <Loader2 size={12} className="animate-spin" aria-hidden /> {t("providerKeys.loadingCredits")}
       </div>
     );
   }
@@ -206,10 +211,11 @@ function CreditsPanel({ isAnon }: { isAnon: boolean }) {
       <p className="px-3 pt-2 text-[11px]">
         {balance > 0 ? (
           <span className="text-muted-foreground">
-            AI credits balance: <span className="font-medium text-foreground">{balance.toLocaleString()}</span> tokens
+            {t("providerKeys.balance")}{" "}
+            <span className="font-medium text-foreground">{balance.toLocaleString(locale)}</span> {t("providerKeys.tokens")}
           </span>
         ) : (
-          <span className="text-destructive">AI credits used up — switch to API Key.</span>
+          <span className="text-destructive">{t("providerKeys.usedUp")}</span>
         )}
       </p>
     );
@@ -217,7 +223,7 @@ function CreditsPanel({ isAnon }: { isAnon: boolean }) {
 
   return (
     <div className="px-3 pt-2">
-      <p className="text-[11px] text-muted-foreground">Apply once to run on shared AI credits.</p>
+      <p className="text-[11px] text-muted-foreground">{t("providerKeys.applyHint")}</p>
       <Button
         variant="success"
         size="sm"
@@ -226,9 +232,9 @@ function CreditsPanel({ isAnon }: { isAnon: boolean }) {
         disabled={apply.isPending}
         onClick={() => apply.mutate()}
       >
-        {apply.isPending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : "Apply for AI credits"}
+        {apply.isPending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : t("providerKeys.apply")}
       </Button>
-      {apply.isError && <p className="mt-1 text-[11px] text-destructive">Could not apply. Try again.</p>}
+      {apply.isError && <p className="mt-1 text-[11px] text-destructive">{t("providerKeys.applyError")}</p>}
     </div>
   );
 }
@@ -268,6 +274,7 @@ function AddApiKeyDialog({
   onOpenChange: (open: boolean) => void;
   onCreated: (id: string) => void;
 }) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const store = useProviderKeyStore();
   const [label, setLabel] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -293,7 +300,7 @@ function AddApiKeyDialog({
       reset();
       onOpenChange(false);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to save API key.");
+      setError(caught instanceof Error ? caught.message : t("providerKeys.saveFailed"));
       setSaving(false);
     }
   };
@@ -308,34 +315,34 @@ function AddApiKeyDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add {provider} API Key</DialogTitle>
+          <DialogTitle>{t("providerKeys.addTitle", { provider })}</DialogTitle>
           <DialogDescription>
             {store.isPersisted
-              ? "Saved to your account and encrypted at rest."
-              : "Kept only for this session — sign in to save keys."}
+              ? t("providerKeys.persistedDescription")
+              : t("providerKeys.sessionDescription")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground">Label</span>
+            <span className="text-xs font-medium text-muted-foreground">{t("providerKeys.label")}</span>
             <Input
               value={label}
               onChange={(event) => setLabel(event.target.value)}
-              placeholder="e.g. Personal, Work"
+              placeholder={t("providerKeys.labelPlaceholder")}
               autoFocus
               autoComplete={"off"}
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground">API Key</span>
+            <span className="text-xs font-medium text-muted-foreground">{t("providerKeys.apiKey")}</span>
             <div className={FIELD_SHELL_CLASS}>
               <KeyRound size={14} className="text-muted-foreground" aria-hidden />
               <input
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
                 className={FIELD_SHELL_INPUT_CLASS}
-                placeholder="Paste your API key"
+                placeholder={t("providerKeys.keyPlaceholder")}
                 type="password"
                 autoComplete={"off"}
                 name={"apiKey"}
@@ -353,10 +360,10 @@ function AddApiKeyDialog({
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("providerKeys.cancel")}
           </Button>
           <Button variant="success" disabled={!label.trim() || !apiKey.trim() || saving} onClick={submit}>
-            {saving ? <Loader2 size={14} className="animate-spin" aria-hidden /> : "Add"}
+            {saving ? <Loader2 size={14} className="animate-spin" aria-hidden /> : t("providerKeys.add")}
           </Button>
         </DialogFooter>
       </DialogContent>

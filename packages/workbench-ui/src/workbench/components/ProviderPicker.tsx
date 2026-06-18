@@ -1,5 +1,7 @@
 import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import { Button } from "./Button";
 import type { ProviderOption } from "./modelCatalog";
 import { ModelProviderLogo } from "./modelProviderVisuals";
@@ -18,6 +20,7 @@ type ProviderPickerProps = {
  * renders each provider's logo — unlike a portal-based native select.
  */
 export function ProviderPicker({ id, providers, value, onChange }: ProviderPickerProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const [open, setOpen] = useState(false);
 
   return (
@@ -35,7 +38,7 @@ export function ProviderPicker({ id, providers, value, onChange }: ProviderPicke
           size="unstyled"
           className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
           onClick={() => setOpen((current) => !current)}
-          aria-label="Choose provider"
+          aria-label={t("modelSettings.chooseProvider")}
         >
           <span className="flex items-center gap-2">
             <span className="flex size-5 items-center justify-center rounded border border-border bg-background">
