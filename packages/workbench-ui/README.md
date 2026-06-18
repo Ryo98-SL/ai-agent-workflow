@@ -59,6 +59,11 @@ Principles:
 - Keep Chat Mode separate from one-shot workflow runs: Start fields are collected
   once per conversation, each message is sent as `query`, and Human Input pauses
   render the same resume form in chat, inspector history, and debug surfaces.
+- Send the current workflow snapshot with run requests after saving dirty
+  changes, so execution uses the model and node settings visible in the editor
+  rather than an older server copy. When development providers are hidden, run
+  requests also replace legacy Ollama defaults and node overrides with the
+  public DeepSeek fallback shown by the UI.
 - Keep Debug Sessions scoped to workflows: switching workflows restores that
   workflow's run output and Chat Mode transcript, or shows an empty debug panel
   when the target workflow has not run in the current browser session. Runs keep

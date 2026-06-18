@@ -31,6 +31,8 @@ import { WorkflowGraphProvider } from "./components/WorkflowGraphContext";
 import { isWorkflowCanvasFocus, isWorkflowShortcutEditableTarget } from "./shortcutFocus";
 import { getWorkflowNodeHandles, getWorkflowNodeSize } from "./components/workflowNodes";
 import { NewWorkflowDialog } from "./components/NewWorkflowDialog";
+import { DEFAULT_MODEL_SETTINGS } from "./components/ModelSettingsPanel";
+import { getProviderOption } from "./components/modelCatalog";
 import { Toaster } from "../components/ui/sonner";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { WorkbenchDataProvider, useWorkbenchData } from "../data/WorkbenchDataProvider";
@@ -806,13 +808,15 @@ function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWork
   // one-shot runs and Chat Mode sends so both go through the same key resolution.
   const prepareRun = useCallback(async () => {
     const persisted = !workflowId || dirty ? await persistWorkflow("save") : { id: workflowId, workflow };
+    const runWorkflow = workflowForRunRequest(persisted.workflow, showDevModelProviders);
+    const runModelProvider = modelProviderForRunRequest(workflow.settings.modelProvider, showDevModelProviders);
 
     // Resolve the active stored key for the run's provider. Authed users send
     // only the key id (the server decrypts it); anonymous users inject the
     // in-memory plaintext via the transient key map.
-    const provider = workflow.settings.modelProvider?.provider;
+    const provider = runModelProvider?.provider;
     const preference = provider ? workflow.settings.providerKeyPrefs?.[provider] : undefined;
-    let modelProviderKeys = workflow.settings.modelProviderKeys;
+    let modelProviderKeys = runWorkflow.settings.modelProviderKeys;
     let providerKeyId: string | undefined;
     if (preference?.usagePriority === "apiKey" && preference.providerKeyId && provider) {
       if (providerKeyStore.isAnon) {
@@ -827,9 +831,14 @@ function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWork
 
     return {
       id: persisted.id,
-      extras: { modelProvider: workflow.settings.modelProvider, modelProviderKeys, providerKeyId },
+      extras: {
+        workflow: runWorkflow,
+        modelProvider: runModelProvider,
+        modelProviderKeys,
+        providerKeyId,
+      },
     };
-  }, [dirty, persistWorkflow, providerKeyStore, workflow, workflowId]);
+  }, [dirty, persistWorkflow, providerKeyStore, showDevModelProviders, workflow, workflowId]);
 
   const runWorkflow = useCallback(
     async (input: RunInput) => {
@@ -987,6 +996,73 @@ function createConnectedNodeEdge(
     // Preserve which branch handle the edge leaves from (e.g. If/Else cases).
     // Only meaningful when connecting *from* the anchor's source handle.
     ...(handleType !== "target" && sourceHandleId ? { sourceHandle: sourceHandleId } : {}),
+  };
+}
+
+function isHiddenDevProvider(provider: ModelProvider | undefined, showDevModelProviders: boolean): boolean {
+  return Boolean(provider && getProviderOption(provider)?.devOnly && !showDevModelProviders);
+}
+
+function modelProviderForRunRequest(
+  settings: OpenAICompatibleSettings | undefined,
+  showDevModelProviders: boolean,
+): OpenAICompatibleSettings | undefined {
+  return isHiddenDevProvider(settings?.provider, showDevModelProviders) ? DEFAULT_MODEL_SETTINGS : settings;
+}
+
+function workflowForRunRequest(workflow: WorkflowFile, showDevModelProviders: boolean): WorkflowFile {
+  if (showDevModelProviders) {
+    return workflow;
+  }
+
+  const workflowProviderHidden = isHiddenDevProvider(workflow.settings.modelProvider?.provider, showDevModelProviders);
+  let changed = workflowProviderHidden;
+  const nodes = workflow.graph.nodes.map((node) => {
+    if (node.type !== "llm" && node.type !== "agent") {
+      return node;
+    }
+
+    const nodeProviderHidden = isHiddenDevProvider(node.config.modelSettings?.provider, showDevModelProviders);
+    const inheritedHiddenProviderModel = workflowProviderHidden && Boolean(node.config.model);
+    if (!nodeProviderHidden && !inheritedHiddenProviderModel) {
+      return node;
+    }
+
+    changed = true;
+    if (node.type === "llm") {
+      return {
+        ...node,
+        config: {
+          ...node.config,
+          model: undefined,
+          modelSettings: DEFAULT_MODEL_SETTINGS,
+        },
+      };
+    }
+    return {
+      ...node,
+      config: {
+        ...node.config,
+        model: undefined,
+        modelSettings: DEFAULT_MODEL_SETTINGS,
+      },
+    };
+  });
+
+  if (!changed) {
+    return workflow;
+  }
+
+  return {
+    ...workflow,
+    graph: {
+      ...workflow.graph,
+      nodes,
+    },
+    settings: {
+      ...workflow.settings,
+      modelProvider: workflowProviderHidden ? DEFAULT_MODEL_SETTINGS : workflow.settings.modelProvider,
+    },
   };
 }
 

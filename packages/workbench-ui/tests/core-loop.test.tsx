@@ -78,6 +78,14 @@ describe("MVP smoke loop", () => {
     expect(api.createRun).toHaveBeenLastCalledWith("workflow-1", {
       input: { topic: "workbench tests" },
       conversationId: expect.any(String),
+      workflow: expect.objectContaining({
+        settings: expect.objectContaining({
+          modelProvider: expect.objectContaining({
+            model: "deepseek-v4-flash-smoke",
+            provider: "deepseek",
+          }),
+        }),
+      }),
       modelProvider: expect.objectContaining({
         model: "deepseek-v4-flash-smoke",
         provider: "deepseek",
@@ -525,6 +533,25 @@ describe("MVP smoke loop", () => {
           model: "qwen3.5:0.8b",
         },
       },
+      graph: {
+        ...workflow.graph,
+        nodes: workflow.graph.nodes.map((node) =>
+          node.type === "llm"
+            ? {
+                ...node,
+                config: {
+                  ...node.config,
+                  model: "qwen3.5:0.8b",
+                  modelSettings: {
+                    provider: "ollama",
+                    baseURL: "http://127.0.0.1:11434",
+                    model: "qwen3.5:0.8b",
+                  },
+                },
+              }
+            : node,
+        ),
+      },
     }));
 
     render(<AppWorkbench workflowApi={api} />);
@@ -538,6 +565,18 @@ describe("MVP smoke loop", () => {
     expect(screen.queryByText("qwen3.5:0.8b")).not.toBeInTheDocument();
     expect(screen.queryByAltText("Ollama")).not.toBeInTheDocument();
     expect(screen.getAllByText("deepseek-v4-flash").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "Close node inspector" }));
+    await user.click(screen.getByRole("button", { name: "Run workflow" }));
+    await user.click(screen.getAllByRole("button", { name: "Run workflow" }).at(-1)!);
+    const request = vi.mocked(api.createRun).mock.calls.at(-1)?.[1];
+    expect(request?.modelProvider).toMatchObject({ provider: "deepseek", model: "deepseek-v4-flash" });
+    expect(request?.workflow?.settings.modelProvider).toMatchObject({
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+    });
+    expect(JSON.stringify(request?.workflow)).not.toContain("ollama");
+    expect(JSON.stringify(request?.workflow)).not.toContain("qwen3.5:0.8b");
   });
 
   it("selects OpenAI multimodal models and shows icon capability tags", async () => {
@@ -773,8 +812,9 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
       return { workflow: dto };
     }),
     createRun: vi.fn(async (workflowId, request = {}) => {
-      const workflow = workflows.get(workflowId);
-      if (!workflow) {
+      const storedWorkflow = workflows.get(workflowId);
+      const runWorkflow = request.workflow ? { id: workflowId, workflow: clone(request.workflow) } : storedWorkflow;
+      if (!runWorkflow) {
         throw new Error(`Workflow ${workflowId} was not found.`);
       }
       const runNumber = nextRunNumber;
@@ -792,8 +832,8 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
         status: "succeeded",
         input: request.input ?? {},
         output: {
-          summary: `Mock run completed for workflow ${workflow.workflow.metadata.name}.`,
-          nodeResults: workflow.workflow.graph.nodes.map((node) => ({
+          summary: `Mock run completed for workflow ${runWorkflow.workflow.metadata.name}.`,
+          nodeResults: runWorkflow.workflow.graph.nodes.map((node) => ({
             nodeId: node.id,
             label: node.label,
             status: "succeeded",
