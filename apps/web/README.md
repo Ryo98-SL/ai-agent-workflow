@@ -29,7 +29,9 @@ dialog, expose a hover three-dot menu for editing info, duplicate, and delete
 actions with an explicit delete confirmation dialog, and the compact search
 field filters only real workflow summary fields. The Knowledge tab mirrors that
 search placement and filters real Knowledge Base summaries while rendering
-theme-aware KB cards.
+theme-aware KB cards with a matching hover three-dot menu for editing info and
+confirmed delete actions; read-only example KBs keep destructive actions
+disabled.
 Product Locale is local to the browser; it translates app-owned homepage chrome
 without rewriting workflow summaries returned by the API. The browser favicon is
 served from `public/favicon.png` and matches the homepage header `AIW` mark.

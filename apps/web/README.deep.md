@@ -29,7 +29,9 @@ shared workbench UI at `/workbench`, and injects a typed workflow client.
   duplicate, and delete actions with a themed confirmation dialog before
   deletion, and the top-left Studio card opens the shared New Workflow template
   dialog. The Knowledge tab uses the same search placement to filter real
-  Knowledge Base summaries and render KB cards. The header uses a three-column
+  Knowledge Base summaries and render KB cards with a matching hover-only
+  three-dot menu for editing summary metadata and deleting editable KBs after a
+  themed confirmation dialog. The header uses a three-column
   grid with a stable right
   utility slot for the Product Locale switcher, shared theme switcher, and
   account menu so the centered tabs do not shift across auth states. The Product

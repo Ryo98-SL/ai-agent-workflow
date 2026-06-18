@@ -14,8 +14,8 @@ workflow workbench.
 - `src/pages/workbench/index.tsx` preserves the full `AppWorkbench` editor at
   `/workbench` and syncs the active `workflowId` search parameter.
 - `src/homepage/` contains the theme-aware Studio/Knowledge homepage shell,
-  workflow cards and card action menu, compact workflow and Knowledge Base
-  search, Product Locale switcher, and Studio New Workflow entry point.
+  workflow and Knowledge Base cards with card action menus, compact workflow and
+  Knowledge Base search, Product Locale switcher, and create entry points.
 - `src/i18n/` contains the app-owned `web` namespace resources for homepage
   Product Locale copy.
 - `src/pages/design/` and `src/design/` contain local design-gallery routes for

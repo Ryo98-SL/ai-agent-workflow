@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "@ai-agent-workflow/i18n";
 import { CreateKnowledgeBaseDialog, useKnowledgeBases } from "@ai-agent-workflow/workbench-ui";
 import { FileText, Loader2, Plus, TriangleAlert, type LucideIcon } from "lucide-react";
+import { KnowledgeBaseCardActions } from "./KnowledgeBaseCardActions";
 import { SearchTagFilter } from "./SearchTagFilter";
 import type { KnowledgeBaseCard, SearchTagFilterValue } from "./types";
 
@@ -14,6 +15,7 @@ export function KnowledgePanel({ icon: Icon }: KnowledgePanelProps) {
   const knowledgeBasesQuery = useKnowledgeBases();
   const [createOpen, setCreateOpen] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
+  const [knowledgeActionError, setKnowledgeActionError] = useState<string | null>(null);
   const [filter, setFilter] = useState<SearchTagFilterValue>({ query: "" });
   const knowledgeBases = useMemo<KnowledgeBaseCard[]>(() => {
     return (knowledgeBasesQuery.data?.knowledgeBases ?? []).map((knowledgeBase) => ({
@@ -53,11 +55,20 @@ export function KnowledgePanel({ icon: Icon }: KnowledgePanelProps) {
         </div>
       </div>
 
+      {knowledgeActionError && (
+        <div className="mt-5 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+          {knowledgeActionError}
+        </div>
+      )}
+
       <div className="mt-6 grid min-w-0 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <button
           type="button"
           className="group flex min-h-[178px] min-w-0 flex-col rounded-xl border border-border bg-card p-5 text-left shadow-sm transition-colors hover:border-brand/45 hover:bg-brand/5"
-          onClick={() => setCreateOpen(true)}
+          onClick={() => {
+            setKnowledgeActionError(null);
+            setCreateOpen(true);
+          }}
         >
           <span className="flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
             <Icon size={23} aria-hidden />
@@ -79,7 +90,12 @@ export function KnowledgePanel({ icon: Icon }: KnowledgePanelProps) {
           />
         )}
         {filteredKnowledgeBases.map((knowledgeBase) => (
-          <KnowledgeBaseCardView key={knowledgeBase.id} knowledgeBase={knowledgeBase} icon={Icon} />
+          <KnowledgeBaseCardView
+            key={knowledgeBase.id}
+            knowledgeBase={knowledgeBase}
+            icon={Icon}
+            onActionError={setKnowledgeActionError}
+          />
         ))}
       </div>
 
@@ -108,11 +124,19 @@ function filterKnowledgeBases(knowledgeBases: KnowledgeBaseCard[], filter: Searc
   });
 }
 
-function KnowledgeBaseCardView({ knowledgeBase, icon: Icon }: { knowledgeBase: KnowledgeBaseCard; icon: LucideIcon }) {
+function KnowledgeBaseCardView({
+  knowledgeBase,
+  icon: Icon,
+  onActionError,
+}: {
+  knowledgeBase: KnowledgeBaseCard;
+  icon: LucideIcon;
+  onActionError: (message: string | null) => void;
+}) {
   const { t } = useTranslation("web");
 
   return (
-    <article className="flex min-h-[178px] min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-brand/45 hover:bg-brand/5">
+    <article className="group/card relative flex min-h-[178px] min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-brand/45 hover:bg-brand/5 focus-within:border-brand/45 focus-within:bg-brand/5">
       <div className="flex min-w-0 items-start gap-3">
         <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
           <Icon size={23} aria-hidden />
@@ -131,7 +155,7 @@ function KnowledgeBaseCardView({ knowledgeBase, icon: Icon }: { knowledgeBase: K
         </p>
       )}
 
-      <span className="mt-auto flex min-w-0 flex-wrap items-center gap-2 pt-4 text-xs font-bold uppercase text-muted-foreground">
+      <span className="mt-auto flex min-w-0 flex-wrap items-center gap-2 pt-4 pr-12 text-xs font-bold uppercase text-muted-foreground">
         <span className="rounded-md border border-border bg-muted/40 px-2 py-1">
           <FileText size={12} className="mr-1 inline-block align-[-2px]" aria-hidden />
           {t("homepage.knowledge.documentCount", { count: knowledgeBase.documentCount })}
@@ -140,6 +164,7 @@ function KnowledgeBaseCardView({ knowledgeBase, icon: Icon }: { knowledgeBase: K
           {t("homepage.knowledge.characterCount", { count: knowledgeBase.characterCount.toLocaleString() })}
         </span>
       </span>
+      <KnowledgeBaseCardActions knowledgeBase={knowledgeBase} onActionError={onActionError} />
     </article>
   );
 }

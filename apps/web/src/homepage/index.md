@@ -37,10 +37,15 @@ entry point.
   dialog is open. Editing uses the shared workbench `WorkflowMetaEditor`;
   duplicate reads the full workflow before creating a localized copy; delete
   opens a themed confirm dialog before calling the delete mutation.
+- `KnowledgeBaseCardActions.tsx` owns the Knowledge Base card three-dot action
+  menu. It mirrors the workflow card trigger placement, edits KB name/
+  description through the shared Knowledge Base mutation hook, and confirms
+  deletion before calling the delete mutation. Read-only example KBs keep edit
+  and delete actions disabled.
 - `KnowledgePanel.tsx` is the Knowledge tab surface. It reuses the Studio header
   search placement, filters real Knowledge Base summaries from the active
-  workbench API, renders compact theme-aware KB cards, and opens the Knowledge
-  Base create dialog.
+  workbench API, renders compact theme-aware KB cards with action menus, and
+  opens the Knowledge Base create dialog.
 - `SearchTagFilter.tsx` is the reusable controlled single-line workflow search
   input. It follows the workbench field token pattern and Escape clears the
   query.
@@ -58,8 +63,10 @@ already available from the current workflow API. It does not show tag chips or
 suggested tags because workflow tags are not persisted. Workflow cards link to
 `/workbench?workflowId=<id>` while their card action trigger owns edit,
 duplicate, and delete actions without navigating. Delete is intercepted by an
-explicit confirm dialog, and the workbench route opens linked workflows and
-keeps the URL synchronized when the header switcher changes workflows.
+explicit confirm dialog. Knowledge Base cards keep their edit/delete actions in
+the same lower-right menu pattern and disable those actions for read-only example
+KBs. The workbench route opens linked workflows and keeps the URL synchronized
+when the header switcher changes workflows.
 Product Locale translates homepage chrome and date formatting only; workflow
 names, descriptions, icons, and other saved summary fields are rendered as
 stored.
