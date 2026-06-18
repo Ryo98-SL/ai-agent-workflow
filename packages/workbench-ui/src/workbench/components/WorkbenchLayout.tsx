@@ -29,6 +29,7 @@ import { RunHistoryMenu } from "./RunHistoryMenu";
 import { WorkflowSwitcher } from "./WorkflowSwitcher";
 import { useResizableWidth } from "../hooks/useResizableWidth";
 import { WorkflowSwitchBar } from "./WorkflowSwitchBar";
+import { WorkbenchHomeLink } from "./WorkbenchHomeLink";
 import type { WorkflowMetaPatch } from "./WorkflowMetaEditor";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import type { WorkflowGraphHistoryEntry } from "../hooks/useWorkflowGraphHistory";
@@ -88,6 +89,7 @@ type WorkbenchLayoutProps = {
   onUpdateModelSettings: (settings: OpenAICompatibleSettings, providerKeys: ModelProviderKeys) => void;
   onUpdateProviderKeyPreference: (provider: ModelProvider, preference: ProviderKeyPreference) => void;
   onUpdateNode: (nodeId: string, updater: (node: WorkflowNode) => WorkflowNode) => void;
+  homeHref: string;
 };
 
 export function WorkbenchLayout({
@@ -144,6 +146,7 @@ export function WorkbenchLayout({
   onUpdateModelSettings,
   onUpdateProviderKeyPreference,
   onUpdateNode,
+  homeHref,
 }: WorkbenchLayoutProps) {
   const { t } = useTranslation("workbench");
   const hasStartNode = workflow.graph.nodes.some((node) => node.type === "start");
@@ -168,6 +171,7 @@ export function WorkbenchLayout({
         />
       )}
       <header className="z-30 flex h-12 shrink-0 items-center gap-3 border-b border-border bg-card/95 px-4 shadow-sm backdrop-blur">
+        <WorkbenchHomeLink href={homeHref} label={t("layout.home")} />
         <WorkflowSwitcher
           workflow={workflow}
           workflowId={workflowId}
@@ -253,6 +257,7 @@ export function WorkbenchLayout({
           workflow={workflow}
           selectedNodeId={selectedNodeId}
           nodeStates={nodeStates}
+          showDevModelProviders={showDevModelProviders}
           waitingNodeId={debugState.status === "waiting" ? debugState.waiting?.interrupt.nodeId : undefined}
           canRedo={canRedo}
           canUndo={canUndo}

@@ -29,6 +29,7 @@ export default function WorkbenchPage() {
       showDevModelProviders={import.meta.env.DEV}
       initialWorkflowId={initialWorkflowId}
       onWorkflowIdChange={handleWorkflowIdChange}
+      homeHref="/"
     />
   );
 }

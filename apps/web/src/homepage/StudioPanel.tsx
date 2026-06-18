@@ -1,9 +1,15 @@
 import { type ComponentProps, useMemo, useState } from "react";
 import { formatDateForLocale, useProductLocale, useTranslation, type SupportedLocale } from "@ai-agent-workflow/i18n";
-import { NewWorkflowDialog, useCreateWorkflow, useWorkflows, WorkflowIconGlyph } from "@ai-agent-workflow/workbench-ui";
+import {
+  NewWorkflowDialog,
+  useCreateWorkflow,
+  useWorkflows,
+  WorkflowIconGlyph,
+} from "@ai-agent-workflow/workbench-ui";
 import { Database, GitBranch, Loader2, Plus, TriangleAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { SearchTagFilter } from "./SearchTagFilter";
+import { WorkflowCardActions } from "./WorkflowCardActions";
 import type { SearchTagFilterValue, StudioWorkflowCard } from "./types";
 
 type WorkflowTemplateSelection = Parameters<ComponentProps<typeof NewWorkflowDialog>["onSelect"]>[0];
@@ -16,7 +22,7 @@ export function StudioPanel() {
   const createWorkflow = useCreateWorkflow();
   const [filter, setFilter] = useState<SearchTagFilterValue>({ query: "" });
   const [createOpen, setCreateOpen] = useState(false);
-  const [createWorkflowError, setCreateWorkflowError] = useState<string | null>(null);
+  const [workflowActionError, setWorkflowActionError] = useState<string | null>(null);
   const workflows = useMemo<StudioWorkflowCard[]>(() => {
     return (workflowsQuery.data?.workflows ?? []).map((workflow) => ({
       ...workflow,
@@ -38,13 +44,13 @@ export function StudioPanel() {
       return;
     }
 
-    setCreateWorkflowError(null);
+    setWorkflowActionError(null);
     try {
       const { workflow } = await createWorkflow.mutateAsync(template.build());
       setCreateOpen(false);
       navigate(`/workbench?workflowId=${encodeURIComponent(workflow.id)}`);
     } catch (error) {
-      setCreateWorkflowError(error instanceof Error ? error.message : t("homepage.studio.createError"));
+      setWorkflowActionError(error instanceof Error ? error.message : t("homepage.studio.createError"));
     }
   }
 
@@ -68,9 +74,9 @@ export function StudioPanel() {
         </div>
       </div>
 
-      {createWorkflowError && (
+      {workflowActionError && (
         <div className="mt-5 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
-          {createWorkflowError}
+          {workflowActionError}
         </div>
       )}
 
@@ -79,7 +85,7 @@ export function StudioPanel() {
           title={t("homepage.studio.createTitle")}
           description={t("homepage.studio.createDescription")}
           onOpen={() => {
-            setCreateWorkflowError(null);
+            setWorkflowActionError(null);
             setCreateOpen(true);
           }}
         />
@@ -89,7 +95,7 @@ export function StudioPanel() {
           <StateCard icon={GitBranch} title={workflows.length === 0 ? t("homepage.studio.empty") : t("homepage.studio.noMatches")} />
         )}
         {filteredWorkflows.map((workflow) => (
-          <WorkflowCard key={workflow.id} workflow={workflow} locale={locale} />
+          <WorkflowCard key={workflow.id} workflow={workflow} locale={locale} onActionError={setWorkflowActionError} />
         ))}
       </div>
 
@@ -127,7 +133,15 @@ function CreateWorkflowCard({ title, description, onOpen }: { title: string; des
   );
 }
 
-function WorkflowCard({ workflow, locale }: { workflow: StudioWorkflowCard; locale: SupportedLocale }) {
+function WorkflowCard({
+  workflow,
+  locale,
+  onActionError,
+}: {
+  workflow: StudioWorkflowCard;
+  locale: SupportedLocale;
+  onActionError: (message: string | null) => void;
+}) {
   const { t } = useTranslation("web");
   const updated = formatDateForLocale(locale, workflow.updatedAt, {
     month: "short",
@@ -137,25 +151,33 @@ function WorkflowCard({ workflow, locale }: { workflow: StudioWorkflowCard; loca
   });
 
   return (
-    <a
-      href={`/workbench?workflowId=${encodeURIComponent(workflow.id)}`}
-      className="flex min-h-[178px] min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-brand/35 hover:bg-accent"
+    <article
+      className="group/card relative flex min-h-[178px] min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-brand/45 hover:bg-brand/5 focus-within:border-brand/45 focus-within:bg-brand/5"
     >
-      <div className="flex min-w-0 items-start gap-3">
+      <a
+        href={`/workbench?workflowId=${encodeURIComponent(workflow.id)}`}
+        className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/45 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        aria-label={workflow.name}
+      />
+      <div className="pointer-events-none relative flex min-w-0 items-start gap-3">
         <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-foreground">
           <WorkflowIconGlyph icon={workflow.icon} size={23} />
         </span>
-          <span className="min-w-0">
-            <span className="block truncate text-base font-bold tracking-normal text-foreground">{workflow.name}</span>
+        <span className="min-w-0">
+          <span className="block truncate text-base font-bold tracking-normal text-foreground">{workflow.name}</span>
           <span className="mt-1 block truncate text-sm font-semibold text-muted-foreground">
             {t("homepage.studio.edited", { date: updated })}
           </span>
-          </span>
+        </span>
       </div>
 
-      {workflow.description && <p className="mt-4 line-clamp-2 text-sm font-medium leading-6 text-muted-foreground">{workflow.description}</p>}
+      {workflow.description && (
+        <p className="pointer-events-none relative mt-4 line-clamp-2 text-sm font-medium leading-6 text-muted-foreground">
+          {workflow.description}
+        </p>
+      )}
 
-      <span className="mt-auto flex min-w-0 flex-wrap items-center gap-2 pt-4 text-xs font-bold uppercase text-muted-foreground">
+      <span className="pointer-events-none relative mt-auto flex min-w-0 flex-wrap items-center gap-2 pt-4 pr-12 text-xs font-bold uppercase text-muted-foreground">
         <span className="rounded-md border border-border bg-muted/40 px-2 py-1">
           {t("homepage.studio.nodeCount", { count: workflow.nodeCount })}
         </span>
@@ -163,7 +185,8 @@ function WorkflowCard({ workflow, locale }: { workflow: StudioWorkflowCard; loca
           {t("homepage.studio.edgeCount", { count: workflow.edgeCount })}
         </span>
       </span>
-    </a>
+      <WorkflowCardActions workflow={workflow} onActionError={onActionError} />
+    </article>
   );
 }
 

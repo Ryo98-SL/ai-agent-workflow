@@ -13,8 +13,9 @@ Node-specific configuration forms for the selection inspector.
 - `sharedModelSettingField.tsx` is the reusable per-node model selector
   (`NodeModelSettingField`) + `modelSettingsForEditor`/`sanitizeNodeModelSettings`,
   shared by the LLM and Agent inspectors. The field opens a popover with the shared
-  `ModelSettingsPanel`; node overrides store provider, model, endpoint URL,
-  temperature, and max tokens.
+  `ModelSettingsPanel`; hidden development providers display through the public
+  fallback when `showDevModelProviders` is false. Node overrides store provider,
+  model, endpoint URL, temperature, and max tokens.
 - `AgentInspector.tsx` edits an Agent node: Agentic Strategy picker (functionCalling
   / react, with a "not implemented" note on react), the shared model field, an inline
   tool list (multi-select Tool Browser, per built-in tool an optional author-fixed

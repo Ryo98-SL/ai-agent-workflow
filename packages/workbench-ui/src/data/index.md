@@ -21,14 +21,17 @@ Data boundary and React Query hooks for the workbench UI.
   delegates account/KB/credit calls to the server API.
 - `anonymousRunStore.ts` tracks anonymous run ids for session-scoped history and
   drops ids when server memory can no longer read them.
-- `useWorkflows.ts` exposes workflow list/create and run-history
-  queries/mutations. The workflow hooks are part of the public package surface
-  so host apps can render product-level workflow summaries and create template
-  workflows without mounting the full editor.
+- `useWorkflows.ts` exposes workflow list/create/update-metadata/duplicate/delete
+  and run-history queries/mutations. Metadata updates and duplicate both read
+  the full workflow first so product-level card menus do not depend on
+  summary-only data. The workflow hooks are part of the public package surface
+  so host apps can render product-level workflow summaries and manage workflows
+  without mounting the full editor.
 - `useAccount.ts` exposes session, provider-key, custom-model, and credits
   hooks.
-- `useKnowledgeBases.ts` exposes Knowledge Base list/read/mutation hooks plus
-  document create/delete/reindex hooks.
+- `useKnowledgeBases.ts` exposes public Knowledge Base list/read/mutation hooks
+  plus document create/delete/reindex hooks so both workbench internals and
+  product shells can render/search KB summaries.
 - `useMcpServers.ts` exposes account-level MCP server list/create/update/refresh/
   delete hooks. The list is auth-gated; on every load it mirrors the fetched
   snapshot tools into the client-only domain registry via

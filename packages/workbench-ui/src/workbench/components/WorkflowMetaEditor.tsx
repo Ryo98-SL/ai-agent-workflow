@@ -1,5 +1,5 @@
 import { Pencil, Save } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ButtonHTMLAttributes, type ComponentProps, type ReactNode } from "react";
 import { useTranslation } from "@ai-agent-workflow/i18n";
 import { Input } from "@workbench/components/ui/input";
 import { Textarea } from "@workbench/components/ui/textarea";
@@ -12,9 +12,20 @@ import { WORKFLOW_ICON_KEYS, WorkflowIconGlyph } from "./workflowIcons";
 export type WorkflowMetaPatch = { name?: string; description?: string; icon?: string };
 export type WorkflowMetaEditorValue = { name: string; description?: string; icon?: string };
 
+type WorkflowMetaEditorTriggerProps = {
+  ref: (node: HTMLButtonElement | null) => void;
+  props: ButtonHTMLAttributes<HTMLButtonElement>;
+  open: boolean;
+  setOpen: (open: boolean) => void;
+};
+
 type WorkflowMetaEditorProps = {
   metadata: WorkflowMetaEditorValue;
   onSaveMeta: (patch: WorkflowMetaPatch) => Promise<boolean>;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  placement?: ComponentProps<typeof Popover>["placement"];
+  renderTrigger?: (props: WorkflowMetaEditorTriggerProps) => ReactNode;
 };
 
 function workflowMetaDraft(metadata: WorkflowMetaEditorValue): Required<WorkflowMetaPatch> {
@@ -25,11 +36,19 @@ function workflowMetaDraft(metadata: WorkflowMetaEditorValue): Required<Workflow
   };
 }
 
-export function WorkflowMetaEditor({ metadata, onSaveMeta }: WorkflowMetaEditorProps) {
+export function WorkflowMetaEditor({
+  metadata,
+  onSaveMeta,
+  open: controlledOpen,
+  onOpenChange,
+  placement = "bottom-start",
+  renderTrigger,
+}: WorkflowMetaEditorProps) {
   const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<Required<WorkflowMetaPatch>>(() => workflowMetaDraft(metadata));
+  const open = controlledOpen ?? internalOpen;
 
   useEffect(() => {
     if (!open) {
@@ -58,7 +77,7 @@ export function WorkflowMetaEditor({ metadata, onSaveMeta }: WorkflowMetaEditorP
         icon: draft.icon,
       });
       if (saved) {
-        setOpen(false);
+        setEditorOpen(false);
       }
     } finally {
       setSaving(false);
@@ -68,7 +87,10 @@ export function WorkflowMetaEditor({ metadata, onSaveMeta }: WorkflowMetaEditorP
     if (nextOpen) {
       setDraft(workflowMetaDraft(metadata));
     }
-    setOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+    if (controlledOpen === undefined) {
+      setInternalOpen(nextOpen);
+    }
   };
 
   return (
@@ -76,24 +98,28 @@ export function WorkflowMetaEditor({ metadata, onSaveMeta }: WorkflowMetaEditorP
       open={open}
       preserveNestedPopoverPress={false}
       onOpenChange={setEditorOpen}
-      placement="bottom-start"
-      renderTrigger={({ ref, props }) => (
-        <Button
-          {...props}
-          ref={ref}
-          variant="ghost"
-          size="iconMd"
-          className="size-7"
-          aria-label={t("workflowMeta.editNamedDetails", { name: metadata.name })}
-          title={t("workflowMeta.editDetails")}
-          onClick={(event) => {
-            event.stopPropagation();
-            setEditorOpen(!open);
-          }}
-        >
-          <Pencil size={14} aria-hidden />
-        </Button>
-      )}
+      placement={placement}
+      renderTrigger={({ ref, props }) =>
+        renderTrigger ? (
+          renderTrigger({ ref, props, open, setOpen: setEditorOpen })
+        ) : (
+          <Button
+            {...props}
+            ref={ref}
+            variant="ghost"
+            size="iconMd"
+            className="size-7"
+            aria-label={t("workflowMeta.editNamedDetails", { name: metadata.name })}
+            title={t("workflowMeta.editDetails")}
+            onClick={(event) => {
+              event.stopPropagation();
+              setEditorOpen(!open);
+            }}
+          >
+            <Pencil size={14} aria-hidden />
+          </Button>
+        )
+      }
     >
       <div className="w-[320px] space-y-3 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl">
         <div className="space-y-1.5">

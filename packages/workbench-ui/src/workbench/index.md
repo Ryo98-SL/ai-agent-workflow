@@ -14,9 +14,10 @@ Reusable workbench state, layout, and canvas runtime.
 - `types.ts` defines workbench UI state and the injected workflow API contract.
 - `dateFormat.ts` owns shared Product Locale-aware date formatting for
   user-visible workbench timestamps.
-- `components/` contains the layout shell, ReactFlow canvas, popovers, palette,
-  inspectors, Knowledge Base management, Tool Browser, variable-rich text
-  editor, model settings, project actions, Chat Panel, and run panel.
+- `components/` contains the layout shell, header home link, ReactFlow canvas,
+  popovers, palette, inspectors, Knowledge Base management, Tool Browser,
+  variable-rich text editor, model settings, project actions, Chat Panel, and
+  run panel.
 - `hooks/` contains execution streaming, resizable panel width, and graph
   history hooks.
 - `workflowDirtySnapshot.ts` creates stable workflow content snapshots for the
@@ -35,7 +36,9 @@ default or a selected template from the New Workflow dialog. Selection opens
 inspection; explicit run requests open run output. Handle palettes wire
 new nodes by handle direction, and target-handle palettes disable End. Model
 settings expose DeepSeek, OpenAI, and Anthropic by default, with Ollama behind
-the development-provider flag. Provider API keys live in the workflow keyring,
+the development-provider flag. When that flag is off, legacy Ollama settings are
+displayed and edited through the DeepSeek fallback so production UI does not
+surface local-provider options. Provider API keys live in the workflow keyring,
 and LLM node Model Setting popovers can override provider, model, API key,
 temperature, and max tokens while the canvas displays the resolved effective
 model. Knowledge Base management opens from the Settings popover, and Knowledge
@@ -67,6 +70,7 @@ Lexical chips but store the canonical template string.
 
 Host applications may pass `initialWorkflowId` and `onWorkflowIdChange` to keep
 their own URL or navigation state aligned with the workbench's active workflow.
+They may also pass `homeHref` for the header `AIW` mark, which defaults to `/`.
 Template creation uses Product Locale as Template Locale for new workflow
 defaults only; after creation, workflow names, node labels, prompts, and field
 defaults are ordinary User-authored Content.

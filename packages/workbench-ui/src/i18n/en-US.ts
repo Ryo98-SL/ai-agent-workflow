@@ -43,6 +43,7 @@ export const workbenchEnUs = {
     syncingWorkflow: "Syncing workflow state with the server.",
   },
   layout: {
+    home: "Back to home",
     openModelSettings: "Open model settings",
     modelSettings: "Model Settings",
     modelSettingsDescription: "Configure the default model provider.",

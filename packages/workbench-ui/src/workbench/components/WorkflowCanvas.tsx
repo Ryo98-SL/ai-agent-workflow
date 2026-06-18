@@ -15,12 +15,14 @@ import {
   type NodeChange,
 } from "@xyflow/react";
 import { nodeTypeLabel, resolveLLMModelSettings } from "@ai-agent-workflow/workflow-domain";
-import type { WorkflowEdge, WorkflowFile, WorkflowNode, WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
+import type { ModelProvider, WorkflowEdge, WorkflowFile, WorkflowNode, WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
 import {
   workflowNodeIconBackgroundClassNames,
   workflowNodeIconClassName,
   workflowNodeIcons,
 } from "./workflowNodes/workflowNodeVisuals";
+import { DEFAULT_MODEL_SETTINGS } from "./ModelSettingsPanel";
+import { getProviderOption } from "./modelCatalog";
 import type { WorkflowGraphHistoryEntry } from "../hooks/useWorkflowGraphHistory";
 import type { AddNodeOptions, NodeExecutionState, WorkflowNodeActionHandler } from "../types";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -48,6 +50,7 @@ type WorkflowCanvasProps = {
   workflow: WorkflowFile;
   selectedNodeId?: string;
   nodeStates: Map<string, NodeExecutionState>;
+  showDevModelProviders: boolean;
   /** Node the run is currently paused on (Human Input), shown with a waiting badge. */
   waitingNodeId?: string;
   canRedo: boolean;
@@ -100,12 +103,16 @@ function toFlowNode(
   onOpenNodePalette?: OpenWorkflowNodePalette,
   executionStatus?: "running" | "waiting" | "succeeded" | "failed",
   onNodeAction?: WorkflowNodeActionHandler,
+  showDevModelProviders = false,
 ): WorkflowFlowNode {
   const nodeSize = getWorkflowNodeSize(node);
   const handles = getWorkflowNodeHandles(node);
   const activeSettings = node.type === "llm" ? resolveLLMModelSettings(workflow, node) : workflow.settings.modelProvider;
-  const activeModel = activeSettings?.model;
-  const activeModelProvider = activeSettings?.provider;
+  const visibleActiveSettings = isHiddenDevProvider(activeSettings?.provider, showDevModelProviders)
+    ? DEFAULT_MODEL_SETTINGS
+    : activeSettings;
+  const activeModel = visibleActiveSettings?.model;
+  const activeModelProvider = visibleActiveSettings?.provider;
 
   return {
     ...currentNode,
@@ -137,6 +144,7 @@ function toFlowNodes(
   nodeStates?: Map<string, import("../types").NodeExecutionState>,
   waitingNodeId?: string,
   onNodeAction?: WorkflowNodeActionHandler,
+  showDevModelProviders = false,
 ): WorkflowFlowNode[] {
   return workflow.graph.nodes.map((node) => {
     return toFlowNode(
@@ -146,6 +154,7 @@ function toFlowNodes(
       onOpenNodePalette,
       nodeExecutionStatus(node, nodeStates, waitingNodeId),
       onNodeAction,
+      showDevModelProviders,
     );
   });
 }
@@ -204,6 +213,7 @@ export function WorkflowCanvas({
   onRedo,
   onSelectNode,
   onUndo,
+  showDevModelProviders,
 }: WorkflowCanvasProps) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
@@ -245,7 +255,7 @@ export function WorkflowCanvas({
     [workflow.graph.edges, workflow.graph.nodes],
   );
   const [nodes, setNodes] = useState(() =>
-    toFlowNodes(workflow, openInlinePalette, nodeStates, waitingNodeId, onNodeAction),
+    toFlowNodes(workflow, openInlinePalette, nodeStates, waitingNodeId, onNodeAction, showDevModelProviders),
   );
   const edges = useMemo(
     () => toFlowEdges(workflow.graph.edges, selectedEdgeIds, hoveredNodeId, isInteractive ? openEdgeInsertPalette : undefined),
@@ -265,10 +275,11 @@ export function WorkflowCanvas({
           openInlinePalette,
           nodeExecutionStatus(node, nodeStates, waitingNodeId),
           onNodeAction,
+          showDevModelProviders,
         ),
       );
     });
-  }, [openInlinePalette, workflow, nodeStates, waitingNodeId, onNodeAction]);
+  }, [openInlinePalette, workflow, nodeStates, waitingNodeId, onNodeAction, showDevModelProviders]);
 
   useEffect(() => {
     setNodes((currentNodes) =>
@@ -471,6 +482,10 @@ export function WorkflowCanvas({
       </ReactFlow>
     </div>
   );
+}
+
+function isHiddenDevProvider(provider: ModelProvider | undefined, showDevModelProviders: boolean): boolean {
+  return Boolean(provider && getProviderOption(provider)?.devOnly && !showDevModelProviders);
 }
 
 /**

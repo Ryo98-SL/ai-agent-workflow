@@ -9,7 +9,12 @@ export type SearchTagFilterValue = {
 export type SearchTagFilterVariant = "inline";
 
 type WorkflowSummary = Awaited<ReturnType<WorkbenchWorkflowApi["listWorkflows"]>>["workflows"][number];
+type KnowledgeBaseSummary = Awaited<ReturnType<WorkbenchWorkflowApi["listKnowledgeBases"]>>["knowledgeBases"][number];
 
 export type StudioWorkflowCard = WorkflowSummary & {
+  searchableText: string;
+};
+
+export type KnowledgeBaseCard = KnowledgeBaseSummary & {
   searchableText: string;
 };

@@ -11,7 +11,7 @@ import type {
 import { Button } from "../Button";
 import { ModelCapabilityTags } from "../ModelCapabilityTags";
 import { DEFAULT_MODEL_SETTINGS, ModelSettingsPanel } from "../ModelSettingsPanel";
-import { getModelCapabilities } from "../modelCatalog";
+import { getModelCapabilities, getProviderOption } from "../modelCatalog";
 import { ModelProviderLogo } from "../modelProviderVisuals";
 import { Popover } from "../Popover";
 import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
@@ -75,7 +75,10 @@ export function NodeModelSettingField({
 }) {
   const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const [open, setOpen] = useState(false);
-  const capabilities = getModelCapabilities(modelSettings.model, modelSettings.provider);
+  const visibleModelSettings = isHiddenDevProvider(modelSettings.provider, showDevModelProviders)
+    ? DEFAULT_MODEL_SETTINGS
+    : modelSettings;
+  const capabilities = getModelCapabilities(visibleModelSettings.model, visibleModelSettings.provider);
 
   return (
     <div>
@@ -98,10 +101,10 @@ export function NodeModelSettingField({
             aria-label={t("nodeModelSetting.open", { defaultValue: "Open model setting" })}
           >
             <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-              <ModelProviderLogo provider={modelSettings.provider} />
+              <ModelProviderLogo provider={visibleModelSettings.provider} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold">{modelSettings.model}</span>
+              <span className="block truncate text-sm font-semibold">{visibleModelSettings.model}</span>
             </span>
             <ModelCapabilityTags capabilities={capabilities} />
           </Button>
@@ -118,7 +121,7 @@ export function NodeModelSettingField({
           </div>
           <div>
             <ModelSettingsPanel
-              settings={modelSettings}
+              settings={visibleModelSettings}
               selectorId={`node-model-selector-${nodeId}`}
               providerKeyPrefs={workflow.settings.providerKeyPrefs}
               showDevModelProviders={showDevModelProviders}
@@ -131,4 +134,8 @@ export function NodeModelSettingField({
       </Popover>
     </div>
   );
+}
+
+function isHiddenDevProvider(provider: ModelProvider, showDevModelProviders: boolean): boolean {
+  return Boolean(getProviderOption(provider)?.devOnly && !showDevModelProviders);
 }

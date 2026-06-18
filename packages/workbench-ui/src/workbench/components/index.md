@@ -21,6 +21,8 @@ Focused React components for the server-backed workbench shell.
 - `modelProviderVisuals.tsx` maps provider names to bundled logo assets and
   normalizes their mixed source dimensions in the model UI.
 - `WorkbenchLayout.tsx` owns the canvas-first shell and panel placement.
+- `WorkbenchHomeLink.tsx` renders the compact `AIW` header mark that links back
+  to the host-provided home route.
 - `ChatPanel.tsx` owns Chat Mode transcript, once-per-conversation Start input
   gate, memory summary controls, and in-chat Human Input resume forms.
 - `NewWorkflowDialog.tsx` renders the starter-template picker from
@@ -62,8 +64,9 @@ Focused React components for the server-backed workbench shell.
   Advanced sampling fields so global and node model settings cannot diverge.
 - `WorkflowMetaEditor.tsx` edits workflow title, description, and icon in a
   local draft and persists them with its own Save button so metadata changes do
-  not activate the header Save control. It is embedded beside each workflow row
-  in `WorkflowSwitcher.tsx`.
+  not activate the header Save control. It supports its default pencil trigger
+  plus custom triggers for host surfaces, and is embedded beside each workflow
+  row in `WorkflowSwitcher.tsx`.
 - `DebugPanel.tsx` gathers Start inputs and triggers runs. Its live state is fed
   from the active workflow's Debug Session, so switching workflows changes the
   visible run output and Chat Mode transcript instead of leaking the previous
@@ -96,6 +99,10 @@ Focused React components for the server-backed workbench shell.
 - `ModelSelectorField.tsx` renders the provider/model picker. Each provider group
   header is collapsible (session-only, not persisted) and hosts a
   `ProviderApiKeyControl` for that provider.
+- `WorkflowCanvas.tsx` and the shared node model setting field coerce hidden
+  development providers to the public DeepSeek fallback for display/editing when
+  `showDevModelProviders` is false, so legacy Ollama-backed workflows do not
+  surface local-provider choices in production UI.
 - `ProviderApiKeyControl.tsx` is the per-provider API-key control: a popover with
   a `Usage Priority` segmented toggle (`AI credits` | `API Key`, default
   credits), the list of stored keys to switch/remove, and an `Add API Key` modal

@@ -831,9 +831,9 @@ export function createDefaultWorkflow(): WorkflowFile {
     },
     settings: {
       modelProvider: {
-        provider: "ollama",
-        baseURL: "http://127.0.0.1:11434",
-        model: "qwen3.5:0.8b",
+        provider: "deepseek",
+        baseURL: "https://api.deepseek.com",
+        model: "deepseek-v4-flash",
       },
       modelProviderKeys: {},
       providerKeyPrefs: {},

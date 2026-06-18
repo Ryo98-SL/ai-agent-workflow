@@ -22,7 +22,7 @@ Template Locale APIs: `getWorkflowTemplates(locale)` and
 binding and become ordinary user-authored workflow content after creation.
 
 Model settings are provider-aware. Persisted workflow settings support
-`deepseek`, `openai`, `anthropic`, and `ollama`, defaulting to DeepSeek
+`deepseek`, `openai`, `anthropic`, and `ollama`, defaulting new workflows to DeepSeek
 `deepseek-v4-flash` at `https://api.deepseek.com`. Workflow settings also keep
 provider API keys in a `modelProviderKeys` keyring. Workflow defaults and LLM
 node `modelSettings` overrides both support provider, base URL, model,

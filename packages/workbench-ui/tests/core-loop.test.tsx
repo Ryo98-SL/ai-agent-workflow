@@ -31,10 +31,10 @@ describe("MVP smoke loop", () => {
     render(<AppWorkbench workflowApi={api} />);
     expect(screen.queryByText("Untitled Agent Workflow")).not.toBeInTheDocument();
     expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
-    expect(screen.getByText("qwen3.5:0.8b")).toBeInTheDocument();
-    expect(screen.getByAltText("Ollama")).toBeInTheDocument();
+    expect(screen.getAllByText("deepseek-v4-flash").length).toBeGreaterThan(0);
+    expect(screen.getByAltText("DeepSeek")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open model settings" }));
-    expect(screen.getByText("deepseek-v4-flash")).toBeInTheDocument();
+    expect(screen.getAllByText("deepseek-v4-flash").length).toBeGreaterThan(0);
     // Off-catalog models are added through the custom-model flow rather than by
     // editing a preset model's name in place.
     await user.click(screen.getByRole("button", { name: "Choose model provider and model" }));
@@ -511,6 +511,33 @@ describe("MVP smoke loop", () => {
     expect(screen.getAllByText("Ollama").length).toBeGreaterThan(0);
     await user.click(screen.getByText("llama3.2"));
     expect(screen.getByDisplayValue("http://127.0.0.1:11434")).toBeInTheDocument();
+  });
+
+  it("hides legacy Ollama defaults from production node cards and model fields", async () => {
+    const user = userEvent.setup();
+    const { api } = createMemoryWorkflowApi((workflow) => ({
+      ...workflow,
+      settings: {
+        ...workflow.settings,
+        modelProvider: {
+          provider: "ollama",
+          baseURL: "http://127.0.0.1:11434",
+          model: "qwen3.5:0.8b",
+        },
+      },
+    }));
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    expect(screen.queryByText("qwen3.5:0.8b")).not.toBeInTheDocument();
+    expect(screen.queryByAltText("Ollama")).not.toBeInTheDocument();
+    expect(screen.getByText("deepseek-v4-flash")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("LLM"));
+    await user.click(screen.getByRole("button", { name: "Open model setting" }));
+    expect(screen.queryByText("qwen3.5:0.8b")).not.toBeInTheDocument();
+    expect(screen.queryByAltText("Ollama")).not.toBeInTheDocument();
+    expect(screen.getAllByText("deepseek-v4-flash").length).toBeGreaterThan(0);
   });
 
   it("selects OpenAI multimodal models and shows icon capability tags", async () => {

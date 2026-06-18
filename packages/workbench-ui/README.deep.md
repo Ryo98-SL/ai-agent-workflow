@@ -9,10 +9,11 @@ or runtime execution adapters.
 Core responsibilities:
 
 - `src/index.ts` exports the public component, data-provider hooks, account
-  hooks, workflow hooks, provider-key store hook, theme/toast helpers, auth
-  menu, theme menu, shared body-level `Popover`, shared workflow icon glyph, New
-  Workflow template dialog, Knowledge Base creation dialog, and API boundary
-  types.
+  hooks, workflow hooks, Knowledge Base hooks, provider-key store hook,
+  theme/toast helpers, auth menu, theme menu, shared body-level `Popover`,
+  workbench `Button`, dialog primitives, `WorkflowMetaEditor`, shared workflow
+  icon glyph, New Workflow template dialog, Knowledge Base creation dialog, and
+  API boundary types.
 - `src/workbench/AppWorkbench.tsx` owns workflow state, panel visibility,
   initial source loading, local/remote API switching, persistence calls, graph
   undo/redo ownership, workflow-level run calls, Chat Mode sends, provider-key
@@ -103,13 +104,16 @@ Design constraints:
   and keep row metadata editing adjacent to row deletion inside the popover.
 - Host apps can pass `initialWorkflowId` to select a workflow from external
   state such as a URL, and `onWorkflowIdChange` to mirror internal workbench
-  switches back to that external state. Keep routing dependencies in host apps,
-  not inside this package.
+  switches back to that external state. The header brand mark links to
+  `homeHref` (default `/`) so hosts can return users to their product home while
+  keeping routing dependencies in host apps, not inside this package.
 - Edge selection is local UI state; edge deletion persists back to the workflow
   graph.
 - DeepSeek is the normal model-settings fallback. OpenAI and Anthropic are
   selectable cloud providers. Ollama is hidden unless the host enables
-  development providers. Workflow-level API keys are stored in the provider
+  development providers, and hidden dev-provider settings fall back to DeepSeek
+  in node cards and node-level model fields so legacy local defaults do not leak
+  into production UI. Workflow-level API keys are stored in the provider
   keyring and selected from provider groups; LLM node overrides reuse the same
   model settings panel and carry provider/model/endpoint plus advanced sampling
   settings, but not inline API keys. Model settings labels, selector chrome,
@@ -148,7 +152,11 @@ Design constraints:
   unsaved `WorkflowFile`; the UI previews requirements, tags, and flow steps
   before loading the draft. Product shells can import it with
   `useCreateWorkflow` to create a selected template through the active workflow
-  API and refresh the workflow list. Created workflows do not store a locale.
+  API and refresh the workflow list, `useUpdateWorkflowMeta` to update title,
+  description, and icon after reading the full workflow, `useDuplicateWorkflow`
+  to copy an existing full workflow before creating it again, and
+  `useDeleteWorkflow` to delete a workflow after the host UI has confirmed the
+  destructive action. Created and duplicated workflows do not store a locale.
 - Variable-bearing fields use `VariableRichTextEditor`, backed by Lexical. The
   canonical stored value remains the plain template string with
   `{{nodeId.path}}` placeholders; chips are editor presentation only. The `/`

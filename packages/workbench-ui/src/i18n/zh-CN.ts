@@ -43,6 +43,7 @@ export const workbenchZhCn = {
     syncingWorkflow: "正在和服务器同步工作流状态。",
   },
   layout: {
+    home: "返回首页",
     openModelSettings: "打开模型设置",
     modelSettings: "模型设置",
     modelSettingsDescription: "配置默认模型提供商。",

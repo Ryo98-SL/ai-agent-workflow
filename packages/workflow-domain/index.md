@@ -47,7 +47,9 @@ and `memory`; `react` strategy is reserved. Human Input nodes define reviewer
 prompts, actions, and optional text input. Template nodes shape runtime
 variables into final text.
 
-Model settings accept DeepSeek, OpenAI, Anthropic, and Ollama providers.
+Model settings accept DeepSeek, OpenAI, Anthropic, and Ollama providers; new
+default workflows start on DeepSeek so dev-only local providers do not leak into
+production starter content.
 Workflow API keys live in `settings.modelProviderKeys`; active stored-key or AI
 credit preference lives in `settings.providerKeyPrefs`. Loading rejects
 unsupported versions and malformed graph data with normalized messages.

@@ -32,9 +32,15 @@ entry point.
   grid uses 2 columns from `md`, 3 from `lg`, and 4 from `xl`. Creating a
   template workflow refreshes the workflow list and navigates to
   `/workbench?workflowId=<id>`.
-- `KnowledgePanel.tsx` is the lightweight Knowledge tab surface, reuses the same
-  compact responsive theme-aware card grid, and opens the Knowledge Base create
-  dialog.
+- `WorkflowCardActions.tsx` owns the workflow-card three-dot action menu. The
+  trigger appears on hover/focus and stays visible while the menu or confirm
+  dialog is open. Editing uses the shared workbench `WorkflowMetaEditor`;
+  duplicate reads the full workflow before creating a localized copy; delete
+  opens a themed confirm dialog before calling the delete mutation.
+- `KnowledgePanel.tsx` is the Knowledge tab surface. It reuses the Studio header
+  search placement, filters real Knowledge Base summaries from the active
+  workbench API, renders compact theme-aware KB cards, and opens the Knowledge
+  Base create dialog.
 - `SearchTagFilter.tsx` is the reusable controlled single-line workflow search
   input. It follows the workbench field token pattern and Escape clears the
   query.
@@ -47,10 +53,12 @@ entry point.
 
 ## Behavior
 
-Homepage search matches against workflow summary fields already available from
-the current workflow API. It does not show tag chips or suggested tags because
-workflow tags are not persisted. Workflow cards link to
-`/workbench?workflowId=<id>`, and the workbench route opens that workflow and
+Homepage search matches against workflow and Knowledge Base summary fields
+already available from the current workflow API. It does not show tag chips or
+suggested tags because workflow tags are not persisted. Workflow cards link to
+`/workbench?workflowId=<id>` while their card action trigger owns edit,
+duplicate, and delete actions without navigating. Delete is intercepted by an
+explicit confirm dialog, and the workbench route opens linked workflows and
 keeps the URL synchronized when the header switcher changes workflows.
 Product Locale translates homepage chrome and date formatting only; workflow
 names, descriptions, icons, and other saved summary fields are rendered as

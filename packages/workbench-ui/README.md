@@ -30,6 +30,8 @@ Principles:
 - Let host apps synchronize the active workflow id with their own URL/state by
   passing `initialWorkflowId` and `onWorkflowIdChange`; the workbench package
   does not import router APIs directly.
+- Keep a compact header brand mark at the far left; it links to the host home
+  route through `homeHref` without importing host routing APIs.
 - Keep node inspection focused: the panel header edits the node label, the body
   edits the description without a framed field, and Settings / History tabs
   separate configuration from run output. History queries all runs for the open
@@ -85,7 +87,9 @@ Consumers provide a workflow API compatible with
 `@ai-agent-workflow/workflow-client` and pass the API base URL so Better Auth can
 share the same origin. DeepSeek, OpenAI, and Anthropic are available by default
 with local logo assets; pass `showDevModelProviders` to expose development
-providers such as Ollama. Provider API keys are edited per provider, and LLM
+providers such as Ollama. When development providers are hidden, legacy node
+cards and node-level model fields fall back to the public default model instead
+of displaying saved local-provider settings. Provider API keys are edited per provider, and LLM
 nodes can override provider, model, base URL, temperature, and max tokens. The
 node inspector and read-only run history reuse the run output renderer from the
 debug panel so selected nodes and historical runs show the same card details as
@@ -93,8 +97,9 @@ the workflow run log. LLM, Knowledge, Tool, Human Input, and Template authoring
 surfaces show output variables so downstream prompt references can be authored
 from the same panel.
 
-The package also exports the shared data provider, session/workflow hooks,
-themed toaster, theme provider, theme menu, auth menu, body-level `Popover`,
-shared workflow icon glyph, New Workflow template dialog, Knowledge Base
-creation dialog, and `workbenchI18nResources` so host apps can build
-product-level shells without duplicating workbench internals.
+The package also exports the shared data provider, session/workflow and
+Knowledge Base hooks, themed toaster, theme provider, theme menu, auth menu,
+body-level `Popover`, workbench `Button`, dialog primitives,
+`WorkflowMetaEditor`, shared workflow icon glyph, New Workflow template dialog,
+Knowledge Base creation dialog, and `workbenchI18nResources` so host apps can
+build product-level shells without duplicating workbench internals.

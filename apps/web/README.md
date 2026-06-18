@@ -25,7 +25,11 @@ account menu; the language menu uses the shared workbench `Popover`.
 Studio workflow cards read each workflow's saved metadata icon, format edited
 dates with Product Locale, use a compact responsive grid that reaches four
 columns on desktop, the top-left card opens the shared New Workflow template
-dialog, and the compact search field filters only real workflow summary fields.
+dialog, expose a hover three-dot menu for editing info, duplicate, and delete
+actions with an explicit delete confirmation dialog, and the compact search
+field filters only real workflow summary fields. The Knowledge tab mirrors that
+search placement and filters real Knowledge Base summaries while rendering
+theme-aware KB cards.
 Product Locale is local to the browser; it translates app-owned homepage chrome
 without rewriting workflow summaries returned by the API. The browser favicon is
 served from `public/favicon.png` and matches the homepage header `AIW` mark.

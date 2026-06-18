@@ -7,7 +7,7 @@ Electron, server, or runtime execution dependencies.
 
 - `src/schema.ts` defines the `.agentflow.json` Zod schemas, inferred types,
   node-level descriptions, Start input field contracts, parse/validate/serialize
-  helpers, default workflow creation, readable node factories, and
+  helpers, DeepSeek-backed default workflow creation, readable node factories, and
   provider-aware model settings for DeepSeek, OpenAI, Anthropic, and Ollama.
   Workflow-level API keys live in `settings.modelProviderKeys`; LLM nodes can
   define `config.modelSettings` overrides and use `resolveLLMModelSettings` to

@@ -15,8 +15,9 @@ shared workbench UI at `/workbench`, and injects a typed workflow client.
   client and API base URL.
 - `src/pages/workbench/index.tsx` mounts `AppWorkbench` with the shared workflow
   client, enables development model providers in dev mode, reads `workflowId`
-  from the URL, and writes the active workflow id back to the URL when the
-  workbench switches workflows.
+  from the URL, writes the active workflow id back to the URL when the
+  workbench switches workflows, and points the workbench header brand mark back
+  to `/`.
 - `src/homepage/` owns the theme-aware Studio/Knowledge homepage shell, the
   workflow card grid, compact local workflow search, Product Locale switcher,
   the search review gallery, and the Studio New Workflow entry point. Its shell,
@@ -24,8 +25,12 @@ shared workbench UI at `/workbench`, and injects a typed workflow client.
   light/dark workbench tokens; the header stays on `bg-card/95` while the
   header-below canvas uses `bg-muted/30` for contrast. Workflow cards render the
   saved workflow metadata icon in a compact responsive grid that reaches four
-  columns on desktop, and the top-left Studio card opens the shared New Workflow
-  template dialog. The header uses a three-column grid with a stable right
+  columns on desktop, add a hover-only three-dot menu for metadata editing,
+  duplicate, and delete actions with a themed confirmation dialog before
+  deletion, and the top-left Studio card opens the shared New Workflow template
+  dialog. The Knowledge tab uses the same search placement to filter real
+  Knowledge Base summaries and render KB cards. The header uses a three-column
+  grid with a stable right
   utility slot for the Product Locale switcher, shared theme switcher, and
   account menu so the centered tabs do not shift across auth states. The Product
   Locale switcher uses the shared workbench `Popover` instead of a native select

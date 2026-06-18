@@ -85,7 +85,7 @@ export function AppWorkbench({ apiBaseUrl, ...props }: AppWorkbenchProps) {
   );
 }
 
-function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWorkflowIdChange }: AppWorkbenchProps) {
+function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWorkflowIdChange, homeHref = "/" }: AppWorkbenchProps) {
   const { t } = useTranslation("workbench");
   // Server-backed when signed in, localStorage-backed when anonymous.
   const workflowApi = useActiveWorkflowApi();
@@ -935,6 +935,7 @@ function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWork
       onUpdateModelSettings={updateModelSettings}
       onUpdateProviderKeyPreference={updateProviderKeyPreference}
       onUpdateNode={updateNode}
+      homeHref={homeHref}
     />
     <NewWorkflowDialog
       open={newWorkflowDialogOpen}

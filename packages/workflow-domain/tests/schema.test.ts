@@ -23,9 +23,9 @@ describe("workflow schema", () => {
     expect(workflow.graph.nodes.map((node) => node.id)).toContain("llm1");
     expect(workflow.graph.nodes.every((node) => Boolean(node.description))).toBe(true);
     expect(workflow.settings.modelProvider).toMatchObject({
-      provider: "ollama",
-      baseURL: "http://127.0.0.1:11434",
-      model: "qwen3.5:0.8b",
+      provider: "deepseek",
+      baseURL: "https://api.deepseek.com",
+      model: "deepseek-v4-flash",
     });
   });
 
