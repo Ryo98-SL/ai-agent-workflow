@@ -1,6 +1,13 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "@ai-agent-workflow/i18n";
-import { AuthMenu, ThemeMenu, Toaster, ThemeProvider, WorkbenchDataProvider } from "@ai-agent-workflow/workbench-ui";
+import {
+  AuthMenu,
+  ImportLocalDataPrompt,
+  ThemeMenu,
+  Toaster,
+  ThemeProvider,
+  WorkbenchDataProvider,
+} from "@ai-agent-workflow/workbench-ui";
 import type { WorkbenchWorkflowApi } from "@ai-agent-workflow/workbench-ui";
 import { BookOpen, Database, LayoutDashboard } from "lucide-react";
 import { HomepageShell } from "./HomepageShell";
@@ -18,6 +25,7 @@ export function ProductHomepage({ workflowApi, apiBaseUrl }: ProductHomepageProp
   return (
     <ThemeProvider>
       <WorkbenchDataProvider workflowApi={workflowApi} apiBaseUrl={apiBaseUrl}>
+        <ImportLocalDataPrompt />
         <HomepageRuntime />
       </WorkbenchDataProvider>
       <Toaster richColors closeButton position="bottom-right" />

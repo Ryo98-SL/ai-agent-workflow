@@ -41,6 +41,8 @@ type PopoverProps = {
   referenceElement?: HTMLElement | null;
 };
 
+const VIEWPORT_PADDING = 12;
+
 export function Popover({
   open,
   onOpenChange,
@@ -63,34 +65,27 @@ export function Popover({
   const activeReferenceElement = referenceElement ?? triggerReferenceElement;
   const middleware = [
     floatingOffset(offset),
-    ...(matchReferenceWidth
-      ? [
-          floatingSize({
-            apply({ elements, rects }) {
-              Object.assign(elements.floating.style, {
-                width: `${rects.reference.width}px`,
-              });
-            },
-          }),
-        ]
-      : []),
     // When filling height we always want the panel to stay below the trigger and
     // grow downward, so we skip `flip` (which would otherwise flip it upward once
     // its natural height overflows the viewport before `size` constrains it).
     ...(fillAvailableHeight ? [] : [flip()]),
-    shift({ padding: 12 }),
-    ...(fillAvailableHeight
-      ? [
-          floatingSize({
-            padding: availableHeightPadding,
-            apply({ availableHeight, elements }) {
-              Object.assign(elements.floating.style, {
-                height: `${Math.max(0, Math.floor(availableHeight))}px`,
-              });
-            },
-          }),
-        ]
-      : []),
+    shift({ padding: VIEWPORT_PADDING }),
+    floatingSize({
+      padding: fillAvailableHeight ? availableHeightPadding : VIEWPORT_PADDING,
+      apply({ availableHeight, availableWidth, elements, rects }) {
+        const constrainedHeight = `${Math.max(0, Math.floor(availableHeight))}px`;
+        const constrainedWidth = `${Math.max(0, Math.floor(availableWidth))}px`;
+        const referenceWidth = `${Math.max(0, Math.floor(Math.min(rects.reference.width, availableWidth)))}px`;
+
+        Object.assign(elements.floating.style, {
+          height: fillAvailableHeight ? constrainedHeight : "",
+          maxHeight: fillAvailableHeight ? "" : constrainedHeight,
+          maxWidth: constrainedWidth,
+          overflow: fillAvailableHeight ? "" : "auto",
+          width: matchReferenceWidth ? referenceWidth : "",
+        });
+      },
+    }),
   ];
   const { context, floatingStyles, update } = useFloating({
     elements: {

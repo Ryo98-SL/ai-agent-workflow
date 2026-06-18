@@ -1,5 +1,6 @@
-import { KeyboardEvent, useId, useRef, useState } from "react";
+import { KeyboardEvent, useId } from "react";
 import { Search, X } from "lucide-react";
+import { Input } from "@workbench/components/ui/input";
 import type { SearchTagFilterValue, SearchTagFilterVariant } from "./types";
 
 type SearchTagFilterProps = {
@@ -19,9 +20,6 @@ export function SearchTagFilter({
   clearLabel,
 }: SearchTagFilterProps) {
   const inputId = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [focused, setFocused] = useState(false);
-
   const setQuery = (query: string) => onChange({ ...value, query });
 
   const clearAll = () => onChange({ query: "" });
@@ -34,47 +32,33 @@ export function SearchTagFilter({
   };
 
   return (
-    <div
-      className={[
-        "min-w-0 rounded-lg border bg-card transition-colors",
-        focused ? "border-brand/70 shadow-[0_0_0_3px_hsl(var(--brand)/0.18)]" : "border-border",
-      ].join(" ")}
-      onClick={() => inputRef.current?.focus()}
-    >
+    <div className="relative min-w-0">
       <label className="sr-only" htmlFor={inputId}>
         {label}
       </label>
-      <div className="flex h-11 min-w-0 items-center gap-2 px-3">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <Search size={17} aria-hidden />
-        </span>
+      <span className="pointer-events-none absolute left-3 top-1/2 z-10 flex size-7 -translate-y-1/2 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <Search size={17} aria-hidden />
+      </span>
 
-        <input
-          ref={inputRef}
-          id={inputId}
-          value={value.query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={onKeyDown}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/60"
-          placeholder={placeholder}
-        />
+      <Input
+        id={inputId}
+        value={value.query}
+        onChange={(event) => setQuery(event.target.value)}
+        onKeyDown={onKeyDown}
+        className="h-11 rounded-lg border-border bg-card py-0 pl-12 pr-12 text-sm font-medium text-foreground shadow-none placeholder:text-muted-foreground/60"
+        placeholder={placeholder}
+      />
 
-        {value.query && (
-          <button
-            type="button"
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            onClick={(event) => {
-              event.stopPropagation();
-              clearAll();
-            }}
-            aria-label={clearLabel}
-          >
-            <X size={16} aria-hidden />
-          </button>
-        )}
-      </div>
+      {value.query && (
+        <button
+          type="button"
+          className="absolute right-3 top-1/2 z-10 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          onClick={clearAll}
+          aria-label={clearLabel}
+        >
+          <X size={16} aria-hidden />
+        </button>
+      )}
     </div>
   );
 }

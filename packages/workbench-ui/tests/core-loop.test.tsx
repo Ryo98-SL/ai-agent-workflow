@@ -301,6 +301,7 @@ describe("MVP smoke loop", () => {
 
     render(<AppWorkbench workflowApi={api} />);
     expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+    await waitFor(() => expect(document.title).toBe("Seed Workflow"));
     const headerSave = screen.getByRole("button", { name: "Save" });
     expect(headerSave).toBeDisabled();
 
@@ -318,6 +319,7 @@ describe("MVP smoke loop", () => {
     });
     expect(calls.updateWorkflow).toHaveBeenCalled();
     expect(screen.getAllByText("Renamed Workflow").length).toBeGreaterThan(0);
+    await waitFor(() => expect(document.title).toBe("Renamed Workflow"));
     expect(screen.getByRole("button", { name: "Switch workflow" }).querySelector(".lucide-bot")).not.toBeNull();
     await user.click(screen.getByRole("button", { name: "Edit Renamed Workflow workflow details" }));
     expect(screen.getByRole("button", { name: "Use bot workflow icon" })).toHaveClass("border-brand");

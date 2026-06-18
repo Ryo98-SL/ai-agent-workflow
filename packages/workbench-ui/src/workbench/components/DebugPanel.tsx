@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import { ArrowLeft, ArrowRight, Loader2, MessagesSquare, Play, Workflow as WorkflowIcon } from "lucide-react";
 import type { ResumeRunRequest, RunInput } from "@ai-agent-workflow/api-contracts";
 import {
@@ -9,6 +10,7 @@ import {
 } from "@ai-agent-workflow/workflow-domain";
 import type { ChatTurn, DebugState, NodeExecutionState } from "../types";
 import { Input } from "@workbench/components/ui/input";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import { Button } from "./Button";
 import { ChatPanel } from "./ChatPanel";
 import { RunOutput } from "./RunOutput";
@@ -57,6 +59,7 @@ export function DebugPanel({
   view: controlledView,
   onViewChange,
 }: DebugPanelProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const hasMemory = workflow.graph.nodes.some((node) => node.type === "llm" && node.config.memory);
   const startNode = workflow.graph.nodes.find((node): node is StartNode => node.type === "start");
   const chatMode = workflow.metadata.mode === "chat";
@@ -141,12 +144,14 @@ export function DebugPanel({
               variant="ghost"
               size="iconSm"
               onClick={() => setView("input")}
-              aria-label="Back to inputs"
-              title="Back to inputs"
+              aria-label={t("debugPanel.backToInputs", { defaultValue: "Back to inputs" })}
+              title={t("debugPanel.backToInputs", { defaultValue: "Back to inputs" })}
             >
               <ArrowLeft size={16} aria-hidden />
             </Button>
-            <span className="truncate text-xs font-medium text-muted-foreground">Run output</span>
+            <span className="truncate text-xs font-medium text-muted-foreground">
+              {t("debugPanel.runOutput", { defaultValue: "Run output" })}
+            </span>
           </div>
         )}
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
@@ -169,9 +174,16 @@ export function DebugPanel({
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold">Workflow Run</h2>
+            <h2 className="truncate text-sm font-semibold">
+              {t("debugPanel.workflowRun", { defaultValue: "Workflow Run" })}
+            </h2>
             <p className="mt-1 truncate text-xs text-muted-foreground">
-              {startNode ? `${startNode.label} inputs` : "No Start node"}
+              {startNode
+                ? t("debugPanel.startNodeInputs", {
+                    defaultValue: "{{label}} inputs",
+                    label: startNode.label,
+                  })
+                : t("debugPanel.noStartNode", { defaultValue: "No Start node" })}
             </p>
             {hasRun && (
               <button
@@ -179,7 +191,7 @@ export function DebugPanel({
                 className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-brand transition-colors hover:text-brand/80"
                 onClick={() => setView("run")}
               >
-                View run output
+                {t("debugPanel.viewRunOutput", { defaultValue: "View run output" })}
                 <ArrowRight size={13} aria-hidden />
               </button>
             )}
@@ -191,13 +203,16 @@ export function DebugPanel({
             onClick={submitRun}
           >
             {debugState.status === "running" ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
-            Run workflow
+            {t("debugPanel.runWorkflow", { defaultValue: "Run workflow" })}
           </Button>
         </div>
         {hasMemory && (
           <div className="mt-3 flex items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
             <span className="text-xs text-muted-foreground">
-              Conversation memory on · {conversationTurns} turn{conversationTurns === 1 ? "" : "s"}
+              {t("debugPanel.conversationMemoryOn", {
+                defaultValue: "Conversation memory on · {{count}} turns",
+                count: conversationTurns,
+              })}
             </span>
             <button
               type="button"
@@ -205,16 +220,18 @@ export function DebugPanel({
               disabled={debugState.status === "running" || conversationTurns === 0}
               onClick={() => onNewConversation?.()}
             >
-              New conversation
+              {t("debugPanel.newConversation", { defaultValue: "New conversation" })}
             </button>
           </div>
         )}
         {startNode && (
           <div className="mt-4 space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start Inputs</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("debugPanel.startInputs", { defaultValue: "Start Inputs" })}
+            </h3>
             {startNode.config.fields.length === 0 ? (
               <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
-                This workflow has no Start inputs.
+                {t("debugPanel.noStartInputs", { defaultValue: "This workflow has no Start inputs." })}
               </p>
             ) : (
               startNode.config.fields.map((field) => (
@@ -248,9 +265,10 @@ function ModeToggle({
   onSetMode: (mode: WorkflowMode) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const options: { value: WorkflowMode; label: string; icon: typeof WorkflowIcon }[] = [
-    { value: "workflow", label: "运行", icon: WorkflowIcon },
-    { value: "chat", label: "对话", icon: MessagesSquare },
+    { value: "workflow", label: t("debugPanel.workflowMode", { defaultValue: "Run" }), icon: WorkflowIcon },
+    { value: "chat", label: t("debugPanel.chatMode", { defaultValue: "Chat" }), icon: MessagesSquare },
   ];
   return (
     <div className="flex items-center gap-1 border-b border-border px-3 py-2">

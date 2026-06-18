@@ -18,12 +18,14 @@ and consumed with Tailwind utilities.
   buttons and separators.
 - `card.tsx` — `Card` and `CardHeader`/`CardTitle`/`CardDescription`/
   `CardContent`/`CardFooter` content containers.
-- `input.tsx` — `Input` themed text field.
+- `input.tsx` — `Input` themed text field with the shared brand focus border,
+  halo, and transition treatment.
 - `label.tsx` — `Label` built on `@radix-ui/react-label`.
 - `select.tsx` — `Select` built on `@radix-ui/react-select`.
 - `separator.tsx` — `Separator` built on `@radix-ui/react-separator`.
 - `badge.tsx` — `Badge` + `badgeVariants` status indicator.
-- `textarea.tsx` — `Textarea` themed multiline field.
+- `textarea.tsx` — `Textarea` themed multiline field with the shared brand
+  focus border, halo, and transition treatment.
 - `sonner.tsx` — `Toaster` wrapper for product-level toasts.
 - `dialog.tsx` — `Dialog` modal built on `@radix-ui/react-dialog` (`DialogContent`/
   `DialogHeader`/`DialogTitle`/`DialogDescription`/`DialogFooter`/`DialogClose`).
@@ -42,3 +44,6 @@ and consumed with Tailwind utilities.
 - Style only through theme tokens (`bg-primary`, `bg-card`, `text-foreground`,
   `border-border`, and similar). Do not reintroduce ad-hoc hex/slate/emerald
   values.
+- Text fields should keep focus treatments on the field primitive itself. Use
+  `border-brand/70` plus the shared brand halo and transition instead of
+  wrapper-managed focus state.

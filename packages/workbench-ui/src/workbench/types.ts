@@ -167,7 +167,7 @@ export type AppWorkbenchProps = {
   showDevModelProviders?: boolean;
   initialWorkflowId?: string;
   onWorkflowIdChange?: (workflowId: string | undefined) => void;
-  /** Destination for the workbench header brand mark. Defaults to the host root. */
+  /** Destination for the workbench header back button. Defaults to the host root. */
   homeHref?: string;
   /**
    * Base URL of the auth/api server, used to construct the Better Auth client.

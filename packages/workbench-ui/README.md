@@ -27,11 +27,14 @@ Principles:
   saved from their own metadata editor.
 - Keep workflow switching row-oriented: the popover list shows each workflow's
   saved icon and places metadata edit actions beside delete actions.
+- Keep the browser document title aligned with the active workflow metadata
+  name after the workbench finishes loading, including workflow switches and
+  metadata-editor saves.
 - Let host apps synchronize the active workflow id with their own URL/state by
   passing `initialWorkflowId` and `onWorkflowIdChange`; the workbench package
   does not import router APIs directly.
-- Keep a compact header brand mark at the far left; it links to the host home
-  route through `homeHref` without importing host routing APIs.
+- Keep a compact left-arrow back button at the far left; it links to the host
+  home route through `homeHref` without importing host routing APIs.
 - Keep node inspection focused: the panel header edits the node label, the body
   edits the description without a framed field, and Settings / History tabs
   separate configuration from run output. History queries all runs for the open
@@ -57,8 +60,10 @@ Principles:
   field labels, and the Knowledge node inspector selects one reusable KB for
   semantic retrieval.
 - Keep Chat Mode separate from one-shot workflow runs: Start fields are collected
-  once per conversation, each message is sent as `query`, and Human Input pauses
-  render the same resume form in chat, inspector history, and debug surfaces.
+  once per conversation, each message is sent as `query`, and the composer
+  reminds authors to reference `{{userInput.query}}` in LLM / Agent prompts when
+  the workflow should see the user's message. Human Input pauses render the same
+  resume form in chat, inspector history, and debug surfaces.
 - Send the current workflow snapshot with run requests after saving dirty
   changes, so execution uses the model and node settings visible in the editor
   rather than an older server copy. When development providers are hidden, run
@@ -77,8 +82,13 @@ Principles:
 - Keep Product Locale copy in the package-owned `workbench` namespace. Display
   localization for Tool descriptors is applied in the rendering layer and does
   not mutate stored tool identity or workflow config. Node Inspector forms,
-  workflow node card fallbacks, output variable chrome, and Workbench timestamps
-  use Product Locale through the shared workbench i18n/date helpers.
+  workflow node card fallbacks, node palette/debug floating-panel chrome, debug
+  run controls, output variable chrome, and Workbench timestamps use Product
+  Locale through the shared workbench i18n/date helpers.
+- Keep shared text-field focus styling on the field primitives themselves:
+  focused `Input`/`Textarea` controls use the brand border and halo rather than
+  wrapper-managed focus state. Bordered shells that host transparent inputs or
+  borderless rich-text editors use the same focus-within treatment on the shell.
 
 ```tsx
 import { AppWorkbench, WorkbenchDataProvider } from "@ai-agent-workflow/workbench-ui";
@@ -104,7 +114,7 @@ from the same panel.
 
 The package also exports the shared data provider, session/workflow and
 Knowledge Base hooks, themed toaster, theme provider, theme menu, auth menu,
-body-level `Popover`, workbench `Button`, dialog primitives,
+anonymous-local-workflow import prompt, body-level `Popover`, workbench `Button`, dialog primitives,
 `WorkflowMetaEditor`, shared workflow icon glyph, New Workflow template dialog,
 Knowledge Base creation dialog, and `workbenchI18nResources` so host apps can
 build product-level shells without duplicating workbench internals.

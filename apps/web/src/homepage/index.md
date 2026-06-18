@@ -9,7 +9,8 @@ entry point.
 ## Structure
 
 - `ProductHomepage.tsx` wraps the homepage runtime in `ThemeProvider`,
-  `WorkbenchDataProvider`, and the shared toaster.
+  `WorkbenchDataProvider`, the shared anonymous-local-workflow import prompt,
+  and the shared toaster.
 - `HomepageShell.tsx` renders the product mark, centered `Studio`/`Knowledge`
   tabs, and right utility slot using a three-column CSS grid. Its header uses
   `bg-card/95`, while the header-below canvas uses `bg-muted/30` so homepage
@@ -20,9 +21,11 @@ entry point.
   pending/signed-out/signed-in states so trigger changes do not shift the
   header. Header tab buttons keep a transparent base border so active and
   inactive states have the same box metrics.
-- `ProductHomepage.tsx` provides the shared `ThemeProvider` and places the
-  Product Locale `LanguageSwitcher`, workbench `ThemeMenu`, and `AuthMenu` in
-  the homepage header.
+- `ProductHomepage.tsx` provides the shared `ThemeProvider`, renders
+  `ImportLocalDataPrompt` inside the data provider so signed-in users can import
+  workflows created while anonymous, and places the Product Locale
+  `LanguageSwitcher`, workbench `ThemeMenu`, and `AuthMenu` in the homepage
+  header.
 - `LanguageSwitcher.tsx` reads `useProductLocale` from the shared i18n package,
   opens the locale list through the shared workbench `Popover`, and persists
   manual language selection through the shared localStorage key.
@@ -47,8 +50,9 @@ entry point.
   workbench API, renders compact theme-aware KB cards with action menus, and
   opens the Knowledge Base create dialog.
 - `SearchTagFilter.tsx` is the reusable controlled single-line workflow search
-  input. It follows the workbench field token pattern and Escape clears the
-  query.
+  input. It composes the shared workbench `Input` component, with that input
+  owning the focused brand border treatment while the search icon and clear
+  action are positioned around it. Escape clears the query.
 - `../i18n/` owns the homepage `web` namespace resources for `en-US` and
   `zh-CN`.
 - `SearchTagFilterGallery.tsx` exposes the compact review surface at

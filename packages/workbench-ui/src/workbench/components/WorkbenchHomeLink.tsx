@@ -1,3 +1,5 @@
+import { ArrowLeft } from "lucide-react";
+
 type WorkbenchHomeLinkProps = {
   href: string;
   label: string;
@@ -8,9 +10,9 @@ export function WorkbenchHomeLink({ href, label }: WorkbenchHomeLinkProps) {
     <a
       href={href}
       aria-label={label}
-      className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand text-xs font-black tracking-normal text-brand-foreground transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/45 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:border-brand/40 hover:bg-brand/10 hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/45 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
-      AIW
+      <ArrowLeft size={15} aria-hidden />
     </a>
   );
 }

@@ -1,4 +1,5 @@
 import type { WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import type { AddNodeOptions, WorkflowNodePaletteHandleType } from "../types";
 import { FloatingPanel } from "./FloatingPanel";
 import { NodePalette } from "./NodePalette";
@@ -33,6 +34,7 @@ type InlineNodePalettePopoverProps = {
 };
 
 export function InlineNodePalettePopover({ hasStartNode, palette, onAddNode, onClose }: InlineNodePalettePopoverProps) {
+  const { t } = useTranslation("workbench");
   const disabledTypes: WorkflowNodeType[] =
     palette?.mode === "insertOnEdge"
       ? ["start", "end"]
@@ -42,9 +44,9 @@ export function InlineNodePalettePopover({ hasStartNode, palette, onAddNode, onC
 
   const description =
     palette?.mode === "insertOnEdge"
-      ? `Insert after ${palette.sourceNodeLabel}`
+      ? t("nodePalette.inlineInsertDescription", { label: palette.sourceNodeLabel })
       : palette
-        ? `Connect from ${palette.sourceNodeLabel}`
+        ? t("nodePalette.inlineConnectDescription", { label: palette.sourceNodeLabel })
         : undefined;
 
   const placement = palette?.mode === "insertOnEdge" ? "right" : palette?.handleType === "target" ? "left-start" : "right-start";
@@ -62,9 +64,9 @@ export function InlineNodePalettePopover({ hasStartNode, palette, onAddNode, onC
       placement={placement}
     >
       <FloatingPanel
-        title="Node Palette"
+        title={t("nodePalette.title")}
         description={description}
-        closeLabel="Close node palette"
+        closeLabel={t("nodePalette.close")}
         onClose={onClose}
         className="h-[min(70vh,520px)] w-[300px]"
       >

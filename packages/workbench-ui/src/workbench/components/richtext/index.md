@@ -23,5 +23,8 @@ The editor presents variable references as chips, but the source of truth
 remains the plain template string. It supports single-line or multiline fields,
 plain paste, IME-safe controlled updates, and keyboard navigation across atomic
 chips. Variable availability is scoped by the consuming node through
-`WorkflowGraphContext`. The `/` insertion menu scrolls internally when the
-available viewport height is smaller than its natural option list.
+`WorkflowGraphContext`. The editor root uses the shared brand focus border and
+halo when it owns the field border; callers that embed it inside a bordered card
+keep the editor borderless and apply that same focus-within treatment to the
+outer container. The `/` insertion menu scrolls internally when the available
+viewport height is smaller than its natural option list.

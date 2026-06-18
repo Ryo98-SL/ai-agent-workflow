@@ -31,7 +31,9 @@ shared workbench UI at `/workbench`, and injects a typed workflow client.
   dialog. The Knowledge tab uses the same search placement to filter real
   Knowledge Base summaries and render KB cards with a matching hover-only
   three-dot menu for editing summary metadata and deleting editable KBs after a
-  themed confirmation dialog. The header uses a three-column
+  themed confirmation dialog. The homepage also mounts the shared local-workflow
+  import prompt inside `WorkbenchDataProvider`, matching the workbench sign-in
+  migration flow. The header uses a three-column
   grid with a stable right
   utility slot for the Product Locale switcher, shared theme switcher, and
   account menu so the centered tabs do not shift across auth states. The Product

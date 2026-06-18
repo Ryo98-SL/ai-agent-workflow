@@ -28,6 +28,7 @@ import { VariableNode, $createVariableNode, $isVariableNode } from "./VariableNo
 import { $populateFromString, $serializeToString, CARET_ANCHOR_CHAR } from "./variableSerialization";
 import { SlashVariablePlugin } from "./SlashVariablePlugin";
 import { VariableConsumerProvider } from "../WorkflowGraphContext";
+import { FIELD_FOCUS_WITHIN_CLASS } from "../fieldStyles";
 
 type VariableRichTextEditorProps = {
   /** Consumer node id — scopes the `/` typeahead to its Available Variables. */
@@ -74,7 +75,8 @@ export function VariableRichTextEditor({
       <VariableConsumerProvider nodeId={nodeId}>
         <div
           className={[
-            "relative flex cursor-text flex-col rounded-md border border-input bg-background px-3 py-2 text-sm leading-5 focus-within:ring-1 focus-within:ring-ring",
+            "relative flex cursor-text flex-col rounded-md border border-input bg-background px-3 py-2 text-sm leading-5 focus-within:outline-none",
+            FIELD_FOCUS_WITHIN_CLASS,
             className ?? "",
           ].join(" ")}
         >

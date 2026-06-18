@@ -151,6 +151,17 @@ function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWork
     debugViewRef.current = debugView;
   }, [debugView]);
 
+  useEffect(() => {
+    if (!initialLoaded) {
+      return;
+    }
+
+    const workflowTitle = workflow.metadata.name.trim();
+    if (workflowTitle) {
+      document.title = workflowTitle;
+    }
+  }, [initialLoaded, workflow.metadata.name]);
+
   const persistActiveDebugView = useCallback(() => {
     debugViewByWorkflowRef.current.set(activeDebugViewKeyRef.current, debugViewRef.current);
   }, []);

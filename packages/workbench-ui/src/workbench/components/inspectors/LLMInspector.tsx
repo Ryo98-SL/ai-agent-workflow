@@ -14,6 +14,7 @@ import { Button } from "../Button";
 import { VariableRichTextEditor } from "../richtext/VariableRichTextEditor";
 import { NodeOutputVariablesPanel } from "../NodeOutputVariablesPanel";
 import { Popover } from "../Popover";
+import { FIELD_FOCUS_WITHIN_CLASS } from "../fieldStyles";
 import { NodeModelSettingField, modelSettingsForEditor, sanitizeNodeModelSettings } from "./sharedModelSettingField";
 import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 
@@ -128,7 +129,10 @@ function PromptMessagesEditor({
         {messages.map((message, index) => {
           const pinned = index === 0;
           return (
-            <div key={index} className="rounded-md border border-border bg-card">
+            <div
+              key={index}
+              className={["rounded-md border border-border bg-card", FIELD_FOCUS_WITHIN_CLASS].join(" ")}
+            >
               <div className="flex items-center justify-between gap-2 px-2 pt-1.5">
                 {pinned ? (
                   <span className="px-1 text-xs font-semibold uppercase tracking-wide text-foreground">
@@ -168,7 +172,7 @@ function PromptMessagesEditor({
                       })
                     : t("inspectors.llm.messagePlaceholder", { defaultValue: "Type / to reference variables" })
                 }
-                className="!border-0 min-h-20 !rounded-none !rounded-b-md focus-within:!ring-0"
+                className="!border-0 min-h-20 !rounded-none !rounded-b-md focus-within:!shadow-none"
               />
             </div>
           );

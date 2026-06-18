@@ -19,14 +19,16 @@ Core responsibilities:
   undo/redo ownership, workflow-level run calls, Chat Mode sends, provider-key
   preparation, current workflow snapshots for run requests, New Workflow
   template loading, workflow-scoped Debug Session selection, unsaved switch
-  handling, and host callbacks for active workflow id synchronization.
+  handling, host callbacks for active workflow id synchronization, and browser
+  document title synchronization from the active workflow metadata name.
 - `src/workbench/workflowDirtySnapshot.ts` owns the canonical content snapshot
   used for Save button dirty state.
 - `src/workbench/components` owns the canvas-first shell, popovers, inspectors,
   model settings, Knowledge Base management, Tool Browser, variable rich-text
   editor, node palette, Chat Panel, run panel, and ReactFlow adapters.
 - `src/components/ui` holds checked-in shadcn/ui primitives used by the
-  workbench and dialogs.
+  workbench and dialogs. Shared text fields keep brand focus border and halo
+  styling on the field primitive itself, not on wrapper state.
 - `src/data/useKnowledgeBases.ts` exposes React Query hooks for KB metadata and
   document mutations through the injected workbench API. Anonymous workflow
   storage stays local, but KB reads/mutations always delegate to the server
@@ -38,12 +40,13 @@ Core responsibilities:
   source. `anonymousRunStore.ts` tracks anonymous run ids for session-scoped
   history while server memory still holds those runs.
 - `src/auth/` owns the Better Auth menu and local-data import prompt shown when
-  an anonymous user signs in. The Better Auth client disables focus-driven
-  session refetches so returning to a tab does not call `get-session` or churn
-  auth UI state.
+  an anonymous user signs in from the workbench or host product shell. The Better
+  Auth client disables focus-driven session refetches so returning to a tab does
+  not call `get-session` or churn auth UI state.
 - `src/theme/` owns the light/dark/system theme provider and menu.
 - `src/i18n/` owns the package-level `workbench` namespace resources for
-  Product Locale copy used by workbench UI surfaces.
+  Product Locale copy used by workbench UI surfaces, including Debug Panel
+  labels and the run-log FloatingPanel chrome.
 - `src/workbench/assets` stores bundled DeepSeek, OpenAI, Anthropic, and
   Ollama provider logos so model UI never depends on external image URLs at
   runtime.
@@ -59,7 +62,9 @@ Design constraints:
   the server-backed or anonymous IndexedDB workflow source, and then only
   bootstraps again when the auth identity changes or a workflow refresh is
   explicitly requested.
-- Popovers use the shared Floating UI wrapper and mount under `body`; the
+- Popovers use the shared Floating UI wrapper, mount under `body`, and are
+  centrally constrained to the available viewport width/height with the Floating
+  UI `size` middleware so individual callers do not need overflow guards; the
   header run history uses a backdrop-protected right drawer because it combines
   historical debug output and a selectable/deletable run list.
 - User-visible dates must use the shared `formatWorkbenchDate` helper with
@@ -71,7 +76,9 @@ Design constraints:
   shadcn button groups under the MiniMap for history and viewport actions so
   styling stays aligned with the workbench.
 - Source-handle palette additions create outgoing edges; target-handle additions
-  create incoming edges and cannot create End nodes.
+  create incoming edges and cannot create End nodes. Node palette floating-panel
+  titles, descriptions, close labels, and inline connection descriptions come
+  from the package `workbench` Product Locale namespace.
 - Hovering a node highlights only its directly connected edges and remains local
   UI state.
 - Inspector edits update node data without viewport resets or selection bounce.
@@ -83,6 +90,10 @@ Design constraints:
   than a touching border. History rows and confirm rows must use the same fixed
   height to avoid layout shift, row hover backgrounds must have vertical spacing
   between them, and raw run IDs should not be shown in the UI.
+- Debug Panel and run-log FloatingPanel copy must come from the package
+  `workbench` Product Locale namespace, including the run trigger tooltip,
+  panel title/description/close label, input/run sub-view labels, memory status,
+  and Workflow/Chat segmented control labels.
 - The node inspector owns node identity editing in the panel header and
   description area, then separates node settings from selected-node run history
   with tabs. History uses compact Product Locale date + duration rows and
@@ -104,9 +115,12 @@ Design constraints:
   and keep row metadata editing adjacent to row deletion inside the popover.
 - Host apps can pass `initialWorkflowId` to select a workflow from external
   state such as a URL, and `onWorkflowIdChange` to mirror internal workbench
-  switches back to that external state. The header brand mark links to
-  `homeHref` (default `/`) so hosts can return users to their product home while
-  keeping routing dependencies in host apps, not inside this package.
+  switches back to that external state. The compact header left-arrow back
+  button links to `homeHref` (default `/`) so hosts can return users to their
+  product home while keeping routing dependencies in host apps, not inside this
+  package. After the initial workflow load completes, the browser document title
+  follows the active workflow metadata name and updates again after workflow
+  switches or metadata-editor saves.
 - Edge selection is local UI state; edge deletion persists back to the workflow
   graph.
 - DeepSeek is the normal model-settings fallback. OpenAI and Anthropic are
@@ -146,9 +160,12 @@ Design constraints:
   Ollama workflow defaults and LLM/Agent overrides with the public DeepSeek
   fallback before calling the server. It sends user text as the `query` run
   field and derives assistant replies from the reached End node or the last LLM
-  node. Start fields are gated once per conversation; "New conversation" resets
-  transcript and memory thread for the active workflow. Summary-buffer settings
-  live in workflow settings and are edited from the Chat Panel.
+  node. The Chat Panel composer keeps a visible reminder that `query` is exposed
+  to workflow nodes as `{{userInput.query}}`, so prompt authors know to reference
+  it when the model should see the chat message. Start fields are gated once per
+  conversation; "New conversation" resets transcript and memory thread for the
+  active workflow. Summary-buffer settings live in workflow settings and are
+  edited from the Chat Panel.
 - Human Input nodes pause runs with a normalized interrupt. `resumeRun` keeps
   completed node state visible, posts the selected action/text, and subscribes
   to a fresh SSE leg on the same run.
@@ -164,9 +181,12 @@ Design constraints:
   destructive action. Created and duplicated workflows do not store a locale.
 - Variable-bearing fields use `VariableRichTextEditor`, backed by Lexical. The
   canonical stored value remains the plain template string with
-  `{{nodeId.path}}` placeholders; chips are editor presentation only. The `/`
-  insertion menu anchors to Lexical's typeahead rect through Floating UI so it
-  can flip and clamp its scrollable height to the available viewport space.
+  `{{nodeId.path}}` placeholders; chips are editor presentation only. When the
+  editor is embedded inside another bordered card, that outer container owns the
+  shared brand focus border and halo while the editor itself stays borderless.
+  The `/` insertion menu anchors to Lexical's typeahead rect through Floating UI
+  so it can flip and clamp its scrollable height to the available viewport
+  space.
 - Tool nodes are descriptor-driven. The palette drills into `ToolBrowser`, the
   inspector can rebind a tool, and `ToolParamForm` renders controls from
   workflow-domain param specs. Built-in descriptor display copy is localized in

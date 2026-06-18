@@ -18,6 +18,8 @@ describe("ChatPanel", () => {
       />,
     );
 
+    expect(screen.getByTitle("User Input / query")).toBeInTheDocument();
+
     const composer = screen.getByPlaceholderText("输入消息，Enter 发送，Shift+Enter 换行");
     fireEvent.change(composer, { target: { value: "拼音中" } });
     fireEvent.keyDown(composer, { key: "Enter", code: "Enter", isComposing: true });

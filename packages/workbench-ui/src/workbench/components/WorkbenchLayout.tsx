@@ -294,17 +294,17 @@ export function WorkbenchLayout({
               size="iconMd"
               className="text-foreground shadow-lg shadow-black/10"
               onClick={onTogglePalette}
-              aria-label="Open node palette"
-              title="Node palette"
+              aria-label={t("nodePalette.open")}
+              title={t("nodePalette.title")}
             >
               <Plus size={18} aria-hidden />
             </Button>
           )}
         >
           <FloatingPanel
-            title="Node Palette"
-            description="Add nodes to the workflow canvas."
-            closeLabel="Close node palette"
+            title={t("nodePalette.title")}
+            description={t("nodePalette.description")}
+            closeLabel={t("nodePalette.close")}
             onClose={onClosePalette}
             className="h-[min(70vh,560px)] w-[300px]"
           >
@@ -338,8 +338,8 @@ export function WorkbenchLayout({
                 size="icon"
                 disabled={!hasStartNode}
                 onClick={onToggleRunPanel}
-                aria-label="Run workflow"
-                title={hasStartNode ? "Run workflow" : "Add a Start node first"}
+                aria-label={t("debugPanel.runWorkflow")}
+                title={hasStartNode ? t("debugPanel.runWorkflow") : t("debugPanel.addStartNodeFirst")}
               >
                 {debugState.status === "running" ? (
                   <Loader2 size={16} className="animate-spin" aria-hidden />
@@ -350,9 +350,9 @@ export function WorkbenchLayout({
             )}
           >
             <FloatingPanel
-              title="Run Log"
-              description="Workflow run"
-              closeLabel="Close run log"
+              title={t("debugPanel.runLogTitle")}
+              description={t("debugPanel.runLogDescription")}
+              closeLabel={t("debugPanel.closeRunLog")}
               onClose={onCloseDebug}
               className="h-full w-[560px]"
             >

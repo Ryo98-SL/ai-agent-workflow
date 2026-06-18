@@ -1,6 +1,7 @@
 export { AppWorkbench } from "./workbench/AppWorkbench";
 export type { AppWorkbenchProps, DebugState, WorkbenchStatus, WorkbenchWorkflowApi } from "./workbench/types";
 export { AuthMenu } from "./auth/AuthMenu";
+export { ImportLocalDataPrompt } from "./auth/ImportLocalDataPrompt";
 export {
   WorkbenchDataProvider,
   useWorkbenchData,

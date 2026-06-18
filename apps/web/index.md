@@ -15,7 +15,8 @@ workflow workbench.
   `/workbench` and syncs the active `workflowId` search parameter.
 - `src/homepage/` contains the theme-aware Studio/Knowledge homepage shell,
   workflow and Knowledge Base cards with card action menus, compact workflow and
-  Knowledge Base search, Product Locale switcher, and create entry points.
+  Knowledge Base search, Product Locale switcher, local-workflow import prompt,
+  and create entry points.
 - `src/i18n/` contains the app-owned `web` namespace resources for homepage
   Product Locale copy.
 - `src/pages/design/` and `src/design/` contain local design-gallery routes for

@@ -24,6 +24,7 @@ import { deriveChatAnswer } from "../hooks/useWorkflowExecution";
 import { Button } from "./Button";
 import { HumanReviewForm } from "./HumanReviewForm";
 import { RunOutput } from "./RunOutput";
+import { VariableTag } from "./VariableTag";
 
 type ChatPanelProps = {
   workflow: WorkflowFile;
@@ -269,6 +270,13 @@ export function ChatPanel({
       {/* Composer */}
       {!readOnly && started && (
         <div className="border-t border-border p-3">
+          <div className="mb-2 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-200">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden />
+            <p className="min-w-0">
+              输入框消息会作为 <VariableTag reference="{{userInput.query}}" className="mx-0.5" />{" "}
+              传入工作流。请在需要看见用户消息的 LLM / Agent 节点提示词中引用它。
+            </p>
+          </div>
           <div className="flex items-end gap-2">
             <Textarea
               value={draft}

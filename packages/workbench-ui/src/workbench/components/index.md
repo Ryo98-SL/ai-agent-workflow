@@ -20,11 +20,15 @@ Focused React components for the server-backed workbench shell.
   and chat/image capability metadata.
 - `modelProviderVisuals.tsx` maps provider names to bundled logo assets and
   normalizes their mixed source dimensions in the model UI.
+- `fieldStyles.ts` centralizes shared field focus treatments for bordered
+  shells that contain transparent inputs or embedded editors.
 - `WorkbenchLayout.tsx` owns the canvas-first shell and panel placement.
-- `WorkbenchHomeLink.tsx` renders the compact `AIW` header mark that links back
-  to the host-provided home route.
+- `WorkbenchHomeLink.tsx` renders the compact left-arrow back button that links
+  back to the host-provided home route and matches the workflow switcher icon
+  footprint.
 - `ChatPanel.tsx` owns Chat Mode transcript, once-per-conversation Start input
-  gate, memory summary controls, and in-chat Human Input resume forms.
+  gate, the `{{userInput.query}}` composer reminder, memory summary controls,
+  and in-chat Human Input resume forms.
 - `NewWorkflowDialog.tsx` renders the starter-template picker from
   workflow-domain `getWorkflowTemplates(locale)` and uses Product Locale as
   Template Locale for newly created workflow defaults.
@@ -32,8 +36,9 @@ Focused React components for the server-backed workbench shell.
   see `knowledge/index.md`.
 - `tools/` owns the Tool Browser and descriptor-driven Tool param form; see
   `tools/index.md`.
-- `richtext/` owns variable-chip editing for prompt-like fields; see
-  `richtext/index.md`.
+- `richtext/` owns variable-chip editing for prompt-like fields, including the
+  shared focus treatment for editor-owned borders and borderless embedded
+  editor containers; see `richtext/index.md`.
 - `RunHistoryMenu.tsx` owns the header run-history drawer. It uses a backdrop
   to prevent accidental canvas interaction, portals the drawer to `document.body`
   so canvas stacking contexts cannot cover it, renders an inset rounded panel
@@ -41,10 +46,13 @@ Focused React components for the server-backed workbench shell.
   larger left pane, and keeps the date-first run list plus same-height delete
   confirmation in the right pane.
 - `Popover.tsx` and `FloatingPanel.tsx` provide the shared body-level floating
-  surfaces. `Popover` supports `matchReferenceWidth` and `fillAvailableHeight`
-  (the latter uses the floating-ui `size` middleware to stretch the panel from
-  the trigger down to the viewport edge, recomputed on every reposition).
-- `InlineNodePalettePopover.tsx` anchors node creation to a ReactFlow handle.
+  surfaces. `Popover` always constrains floating content to the available
+  viewport width/height through Floating UI `size`, supports
+  `matchReferenceWidth`, and supports `fillAvailableHeight` for panels that
+  should stretch from the trigger down to the viewport edge.
+- `InlineNodePalettePopover.tsx` anchors node creation to a ReactFlow handle and
+  localizes the inline floating-panel title, close label, and connection
+  description through the `workbench` Product Locale namespace.
 - `ModelSettingsPanel.tsx` is the unified provider/model/endpoint/Advanced
   settings surface used by both workflow defaults and LLM node overrides. Its
   labels, selector chrome, custom-model flow, provider-key popover, and credits
@@ -72,8 +80,10 @@ Focused React components for the server-backed workbench shell.
   visible run output and Chat Mode transcript instead of leaking the previous
   workflow's debug details. Chat composer Enter submission respects IME
   composition so Chinese/Japanese/Korean candidate confirmation does not send the
-  draft. In read-only mode it hides the Start input/run controls and delegates
-  historical output rendering to `RunOutput.tsx`.
+  draft. Labels, actions, memory status, and Workflow/Chat mode tabs come from
+  the package `workbench` Product Locale namespace. In read-only mode it hides
+  the Start input/run controls and delegates historical output rendering to
+  `RunOutput.tsx`.
 - `RunOutput.tsx`, `RunNodeCard.tsx`, and `RunOutputPrimitives.tsx` render the
   shared latest-run surface: a persistent run-status header, filtered or full
   per-node cards, live LLM text, token counts, errors, and collapsible Input /
@@ -95,7 +105,9 @@ Focused React components for the server-backed workbench shell.
   Inspector chrome, node form copy, and output variable headings read from the
   package `workbench` Product Locale namespace.
 - `NodePalette.tsx` lists creatable schema nodes, prevents duplicate Start, and
-  drills into `ToolBrowser` before adding a Tool node.
+  drills into `ToolBrowser` before adding a Tool node. The surrounding palette
+  panel chrome in `WorkbenchLayout.tsx` uses the same `workbench` Product Locale
+  keys as the inline palette.
 - `ModelSelectorField.tsx` renders the provider/model picker. Each provider group
   header is collapsible (session-only, not persisted) and hosts a
   `ProviderApiKeyControl` for that provider.

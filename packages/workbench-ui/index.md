@@ -9,15 +9,16 @@ workflow IO stays behind the injected API.
 
 - `src/index.ts` exports the public workbench component, shared `Popover`,
   `Button`, dialog primitives, `WorkflowMetaEditor`, public data/account hooks,
-  Knowledge Base hooks, provider-key store hook, auth client type, and
-  workbench API types.
+  Knowledge Base hooks, provider-key store hook, auth menu/import prompt, auth
+  client type, and workbench API types.
 - `src/styles.css` provides Tailwind plus the shadcn CSS-variable theme tokens
   (zinc base, light + dark) and token-based base document styles.
 - `src/components/ui/` holds the shadcn/ui primitives (new-york style); see its
   `index.md`. `components.json` configures the shadcn CLI for this package.
 - `src/lib/utils.ts` exposes the `cn` class-merge helper. The `@workbench/*`
   alias maps to `src/*` (wired in tsconfig, vitest, and the consuming Vite apps).
-- `src/auth/` contains Better Auth UI and the anonymous-local-data import prompt.
+- `src/auth/` contains Better Auth UI and the anonymous-local-data import prompt;
+  see its `index.md`.
 - `src/theme/` contains theme provider/menu state.
 - `src/i18n/` contains the package-owned `workbench` namespace resources for
   Product Locale copy.

@@ -10,7 +10,8 @@ Reusable workbench state, layout, and canvas runtime.
   selection, initial load gating, content-snapshot dirty state, New Workflow
   template loading, Chat Mode dispatch, provider-key preparation, run request
   workflow snapshots, workflow-scoped Debug Session selection, active workflow id
-  sync callbacks, and floating panel visibility.
+  sync callbacks, browser document title synchronization, and floating panel
+  visibility.
 - `types.ts` defines workbench UI state and the injected workflow API contract.
 - `dateFormat.ts` owns shared Product Locale-aware date formatting for
   user-visible workbench timestamps.
@@ -75,7 +76,10 @@ Lexical chips but store the canonical template string.
 
 Host applications may pass `initialWorkflowId` and `onWorkflowIdChange` to keep
 their own URL or navigation state aligned with the workbench's active workflow.
-They may also pass `homeHref` for the header `AIW` mark, which defaults to `/`.
+They may also pass `homeHref` for the header back button, which defaults to `/`.
+After the active workflow has loaded, `AppWorkbench` keeps `document.title`
+aligned with `workflow.metadata.name`, including workflow switches and metadata
+editor saves.
 Template creation uses Product Locale as Template Locale for new workflow
 defaults only; after creation, workflow names, node labels, prompts, and field
 defaults are ordinary User-authored Content.
