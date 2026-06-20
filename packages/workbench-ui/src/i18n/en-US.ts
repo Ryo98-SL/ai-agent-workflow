@@ -444,6 +444,8 @@ export const workbenchEnUs = {
       embeddingProvider: "Embedding Provider",
       embeddingModel: "Embedding Model",
       platformManaged: "Platform-managed",
+      embeddingLoading: "Loading…",
+      embeddingUnconfigured: "No embedding model configured on the server — indexing and retrieval are unavailable.",
       chunkSize: "Chunk Size",
       chunkOverlap: "Chunk Overlap",
       topK: "Top K",

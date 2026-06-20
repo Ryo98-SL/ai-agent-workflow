@@ -8,6 +8,7 @@ import type {
   ResumeRunRequest,
   CreditStatusResponse,
   CreditProvidersResponse,
+  EmbeddingInfoResponse,
   CustomModelDto,
   KnowledgeBaseDto,
   KnowledgeDocumentDto,
@@ -162,6 +163,7 @@ export type WorkbenchWorkflowApi = {
   getCredits: () => Promise<CreditStatusResponse>;
   applyCredits: () => Promise<CreditStatusResponse>;
   getCreditProviders: () => Promise<CreditProvidersResponse>;
+  getEmbeddingInfo: () => Promise<EmbeddingInfoResponse>;
 };
 
 export type AppWorkbenchProps = {

@@ -36,6 +36,7 @@ export const API_ROUTE_TEMPLATES = {
   credits: "/api/credits",
   creditsApply: "/api/credits/apply",
   creditProviders: "/api/credit-providers",
+  embeddingInfo: "/api/embedding-info",
 } as const;
 
 const encodePathSegment = (value: string) => encodeURIComponent(value);
@@ -65,6 +66,7 @@ export const apiPaths = {
   credits: () => API_ROUTE_TEMPLATES.credits,
   creditsApply: () => API_ROUTE_TEMPLATES.creditsApply,
   creditProviders: () => API_ROUTE_TEMPLATES.creditProviders,
+  embeddingInfo: () => API_ROUTE_TEMPLATES.embeddingInfo,
 } as const;
 
 export const ApiIssueSchema = z.object({
@@ -667,6 +669,19 @@ export const CreditProvidersResponseSchema = z.object({
   providers: z.array(z.string()),
 });
 
+// The platform embedding provider/model the server is configured to use for KB
+// indexing/retrieval (from `EMBEDDING_*` env). Public, non-sensitive config the UI
+// reads to show the active embedding model instead of hardcoding it; `embedding` is
+// null when no platform embedding key is configured (KB indexing/retrieval is off).
+export const EmbeddingInfoResponseSchema = z.object({
+  embedding: z
+    .object({
+      provider: z.string(),
+      model: z.string(),
+    })
+    .nullable(),
+});
+
 export type ProviderKeyDto = z.infer<typeof ProviderKeyDtoSchema>;
 export type ListProviderKeysResponse = z.infer<typeof ListProviderKeysResponseSchema>;
 export type CreateProviderKeyRequest = z.input<typeof CreateProviderKeyRequestSchema>;
@@ -674,6 +689,7 @@ export type CreateProviderKeyResponse = z.infer<typeof CreateProviderKeyResponse
 export type CreditStatusDto = z.infer<typeof CreditStatusDtoSchema>;
 export type CreditStatusResponse = z.infer<typeof CreditStatusResponseSchema>;
 export type CreditProvidersResponse = z.infer<typeof CreditProvidersResponseSchema>;
+export type EmbeddingInfoResponse = z.infer<typeof EmbeddingInfoResponseSchema>;
 export type CustomModelDto = z.infer<typeof CustomModelDtoSchema>;
 export type ListCustomModelsResponse = z.infer<typeof ListCustomModelsResponseSchema>;
 export type CreateCustomModelRequest = z.input<typeof CreateCustomModelRequestSchema>;

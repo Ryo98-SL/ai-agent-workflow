@@ -8,6 +8,7 @@ export const accountQueryKeys = {
   customModels: ["custom-models"] as const,
   credits: ["credits"] as const,
   creditProviders: ["credit-providers"] as const,
+  embeddingInfo: ["embedding-info"] as const,
   workflowRuns: (workflowId: string) => ["workflow-runs", workflowId] as const,
 };
 
@@ -105,6 +106,20 @@ export function useCreditProviders() {
   return useQuery({
     queryKey: accountQueryKeys.creditProviders,
     queryFn: () => workflowApi.getCreditProviders(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * The platform embedding provider/model the server runs (from `EMBEDDING_*` env), or
+ * `embedding: null` when unconfigured. Public, non-sensitive; cached long since it only
+ * changes on deploy. The KB UI uses it to show the active embedding model.
+ */
+export function useEmbeddingInfo() {
+  const { workflowApi } = useWorkbenchData();
+  return useQuery({
+    queryKey: accountQueryKeys.embeddingInfo,
+    queryFn: () => workflowApi.getEmbeddingInfo(),
     staleTime: 5 * 60 * 1000,
   });
 }

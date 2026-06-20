@@ -19,6 +19,7 @@ import {
   CreateMcpServerResponseSchema,
   CreditStatusResponseSchema,
   CreditProvidersResponseSchema,
+  EmbeddingInfoResponseSchema,
   ListMcpServersResponseSchema,
   ReindexKnowledgeDocumentResponseSchema,
   RefreshMcpServerResponseSchema,
@@ -57,6 +58,7 @@ import {
   type CreateMcpServerResponse,
   type CreditStatusResponse,
   type CreditProvidersResponse,
+  type EmbeddingInfoResponse,
   type ListMcpServersResponse,
   type ReindexKnowledgeDocumentResponse,
   type RefreshMcpServerResponse,
@@ -143,6 +145,7 @@ export type WorkflowClient = {
   getCredits: () => Promise<CreditStatusResponse>;
   applyCredits: () => Promise<CreditStatusResponse>;
   getCreditProviders: () => Promise<CreditProvidersResponse>;
+  getEmbeddingInfo: () => Promise<EmbeddingInfoResponse>;
 };
 
 type RequestOptions<TResponse> = {
@@ -448,6 +451,11 @@ export function createWorkflowClient(options: WorkflowClientOptions): WorkflowCl
       request({
         path: apiPaths.creditProviders(),
         responseSchema: CreditProvidersResponseSchema,
+      }),
+    getEmbeddingInfo: () =>
+      request({
+        path: apiPaths.embeddingInfo(),
+        responseSchema: EmbeddingInfoResponseSchema,
       }),
   };
 }

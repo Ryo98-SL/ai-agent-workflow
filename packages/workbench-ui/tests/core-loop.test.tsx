@@ -1000,6 +1000,7 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
     getCredits: vi.fn(async () => ({ status: "none" as const })),
     applyCredits: vi.fn(async () => ({ status: "approved" as const, grantedTokens: 100_000, balanceTokens: 100_000 })),
     getCreditProviders: vi.fn(async () => ({ providers: ["deepseek"] })),
+    getEmbeddingInfo: vi.fn(async () => ({ embedding: { provider: "openai", model: "text-embedding-3-small" } })),
   };
 
   return { api, workflows, calls };

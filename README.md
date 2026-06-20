@@ -89,7 +89,21 @@ KBs and add pasted text or `.txt`/`.md` files.
   Postgres) for stored chunk embeddings.
 - **Embedding env** (`apps/server`): `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`,
   `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY` (falls back to `CREDITS_OPENAI_API_KEY`),
-  and `KNOWLEDGE_INDEXER_CONCURRENCY`. See `apps/server/.env.example`.
+  and `KNOWLEDGE_INDEXER_CONCURRENCY`. See `apps/server/.env.example`. Any
+  OpenAI-compatible `/embeddings` endpoint works (model name passed through, no
+  `dimensions` param sent — the model's default dimension is used). `EMBEDDING_BASE_URL`
+  must be reachable **from the server's own runtime**: a local `127.0.0.1:11434` Ollama
+  is fine for `pnpm dev` but not on a hosted deploy (e.g. Railway) — there, point it at a
+  hosted endpoint (OpenAI, SiliconFlow, DashScope, …). With no key configured,
+  `getPlatformEmbeddingConfig()` returns null, no embedding adapter is built, and Knowledge
+  nodes fail at runtime with "Embedding adapter is not configured for Knowledge retrieval."
+- **Active embedding surfaced to the UI**: `GET /api/embedding-info` (public,
+  non-sensitive) reports the configured `{ provider, model }` (or `null` when unset).
+  The KB create dialog reads it to show the real embedding model instead of a hardcoded
+  one, including an explicit "not configured" state. Creating a KB **stamps** that
+  provider/model into the KB's persisted `settings.embedding` so its metadata records the
+  model it was indexed with; this is applied only on create — read views keep each KB's
+  own recorded value even if the server env later changes.
 - **MVP limits**: 20 documents per KB, 100k characters per document, and 500k
   characters total per account.
 - **Deferred**: PDF/DOCX/webpage ingestion, keyword/hybrid retrieval, reranking,

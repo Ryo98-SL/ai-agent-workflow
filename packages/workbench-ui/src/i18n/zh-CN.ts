@@ -444,6 +444,8 @@ export const workbenchZhCn = {
       embeddingProvider: "Embedding 提供商",
       embeddingModel: "Embedding 模型",
       platformManaged: "平台托管",
+      embeddingLoading: "加载中…",
+      embeddingUnconfigured: "服务端未配置 embedding 模型，知识库索引与检索不可用。",
       chunkSize: "分块大小",
       chunkOverlap: "分块重叠",
       topK: "Top K",

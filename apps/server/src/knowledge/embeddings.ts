@@ -49,6 +49,19 @@ export function createPlatformEmbeddingAdapter(
   };
 }
 
+/**
+ * The platform embedding as persisted KB-settings (the provider/model the server
+ * actually indexes with, from `EMBEDDING_*` env), or null when no platform embedding is
+ * configured. Stamped onto a KB at creation so its metadata records the model it was
+ * indexed with — independent of any later env change. Not applied on read, so existing
+ * KBs keep showing their own persisted embedding.
+ */
+export function getPlatformEmbeddingSettings(
+  config: PlatformEmbeddingConfig | null = getPlatformEmbeddingConfig(),
+): { mode: "platform"; provider: string; model: string } | null {
+  return config ? { mode: "platform", provider: config.provider, model: config.model } : null;
+}
+
 function deterministicEmbedding(text: string, dimensions: number): number[] {
   const vector = Array.from({ length: dimensions }, () => 0);
   for (let index = 0; index < text.length; index += 1) {

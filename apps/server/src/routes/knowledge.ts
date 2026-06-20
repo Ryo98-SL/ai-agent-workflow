@@ -5,6 +5,7 @@ import {
   CreateKnowledgeBaseResponseSchema,
   CreateKnowledgeDocumentResponseSchema,
   CreateTextKnowledgeDocumentRequestSchema,
+  EmbeddingInfoResponseSchema,
   GetKnowledgeBaseResponseSchema,
   ListKnowledgeBasesResponseSchema,
   ListKnowledgeDocumentsResponseSchema,
@@ -18,6 +19,7 @@ import {
 import { Hono, type Context } from "hono";
 import type { z } from "zod";
 import { logger } from "../logger";
+import { getPlatformEmbeddingConfig } from "../config";
 import { type KnowledgeIndexingRunner } from "../knowledge/indexer";
 import { KnowledgeRepositoryError, type KnowledgeRepository } from "../knowledge/repository";
 
@@ -87,6 +89,18 @@ export function createKnowledgeRoutes({ repository, resolveUserId, indexer }: Kn
     logger.error("knowledge.example_seed_failed", {
       message: error instanceof Error ? error.message : "seed failed",
     });
+  });
+
+  // Public, non-sensitive: the active platform embedding provider/model (from
+  // `EMBEDDING_*` env), or null when no key is configured. The KB UI reads this to
+  // show the real embedding model instead of a hardcoded one.
+  app.get(apiPaths.embeddingInfo(), (c) => {
+    const config = getPlatformEmbeddingConfig();
+    return c.json(
+      responseFromSchema(EmbeddingInfoResponseSchema, {
+        embedding: config ? { provider: config.provider, model: config.model } : null,
+      }),
+    );
   });
 
   app.get(apiPaths.knowledgeBases(), async (c) => {

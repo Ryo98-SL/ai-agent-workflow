@@ -19,6 +19,7 @@ import {
 } from "./constants";
 import { EXAMPLE_KNOWLEDGE_BASE, EXAMPLE_KNOWLEDGE_DOCUMENTS } from "./example";
 import { normalizeKnowledgeText, parserForMimeType } from "./chunking";
+import { getPlatformEmbeddingSettings } from "./embeddings";
 
 export class KnowledgeRepositoryError extends Error {
   constructor(
@@ -137,6 +138,17 @@ function mergeSettings(settings?: KnowledgeBaseSettings): KnowledgeBaseSettings 
   };
 }
 
+/**
+ * Overlays the active platform embedding (from `EMBEDDING_*` env) onto settings at
+ * creation, so a new KB persists the provider/model it is actually indexed with. A no-op
+ * when no platform embedding is configured. Applied only on create — never on read — so
+ * existing KBs keep their own recorded embedding even if the server env later changes.
+ */
+function stampPlatformEmbedding(settings: KnowledgeBaseSettings): KnowledgeBaseSettings {
+  const platform = getPlatformEmbeddingSettings();
+  return platform ? { ...settings, embedding: { ...settings.embedding, ...platform } } : settings;
+}
+
 function toBaseDto(row: KnowledgeBaseRow): KnowledgeBaseDto {
   const documentCount = row.documents?.length ?? 0;
   const characterCount = row.documents?.reduce((sum, document) => sum + document.characterCount, 0) ?? 0;
@@ -216,7 +228,7 @@ export function createPrismaKnowledgeRepository(): KnowledgeRepository {
           name: EXAMPLE_KNOWLEDGE_BASE.name,
           description: EXAMPLE_KNOWLEDGE_BASE.description,
           visibility: "example",
-          settings: DEFAULT_KNOWLEDGE_BASE_SETTINGS,
+          settings: stampPlatformEmbedding(DEFAULT_KNOWLEDGE_BASE_SETTINGS),
           documents: {
             create: EXAMPLE_KNOWLEDGE_DOCUMENTS.map((document) => ({
               id: document.id,
@@ -259,7 +271,7 @@ export function createPrismaKnowledgeRepository(): KnowledgeRepository {
           name: request.name,
           description: request.description,
           visibility: "private",
-          settings: mergeSettings(request.settings as KnowledgeBaseSettings | undefined),
+          settings: stampPlatformEmbedding(mergeSettings(request.settings as KnowledgeBaseSettings | undefined)),
         },
         include: { documents: { select: { characterCount: true } } },
       });

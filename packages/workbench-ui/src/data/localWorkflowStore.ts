@@ -214,5 +214,6 @@ export function createLocalWorkflowApi(serverApi: WorkbenchWorkflowApi): Workben
     getCredits: () => serverApi.getCredits(),
     applyCredits: () => serverApi.applyCredits(),
     getCreditProviders: () => serverApi.getCreditProviders(),
+    getEmbeddingInfo: () => serverApi.getEmbeddingInfo(),
   };
 }
