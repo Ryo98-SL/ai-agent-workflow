@@ -71,6 +71,39 @@ export function getCreditsProvider(provider: string): CreditsProvider | null {
   return { apiKey, baseURL };
 }
 
+/**
+ * Default platform-wide ceiling on AI-credits output tokens per UTC day, summed
+ * across all users. Overridable with the `DAILY_OUTPUT_TOKEN_LIMIT` env var.
+ */
+export const DEFAULT_DAILY_OUTPUT_TOKEN_LIMIT = 1_000_000;
+
+/**
+ * The configured daily output-token ceiling for AI-credits runs. Falls back to
+ * the default when `DAILY_OUTPUT_TOKEN_LIMIT` is unset, non-numeric, or not a
+ * positive integer.
+ */
+export function getDailyOutputTokenLimit(): number {
+  const raw = process.env.DAILY_OUTPUT_TOKEN_LIMIT?.trim();
+  if (!raw) {
+    return DEFAULT_DAILY_OUTPUT_TOKEN_LIMIT;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
+    return DEFAULT_DAILY_OUTPUT_TOKEN_LIMIT;
+  }
+  return parsed;
+}
+
+/**
+ * Providers the platform can fund with AI credits: those that have a
+ * `CREDITS_<PROVIDER>_API_KEY` configured. The candidate set is the providers we
+ * know an official endpoint for; the UI uses this to only offer "AI Credits" for
+ * providers the server can actually back.
+ */
+export function listConfiguredCreditProviders(): string[] {
+  return Object.keys(CREDITS_DEFAULT_BASE_URLS).filter((provider) => getCreditsProvider(provider) != null);
+}
+
 export function getPlatformEmbeddingConfig(): PlatformEmbeddingConfig | null {
   const apiKey = process.env.EMBEDDING_API_KEY?.trim() || process.env.CREDITS_OPENAI_API_KEY?.trim();
   if (!apiKey) {

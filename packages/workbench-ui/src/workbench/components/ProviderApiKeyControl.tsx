@@ -1,6 +1,6 @@
 import type { ProviderKeyPreference, UsagePriority } from "@ai-agent-workflow/workflow-domain";
 import { Check, ChevronDown, Coins, KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useProductLocale, useTranslation } from "@ai-agent-workflow/i18n";
 import { cn } from "@workbench/lib/utils";
 import { Input } from "@workbench/components/ui/input";
@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@workbench/components/ui/dialog";
-import { useApplyCredits, useCredits } from "../../data/useAccount";
+import { useApplyCredits, useCreditProviders, useCredits } from "../../data/useAccount";
 import { useProviderKeyStore } from "../../data/useProviderKeyStore";
 import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import { Button } from "./Button";
@@ -34,12 +34,25 @@ export function ProviderApiKeyControl({ provider, preference, onPreferenceChange
   const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const store = useProviderKeyStore();
   const keys = store.keysForProvider(provider);
+  const { data: creditProviders } = useCreditProviders();
   const [open, setOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const usagePriority: UsagePriority = preference?.usagePriority ?? "credits";
+  // AI Credits are only offered for providers the platform actually funds. For
+  // every other provider the only path is the user's own API key.
+  const creditsAvailable = creditProviders?.providers.includes(provider) ?? false;
+  const savedUsagePriority: UsagePriority = preference?.usagePriority ?? "credits";
+  const usagePriority: UsagePriority = creditsAvailable ? savedUsagePriority : "apiKey";
   const selectedKey = keys.find((key) => key.id === preference?.providerKeyId);
   const usingApiKey = usagePriority === "apiKey";
+
+  // Self-heal a stale "credits" preference once we know the provider has no
+  // platform funding, so runs don't try the credits path and fail server-side.
+  useEffect(() => {
+    if (!creditsAvailable && savedUsagePriority !== "apiKey") {
+      onPreferenceChange({ providerKeyId: preference?.providerKeyId, usagePriority: "apiKey" });
+    }
+  }, [creditsAvailable, savedUsagePriority, preference?.providerKeyId, onPreferenceChange]);
 
   const setUsagePriority = (next: UsagePriority) => {
     onPreferenceChange({ providerKeyId: preference?.providerKeyId, usagePriority: next });
@@ -98,20 +111,24 @@ export function ProviderApiKeyControl({ provider, preference, onPreferenceChange
         )}
       >
         <div className="w-64 overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl shadow-black/20">
-          <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-            <span className="text-xs font-semibold text-muted-foreground">{t("providerKeys.usagePriority")}</span>
-            <div className="flex rounded-md border border-border p-0.5">
-              <UsagePriorityTab active={!usingApiKey} onClick={() => setUsagePriority("credits")}>
-                {t("providerKeys.aiCredits")}
-              </UsagePriorityTab>
-              <UsagePriorityTab active={usingApiKey} onClick={() => setUsagePriority("apiKey")}>
-                {t("providerKeys.apiKey")}
-              </UsagePriorityTab>
+          {creditsAvailable && (
+            <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+              <span className="text-xs font-semibold text-muted-foreground">{t("providerKeys.usagePriority")}</span>
+              <div className="flex rounded-md border border-border p-0.5">
+                <UsagePriorityTab active={!usingApiKey} onClick={() => setUsagePriority("credits")}>
+                  {t("providerKeys.aiCredits")}
+                </UsagePriorityTab>
+                <UsagePriorityTab active={usingApiKey} onClick={() => setUsagePriority("apiKey")}>
+                  {t("providerKeys.apiKey")}
+                </UsagePriorityTab>
+              </div>
             </div>
-          </div>
+          )}
 
           {usingApiKey ? (
-            <p className="px-3 pt-2 text-[11px] text-muted-foreground">{t("providerKeys.apiKeyHint")}</p>
+            <p className="px-3 pt-2 text-[11px] text-muted-foreground">
+              {creditsAvailable ? t("providerKeys.apiKeyHint") : t("providerKeys.creditsUnavailable")}
+            </p>
           ) : (
             <CreditsPanel isAnon={store.isAnon} />
           )}

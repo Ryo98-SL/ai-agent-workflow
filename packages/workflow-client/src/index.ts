@@ -18,6 +18,7 @@ import {
   CreateProviderKeyResponseSchema,
   CreateMcpServerResponseSchema,
   CreditStatusResponseSchema,
+  CreditProvidersResponseSchema,
   ListMcpServersResponseSchema,
   ReindexKnowledgeDocumentResponseSchema,
   RefreshMcpServerResponseSchema,
@@ -55,6 +56,7 @@ import {
   type CreateMcpServerRequest,
   type CreateMcpServerResponse,
   type CreditStatusResponse,
+  type CreditProvidersResponse,
   type ListMcpServersResponse,
   type ReindexKnowledgeDocumentResponse,
   type RefreshMcpServerResponse,
@@ -140,6 +142,7 @@ export type WorkflowClient = {
   deleteCustomModel: (id: string) => Promise<void>;
   getCredits: () => Promise<CreditStatusResponse>;
   applyCredits: () => Promise<CreditStatusResponse>;
+  getCreditProviders: () => Promise<CreditProvidersResponse>;
 };
 
 type RequestOptions<TResponse> = {
@@ -440,6 +443,11 @@ export function createWorkflowClient(options: WorkflowClientOptions): WorkflowCl
         method: "POST",
         path: apiPaths.creditsApply(),
         responseSchema: CreditStatusResponseSchema,
+      }),
+    getCreditProviders: () =>
+      request({
+        path: apiPaths.creditProviders(),
+        responseSchema: CreditProvidersResponseSchema,
       }),
   };
 }

@@ -213,5 +213,6 @@ export function createLocalWorkflowApi(serverApi: WorkbenchWorkflowApi): Workben
     deleteCustomModel: (id) => serverApi.deleteCustomModel(id),
     getCredits: () => serverApi.getCredits(),
     applyCredits: () => serverApi.applyCredits(),
+    getCreditProviders: () => serverApi.getCreditProviders(),
   };
 }

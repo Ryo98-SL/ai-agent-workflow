@@ -99,6 +99,7 @@ export const workbenchZhCn = {
     aiCredits: "AI credits",
     usagePriority: "使用优先级",
     apiKeyHint: "运行会使用下面选中的 API key。",
+    creditsUnavailable: "该模型提供方暂未开放 AI credits，请在下方添加你自己的 API key。",
     loading: "正在加载...",
     noKeys: "这个提供商还没有 key。",
     sessionOnly: "Key 只保留在当前会话中。登录后可以保存。",

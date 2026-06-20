@@ -100,6 +100,27 @@ KBs and add pasted text or `.txt`/`.md` files.
   single click. Use the shared inline confirmation pattern (confirm + cancel),
   matching `WorkflowSwitcher`/`RunHistoryMenu`.
 
+## AI Credits
+
+Platform-funded "AI credits" let users run paid providers without their own API
+key. Credentials are deployment secrets, one per provider, read from env as
+`CREDITS_<PROVIDER>_API_KEY` (base URL forced to the official endpoint, optionally
+overridden with `CREDITS_<PROVIDER>_BASE_URL`). The MVP funds **DeepSeek only**.
+
+- **Per-user grant**: a single auto-approved grant of 100k tokens (input +
+  output), metered down per credits run.
+- **Platform-wide daily cap**: across *all* users, AI-credits runs may produce at
+  most **1,000,000 output tokens per UTC day** by default — overridable with the
+  optional `DAILY_OUTPUT_TOKEN_LIMIT` env var — tracked in `platform_daily_usage`.
+  New credits runs are refused with
+  `daily_limit_exceeded` once spent, and an in-flight run is stopped if it crosses
+  the ceiling. Runs on a user's own API key are **not** counted. The cap resets at
+  UTC midnight; users can switch to an API key to keep working.
+- **Provider availability**: `GET /api/credit-providers` (public, non-sensitive)
+  reports which providers have a platform key configured. The model selector only
+  offers the "AI Credits" option for those providers; every other provider shows
+  API-key-only.
+
 ## Known Limits
 
 - Production graph execution beyond the supported Start, Knowledge, LLM, Tool,

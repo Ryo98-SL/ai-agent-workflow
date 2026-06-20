@@ -35,6 +35,7 @@ export const API_ROUTE_TEMPLATES = {
   mcpServerRefresh: "/api/mcp-servers/:id/refresh",
   credits: "/api/credits",
   creditsApply: "/api/credits/apply",
+  creditProviders: "/api/credit-providers",
 } as const;
 
 const encodePathSegment = (value: string) => encodeURIComponent(value);
@@ -63,6 +64,7 @@ export const apiPaths = {
   mcpServerRefresh: (id: string) => `/api/mcp-servers/${encodePathSegment(id)}/refresh`,
   credits: () => API_ROUTE_TEMPLATES.credits,
   creditsApply: () => API_ROUTE_TEMPLATES.creditsApply,
+  creditProviders: () => API_ROUTE_TEMPLATES.creditProviders,
 } as const;
 
 export const ApiIssueSchema = z.object({
@@ -79,6 +81,7 @@ export const ApiErrorCodeSchema = z.enum([
   "conflict",
   "credits_required",
   "credits_exhausted",
+  "daily_limit_exceeded",
   "internal_error",
 ]);
 
@@ -657,12 +660,20 @@ export const CreditStatusDtoSchema = z.object({
 
 export const CreditStatusResponseSchema = CreditStatusDtoSchema;
 
+// Providers that the platform funds with AI credits (a `CREDITS_<PROVIDER>_API_KEY`
+// is configured server-side). Public, non-sensitive config the UI reads to decide
+// which providers may offer the "AI Credits" usage option.
+export const CreditProvidersResponseSchema = z.object({
+  providers: z.array(z.string()),
+});
+
 export type ProviderKeyDto = z.infer<typeof ProviderKeyDtoSchema>;
 export type ListProviderKeysResponse = z.infer<typeof ListProviderKeysResponseSchema>;
 export type CreateProviderKeyRequest = z.input<typeof CreateProviderKeyRequestSchema>;
 export type CreateProviderKeyResponse = z.infer<typeof CreateProviderKeyResponseSchema>;
 export type CreditStatusDto = z.infer<typeof CreditStatusDtoSchema>;
 export type CreditStatusResponse = z.infer<typeof CreditStatusResponseSchema>;
+export type CreditProvidersResponse = z.infer<typeof CreditProvidersResponseSchema>;
 export type CustomModelDto = z.infer<typeof CustomModelDtoSchema>;
 export type ListCustomModelsResponse = z.infer<typeof ListCustomModelsResponseSchema>;
 export type CreateCustomModelRequest = z.input<typeof CreateCustomModelRequestSchema>;

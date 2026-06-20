@@ -131,10 +131,14 @@ export async function executeWorkflowRuntime(
   const nodeStartTimes = new Map<string, number>();
   let runningNodeId: string | undefined;
 
-  // Credit metering: accumulate token usage and abort once the budget is spent.
+  // Credit metering: accumulate token usage and abort once the budget is spent
+  // (per-user balance) or the platform's daily output ceiling is reached.
   let consumedTokens = 0;
+  let consumedOutputTokens = 0;
   let creditsExhausted = false;
-  const creditAbort = options.creditBudget != null ? new AbortController() : undefined;
+  let dailyLimitReached = false;
+  const creditAbort =
+    options.creditBudget != null || options.dailyOutputBudget != null ? new AbortController() : undefined;
 
   try {
     logger.info("runtime.execution.started", {
@@ -388,8 +392,17 @@ export async function executeWorkflowRuntime(
           // Meter against the credit budget; stop before any further node runs
           // once the balance is spent.
           consumedTokens += (tokenUsage.inputTokens ?? 0) + (tokenUsage.outputTokens ?? 0);
+          consumedOutputTokens += tokenUsage.outputTokens ?? 0;
           if (options.creditBudget != null && consumedTokens >= options.creditBudget && !creditsExhausted) {
             creditsExhausted = true;
+            creditAbort?.abort();
+          }
+          if (
+            options.dailyOutputBudget != null &&
+            consumedOutputTokens >= options.dailyOutputBudget &&
+            !dailyLimitReached
+          ) {
+            dailyLimitReached = true;
             creditAbort?.abort();
           }
         }
@@ -401,7 +414,11 @@ export async function executeWorkflowRuntime(
     }
 
     // If the abort stopped iteration without throwing, force the failure path so
-    // the run is reported as credits_exhausted rather than a partial success.
+    // the run is reported as the right billing failure rather than a partial
+    // success. The daily ceiling takes precedence in messaging.
+    if (dailyLimitReached) {
+      throw new Error("Daily AI credits limit reached.");
+    }
     if (creditsExhausted) {
       throw new Error("AI credits exhausted.");
     }
@@ -428,6 +445,7 @@ export async function executeWorkflowRuntime(
         nodeResults,
         streamEvents,
         consumedTokens,
+        consumedOutputTokens,
       };
     }
 
@@ -439,16 +457,29 @@ export async function executeWorkflowRuntime(
       threadId,
     });
 
-    return { ok: true, status: "completed", state: finalGraphState.values, nodeResults, streamEvents, consumedTokens };
+    return {
+      ok: true,
+      status: "completed",
+      state: finalGraphState.values,
+      nodeResults,
+      streamEvents,
+      consumedTokens,
+      consumedOutputTokens,
+    };
   } catch (error) {
     // A credit-budget abort surfaces as a generic abort error; report it as a
-    // first-class credits_exhausted failure instead.
-    const normalizedError = creditsExhausted
+    // first-class billing failure instead. The daily ceiling takes precedence.
+    const normalizedError = dailyLimitReached
       ? createApiErrorResponse(
-          "credits_exhausted",
-          "AI credits exhausted — the run was stopped. Apply for more credits or switch to an API key.",
+          "daily_limit_exceeded",
+          "The platform's daily free AI credits limit has been reached — the run was stopped. Try again tomorrow or switch to an API key.",
         ).error
-      : normalizeRuntimeError(error);
+      : creditsExhausted
+        ? createApiErrorResponse(
+            "credits_exhausted",
+            "AI credits exhausted — the run was stopped. Apply for more credits or switch to an API key.",
+          ).error
+        : normalizeRuntimeError(error);
 
     // The streaming iterator aborts on a node error without emitting
     // on_chain_error, so the node that was running never got a node.failed
@@ -481,7 +512,7 @@ export async function executeWorkflowRuntime(
       message: normalizedError.message,
       threadId,
     });
-    return { ok: false, error: normalizedError, nodeResults, streamEvents, consumedTokens };
+    return { ok: false, error: normalizedError, nodeResults, streamEvents, consumedTokens, consumedOutputTokens };
   }
 }
 

@@ -146,6 +146,17 @@ model PlatformProviderKey {
   @@map("platform_provider_key")
 }
 
+// Global per-day output-token meter for platform-funded ("AI credits") runs.
+// One row per UTC day; `outputTokens` accumulates across all users and caps the
+// platform's daily spend regardless of individual credit balances.
+model PlatformDailyUsage {
+  day          String   @id
+  outputTokens Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@map("platform_daily_usage")
+}
+
 model Workflow {
   id        String   @id @default(cuid())
   userId    String

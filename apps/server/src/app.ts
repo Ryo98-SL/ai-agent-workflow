@@ -44,8 +44,10 @@ import { createAccountRoutes, loadDecryptedProviderKey, loadDecryptedProviderKey
 import {
   consumeCredits,
   createCreditRoutes,
+  getRemainingDailyOutput,
   loadCreditBalance,
   loadPlatformCreditsProvider,
+  recordDailyOutputUsage,
   type PlatformCreditsProvider,
 } from "./routes/credits";
 import { createKnowledgeRoutes } from "./routes/knowledge";
@@ -110,6 +112,10 @@ export type CreateServerAppOptions = {
   creditBalanceLoader?: (userId: string) => Promise<number | null>;
   /** Credit consumption override for tests. Defaults to the Prisma-backed grant store. */
   creditConsumer?: (userId: string, tokens: number) => Promise<void>;
+  /** Remaining platform-wide daily output budget loader. Defaults to the Prisma-backed meter. */
+  dailyOutputRemainingLoader?: () => Promise<number>;
+  /** Records a credits run's output tokens against the daily meter. Defaults to the Prisma-backed meter. */
+  dailyOutputRecorder?: (tokens: number) => Promise<void>;
   /** Email sender for the Email tool. Defaults to env-gated Resend (undefined when unset → dry-run only). */
   emailSender?: EmailSender;
   /** Durable LangGraph checkpointer for authed runs. Anonymous runs use MemorySaver. */
@@ -378,6 +384,8 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
   const platformCreditsProvider = options.platformCreditsProvider ?? loadPlatformCreditsProvider;
   const creditBalanceLoader = options.creditBalanceLoader ?? loadCreditBalance;
   const creditConsumer = options.creditConsumer ?? consumeCredits;
+  const dailyOutputRemainingLoader = options.dailyOutputRemainingLoader ?? getRemainingDailyOutput;
+  const dailyOutputRecorder = options.dailyOutputRecorder ?? recordDailyOutputUsage;
   // Undefined unless RESEND_API_KEY + EMAIL_FROM are set; then the Email tool's
   // "send for real" path works (otherwise it errors and dry-run is the default).
   const emailSender = options.emailSender ?? createEnvEmailSender(options.fetch);
@@ -426,6 +434,8 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     effectiveProviderKeys?: ModelProviderKeys;
     creditsBaseURL?: string;
     creditBudget?: number;
+    /** Remaining platform-wide daily output-token budget (credits runs only). */
+    dailyOutputBudget?: number;
     /** Resume answer for a paused Human Input interrupt (re-enters the thread). */
     resume?: { value: unknown };
     /** Node results from earlier legs, merged into the persisted run output. */
@@ -448,6 +458,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       effectiveProviderKeys,
       creditsBaseURL,
       creditBudget,
+      dailyOutputBudget,
       resume,
       priorNodeResults,
     } = params;
@@ -472,6 +483,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
         threadId,
         query,
         creditBudget,
+        dailyOutputBudget,
         userId,
         emailSender,
         // Agent MCP tools resolve connections at run time (ADR 0004 — never a
@@ -531,7 +543,8 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       },
     )
       .then(async (execution) => {
-        // Deduct metered tokens from the credit balance (credits runs only).
+        // Deduct metered tokens from the credit balance (credits runs only) and
+        // add the run's output tokens to the platform-wide daily meter.
         if (creditBudget != null && userId && execution.consumedTokens > 0) {
           try {
             await creditConsumer(userId, execution.consumedTokens);
@@ -539,6 +552,16 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
             logger.error("credits.consume_failed", {
               runId,
               message: error instanceof Error ? error.message : "consume failed",
+            });
+          }
+        }
+        if (dailyOutputBudget != null && execution.consumedOutputTokens > 0) {
+          try {
+            await dailyOutputRecorder(execution.consumedOutputTokens);
+          } catch (error) {
+            logger.error("credits.daily_record_failed", {
+              runId,
+              message: error instanceof Error ? error.message : "record failed",
             });
           }
         }
@@ -799,7 +822,13 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     modelProvider?: OpenAICompatibleSettings;
     providerKeyId?: string;
   }): Promise<
-    | { ok: true; effectiveProviderKeys?: ModelProviderKeys; creditBudget?: number; creditsBaseURL?: string }
+    | {
+        ok: true;
+        effectiveProviderKeys?: ModelProviderKeys;
+        creditBudget?: number;
+        dailyOutputBudget?: number;
+        creditsBaseURL?: string;
+      }
     | { ok: false; error: ReturnType<typeof createApiErrorResponse>; status: 402 }
   > {
     let effectiveProviderKeys = args.modelProviderKeys;
@@ -832,6 +861,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     // require an approved grant with a positive balance, inject the platform's
     // provider key, force the official endpoint, and meter the run.
     let creditBudget: number | undefined;
+    let dailyOutputBudget: number | undefined;
     let creditsBaseURL: string | undefined;
     const needsCredits = Boolean(runProvider) && runProvider !== "ollama" && usesCredits;
     if (needsCredits) {
@@ -871,12 +901,26 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
           ),
         };
       }
+      // Platform-wide daily ceiling: refuse new credits runs once today's free
+      // output-token budget is spent, regardless of the user's own balance.
+      const remainingDailyOutput = await dailyOutputRemainingLoader();
+      if (remainingDailyOutput <= 0) {
+        return {
+          ok: false,
+          status: 402,
+          error: createApiErrorResponse(
+            "daily_limit_exceeded",
+            "The platform's daily free AI credits limit has been reached. Try again tomorrow or add an API key for this provider.",
+          ),
+        };
+      }
       effectiveProviderKeys = { ...effectiveProviderKeys, [runProvider!]: platform.apiKey };
       creditsBaseURL = platform.baseURL;
       creditBudget = balance;
+      dailyOutputBudget = remainingDailyOutput;
     }
 
-    return { ok: true, effectiveProviderKeys, creditBudget, creditsBaseURL };
+    return { ok: true, effectiveProviderKeys, creditBudget, dailyOutputBudget, creditsBaseURL };
   }
 
   app.post(API_ROUTE_TEMPLATES.workflowRuns, async (c) => {
@@ -924,7 +968,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
     if (!credentials.ok) {
       return c.json(credentials.error, credentials.status);
     }
-    const { effectiveProviderKeys, creditBudget, creditsBaseURL } = credentials;
+    const { effectiveProviderKeys, creditBudget, dailyOutputBudget, creditsBaseURL } = credentials;
 
     const runId = randomUUID();
     // Multi-turn memory: runs sharing a conversationId share a LangGraph thread,
@@ -990,6 +1034,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       effectiveProviderKeys,
       creditsBaseURL,
       creditBudget,
+      dailyOutputBudget,
     });
 
     return c.json(responseFromSchema(CreateRunResponseSchema, { run: pendingRun }), 201);
@@ -1048,6 +1093,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
       effectiveProviderKeys: credentials.effectiveProviderKeys,
       creditsBaseURL: credentials.creditsBaseURL,
       creditBudget: credentials.creditBudget,
+      dailyOutputBudget: credentials.dailyOutputBudget,
       resume: { value: { action_id: parsed.data.action_id, action_value: parsed.data.action_value } },
       priorNodeResults: run.output?.nodeResults ?? [],
     });

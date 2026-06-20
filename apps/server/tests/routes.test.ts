@@ -78,6 +78,8 @@ function createTestApp(
     platformCreditsProvider?: ServerAppOptions["platformCreditsProvider"];
     creditBalanceLoader?: ServerAppOptions["creditBalanceLoader"];
     creditConsumer?: ServerAppOptions["creditConsumer"];
+    dailyOutputRemainingLoader?: ServerAppOptions["dailyOutputRemainingLoader"];
+    dailyOutputRecorder?: ServerAppOptions["dailyOutputRecorder"];
   } = {},
 ): HonoApp {
   const seed = withSeedMetadata(options.seedWorkflow ?? createDefaultWorkflow());
@@ -91,6 +93,9 @@ function createTestApp(
     platformCreditsProvider: options.platformCreditsProvider,
     creditBalanceLoader: options.creditBalanceLoader,
     creditConsumer: options.creditConsumer,
+    // Global daily meter defaults are DB-free so credits-path tests don't hit Prisma.
+    dailyOutputRemainingLoader: options.dailyOutputRemainingLoader ?? (async () => 1_000_000),
+    dailyOutputRecorder: options.dailyOutputRecorder ?? (async () => {}),
   });
 }
 
@@ -674,6 +679,77 @@ describe("workflow API server", () => {
     const readResponse = await app.request("/api/workflows/workflow-1");
     const stored = (await json(readResponse)) as { workflow: { workflow: { settings: { modelProvider?: { apiKey?: string } } } } };
     expect(stored.workflow.workflow.settings.modelProvider?.apiKey).toBeUndefined();
+  });
+
+  it("rejects credits runs once the platform-wide daily output budget is spent", async () => {
+    const workflow = createDefaultWorkflow();
+    workflow.settings.modelProvider = { provider: "deepseek", baseURL: "https://api.deepseek.com", model: "deepseek-chat" };
+
+    let modelCalled = false;
+    const app = createTestApp({
+      seedWorkflow: workflow,
+      platformCreditsProvider: async () => ({ apiKey: "platform-deepseek-key", baseURL: "https://api.deepseek.com" }),
+      creditBalanceLoader: async () => 1000,
+      dailyOutputRemainingLoader: async () => 0,
+      fetch: async () => {
+        modelCalled = true;
+        return new Response("{}", { status: 200 });
+      },
+    });
+
+    const response = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "credits" } }),
+    });
+
+    expect(response.status).toBe(402);
+    expect(await json(response)).toMatchObject({ error: { code: "daily_limit_exceeded" } });
+    expect(modelCalled).toBe(false);
+  });
+
+  it("records a credits run's output tokens against the daily meter", async () => {
+    const workflow = createDefaultWorkflow();
+    workflow.settings.modelProvider = { provider: "deepseek", baseURL: "https://api.deepseek.com", model: "deepseek-chat" };
+
+    let recorded: number | undefined;
+    const app = createTestApp({
+      seedWorkflow: workflow,
+      platformCreditsProvider: async () => ({ apiKey: "platform-deepseek-key", baseURL: "https://api.deepseek.com" }),
+      creditBalanceLoader: async () => 1000,
+      creditConsumer: async () => {},
+      dailyOutputRemainingLoader: async () => 1_000_000,
+      dailyOutputRecorder: async (tokens) => {
+        recorded = tokens;
+      },
+      fetch: async (_url, init) => {
+        const requestedBody = JSON.parse(String(init?.body));
+        if (requestedBody.stream) {
+          return createOpenAIStreamResponse("Credits output.", {
+            prompt_tokens: 5,
+            completion_tokens: 8,
+            total_tokens: 13,
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: "Credits output." } }],
+            usage: { prompt_tokens: 5, completion_tokens: 8, total_tokens: 13 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    const response = await app.request("/api/workflows/workflow-1/runs", {
+      method: "POST",
+      body: JSON.stringify({ input: { topic: "credits" } }),
+    });
+    expect(response.status).toBe(201);
+    const created = (await json(response)) as { run: { id: string } };
+    await waitForRun(app, created.run.id);
+
+    // Only the output tokens (completion_tokens) feed the daily meter.
+    expect(recorded).toBe(8);
   });
 
   it("fails missing required Start input before model calls", async () => {

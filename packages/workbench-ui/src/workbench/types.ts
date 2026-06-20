@@ -7,6 +7,7 @@ import type {
   CreateRunRequest,
   ResumeRunRequest,
   CreditStatusResponse,
+  CreditProvidersResponse,
   CustomModelDto,
   KnowledgeBaseDto,
   KnowledgeDocumentDto,
@@ -160,6 +161,7 @@ export type WorkbenchWorkflowApi = {
   deleteCustomModel: (id: string) => Promise<void>;
   getCredits: () => Promise<CreditStatusResponse>;
   applyCredits: () => Promise<CreditStatusResponse>;
+  getCreditProviders: () => Promise<CreditProvidersResponse>;
 };
 
 export type AppWorkbenchProps = {

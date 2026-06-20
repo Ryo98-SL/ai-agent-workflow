@@ -68,6 +68,8 @@ export type RuntimeExecutionResult =
       streamEvents: RuntimeStreamEvent[];
       /** Summed input + output tokens consumed across LLM calls in this run. */
       consumedTokens: number;
+      /** Output tokens only, for the platform-wide daily meter. */
+      consumedOutputTokens: number;
     }
   | {
       ok: false;
@@ -75,6 +77,7 @@ export type RuntimeExecutionResult =
       nodeResults: RuntimeNodeResult[];
       streamEvents: RuntimeStreamEvent[];
       consumedTokens: number;
+      consumedOutputTokens: number;
     };
 
 export type RuntimeExecutorOptions = {
@@ -116,4 +119,10 @@ export type RuntimeExecutorOptions = {
    * fails with a credits_exhausted error.
    */
   creditBudget?: number;
+  /**
+   * Platform-wide remaining output-token budget for today (credits runs only).
+   * Once this run's output tokens reach it, remaining graph execution is aborted
+   * and the run fails with a daily_limit_exceeded error.
+   */
+  dailyOutputBudget?: number;
 };

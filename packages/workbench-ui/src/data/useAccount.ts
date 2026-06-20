@@ -7,6 +7,7 @@ export const accountQueryKeys = {
   providerKeys: ["provider-keys"] as const,
   customModels: ["custom-models"] as const,
   credits: ["credits"] as const,
+  creditProviders: ["credit-providers"] as const,
   workflowRuns: (workflowId: string) => ["workflow-runs", workflowId] as const,
 };
 
@@ -91,6 +92,20 @@ export function useCredits() {
     queryKey: accountQueryKeys.credits,
     queryFn: () => workflowApi.getCredits(),
     enabled,
+  });
+}
+
+/**
+ * Providers the platform funds with AI credits (a server-side key is
+ * configured). Public, non-sensitive config; fetched regardless of auth and
+ * cached long since it only changes on deploy.
+ */
+export function useCreditProviders() {
+  const { workflowApi } = useWorkbenchData();
+  return useQuery({
+    queryKey: accountQueryKeys.creditProviders,
+    queryFn: () => workflowApi.getCreditProviders(),
+    staleTime: 5 * 60 * 1000,
   });
 }
 

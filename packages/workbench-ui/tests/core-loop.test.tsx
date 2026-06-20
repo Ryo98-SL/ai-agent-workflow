@@ -999,6 +999,7 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
     deleteCustomModel: vi.fn(async () => undefined),
     getCredits: vi.fn(async () => ({ status: "none" as const })),
     applyCredits: vi.fn(async () => ({ status: "approved" as const, grantedTokens: 100_000, balanceTokens: 100_000 })),
+    getCreditProviders: vi.fn(async () => ({ providers: ["deepseek"] })),
   };
 
   return { api, workflows, calls };

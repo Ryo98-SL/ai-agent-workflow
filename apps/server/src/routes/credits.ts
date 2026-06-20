@@ -2,7 +2,7 @@ import { apiPaths, createApiErrorResponse, type CreditStatusDto } from "@ai-agen
 import { Hono } from "hono";
 import { decryptSecret, encryptSecret } from "../auth/crypto";
 import { requireUser, type AuthVariables } from "../auth/middleware";
-import { getCreditsProvider } from "../config";
+import { getCreditsProvider, getDailyOutputTokenLimit, listConfiguredCreditProviders } from "../config";
 import { prisma } from "../db/prisma";
 import { logger } from "../logger";
 
@@ -12,6 +12,47 @@ import { logger } from "../logger";
  * priority. Kept as a simple constant until real billing lands.
  */
 export const CREDIT_INITIAL_TOKENS = 100_000;
+
+/** UTC day key (YYYY-MM-DD) used to bucket the global daily usage row. */
+function dailyUsageKey(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+/** Output tokens already funded by AI credits across all users today. */
+export async function getDailyOutputUsage(): Promise<number> {
+  const row = await prisma.platformDailyUsage.findUnique({
+    where: { day: dailyUsageKey() },
+    select: { outputTokens: true },
+  });
+  return row?.outputTokens ?? 0;
+}
+
+/** Remaining global output-token budget for today (floored at zero). */
+export async function getRemainingDailyOutput(): Promise<number> {
+  return Math.max(0, getDailyOutputTokenLimit() - (await getDailyOutputUsage()));
+}
+
+/** Add a finished credits run's output tokens to today's global meter. */
+export async function recordDailyOutputUsage(outputTokens: number): Promise<void> {
+  if (outputTokens <= 0) {
+    return;
+  }
+  const day = dailyUsageKey();
+  await prisma.platformDailyUsage.upsert({
+    where: { day },
+    create: { day, outputTokens },
+    update: { outputTokens: { increment: outputTokens } },
+  });
+  logger.info("credits.daily_output_recorded", { day, outputTokens });
+}
+
+/**
+ * Providers the platform can fund with AI credits right now: the supported set
+ * intersected with what env has actually configured a key for.
+ */
+export function listCreditProviders(): string[] {
+  return listConfiguredCreditProviders().filter((provider) => SUPPORTED_PLATFORM_CREDIT_PROVIDERS.has(provider));
+}
 
 type CreditGrantRow = { status: string; grantedTokens: number; balanceTokens: number };
 export type PlatformCreditsProvider = { apiKey: string; baseURL: string };
@@ -112,6 +153,12 @@ async function bootstrapPlatformCreditsProvider(provider: string): Promise<Platf
 
 export function createCreditRoutes() {
   const app = new Hono<{ Variables: AuthVariables }>();
+
+  // Public, non-sensitive: which providers the platform funds with AI credits.
+  // The UI reads this to only offer the "AI Credits" option where it can work.
+  app.get(apiPaths.creditProviders(), (c) => {
+    return c.json({ providers: listCreditProviders() });
+  });
 
   app.get(apiPaths.credits(), requireUser, async (c) => {
     const userId = c.get("userId");

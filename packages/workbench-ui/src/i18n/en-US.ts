@@ -99,6 +99,7 @@ export const workbenchEnUs = {
     aiCredits: "AI credits",
     usagePriority: "Usage Priority",
     apiKeyHint: "Runs use the API key selected below.",
+    creditsUnavailable: "AI credits aren't available for this provider — add your own API key below.",
     loading: "Loading...",
     noKeys: "No keys yet for this provider.",
     sessionOnly: "Keys are kept only for this session. Sign in to save them.",
