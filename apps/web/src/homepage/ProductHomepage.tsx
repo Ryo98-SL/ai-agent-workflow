@@ -51,6 +51,7 @@ function HomepageRuntime() {
       onTabChange={setActiveTab}
       brandAriaLabel={t("homepage.brandAria")}
       sectionsAriaLabel={t("homepage.sectionsAria")}
+      githubLabel={t("homepage.github")}
       accountSlot={
         <div className="flex min-w-0 items-center justify-end gap-2">
           <LanguageSwitcher />

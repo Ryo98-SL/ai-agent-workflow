@@ -11,6 +11,7 @@ export const webEnUs = {
       english: "English",
       chinese: "中文",
     },
+    github: "Open GitHub repository",
     studio: {
       title: "Studio",
       description: "Build workflows, connect knowledge, and return to the editor when a card needs deeper work.",

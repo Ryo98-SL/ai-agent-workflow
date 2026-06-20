@@ -71,6 +71,14 @@ export const workbenchZhCn = {
     workflowMode: "运行",
     chatMode: "对话",
   },
+  chatPanel: {
+    hintAriaLabel: "输入与记忆提示",
+    queryHintPrefix: "输入框消息会作为",
+    queryHintSuffix: "传入工作流，请在需要看见用户消息的 LLM / Agent 节点提示词中引用它。",
+    memoryOn: "跨轮记忆已开启 · 助手会参考最近的对话历史。",
+    memoryOnSummary: "超出阈值的较早轮次会被压缩为摘要。",
+    memoryOff: "未开启跨轮记忆 · 想让对话跨轮记住上下文，请在 LLM / Agent 节点开启「记忆」。",
+  },
   modelSettings: {
     model: "模型",
     chooseModel: "选择模型提供商和模型",
@@ -126,6 +134,7 @@ export const workbenchZhCn = {
   projectFileActions: {
     saveWorkflow: "保存工作流",
     save: "保存",
+    saving: "保存中...",
   },
   workflowSwitcher: {
     switchWorkflow: "切换工作流",
@@ -230,6 +239,10 @@ export const workbenchZhCn = {
       queryPlaceholder: "本轮用户输入，默认 {{defaultQuery}}，输入 / 引用上游变量",
       queryRequired: "查询不能为空。",
       configureParams: "配置参数",
+      showToolDetails: "查看工具详情",
+      hideToolDetails: "收起工具详情",
+      description: "说明",
+      toolIdentity: "工具",
       removeTool: "移除工具",
       mcpParamsAuto: "参数由 Agent 在调用时自动填充。",
       fixedParamsHint: "填写的参数将被固定；留空的参数由 Agent 自动填充。",

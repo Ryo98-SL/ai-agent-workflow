@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   AlertTriangle,
+  Brain,
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Info,
   Loader2,
   MessageSquareText,
   Send,
   Settings2,
   UserCheck,
+  Variable,
 } from "lucide-react";
+import { useTranslation } from "@ai-agent-workflow/i18n";
 import type { ResumeRunRequest } from "@ai-agent-workflow/api-contracts";
 import {
   resolveMemorySettings,
@@ -19,11 +23,13 @@ import {
 } from "@ai-agent-workflow/workflow-domain";
 import { Textarea } from "@workbench/components/ui/textarea";
 import { Input } from "@workbench/components/ui/input";
+import { WORKBENCH_I18N_NAMESPACE } from "../../i18n";
 import type { ChatTurn, DebugState, NodeExecutionState } from "../types";
 import { deriveChatAnswer } from "../hooks/useWorkflowExecution";
 import { Button } from "./Button";
 import { HumanReviewForm } from "./HumanReviewForm";
 import { RunOutput } from "./RunOutput";
+import { Tooltip } from "./Tooltip";
 import { VariableTag } from "./VariableTag";
 
 type ChatPanelProps = {
@@ -59,8 +65,18 @@ export function ChatPanel({
   onMemorySummaryChange,
   readOnly = false,
 }: ChatPanelProps) {
+  const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const startFields = useMemo(() => startNode?.config.fields ?? [], [startNode]);
   const needsSetup = startFields.length > 0;
+  // Cross-turn memory only carries context when an LLM/Agent node opts in. Surface
+  // that status in the composer hint so users know whether the chat will remember.
+  const memoryEnabled = useMemo(
+    () =>
+      workflow.graph.nodes.some(
+        (node) => (node.type === "llm" || node.type === "agent") && node.config.memory === true,
+      ),
+    [workflow],
+  );
   const initialValues = useMemo(
     () => Object.fromEntries(startFields.map((field) => [field.name, field.defaultValue ?? ""])) as Record<string, string>,
     [startFields],
@@ -270,12 +286,45 @@ export function ChatPanel({
       {/* Composer */}
       {!readOnly && started && (
         <div className="border-t border-border p-3">
-          <div className="mb-2 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-200">
-            <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden />
-            <p className="min-w-0">
-              输入框消息会作为 <VariableTag reference="{{userInput.query}}" className="mx-0.5" />{" "}
-              传入工作流。请在需要看见用户消息的 LLM / Agent 节点提示词中引用它。
-            </p>
+          {/* Compact hint trigger: a hover/focus tooltip carries both the
+              `{{userInput.query}}` usage note and the dynamic cross-turn memory
+              status, so neither needs a permanent box crowding the composer. */}
+          <div className="mb-2 flex justify-end">
+            <Tooltip
+              placement="top-end"
+              content={
+                <div className="w-72 rounded-md border border-border bg-background p-3 shadow-lg">
+                  <div className="flex gap-2">
+                    <Variable size={14} className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden />
+                    <p className="min-w-0 text-xs leading-relaxed text-muted-foreground">
+                      {t("chatPanel.queryHintPrefix")}{" "}
+                      <VariableTag reference="{{userInput.query}}" className="mx-0.5" />{" "}
+                      {t("chatPanel.queryHintSuffix")}
+                    </p>
+                  </div>
+                  <div className="mt-3 flex gap-2 border-t border-border pt-2.5">
+                    <Brain
+                      size={14}
+                      className={["mt-0.5 shrink-0", memoryEnabled ? "text-brand" : "text-amber-500"].join(" ")}
+                      aria-hidden
+                    />
+                    <p className="min-w-0 text-xs leading-relaxed text-muted-foreground">
+                      {memoryEnabled
+                        ? `${t("chatPanel.memoryOn")}${summary.enabled ? ` ${t("chatPanel.memoryOnSummary")}` : ""}`
+                        : t("chatPanel.memoryOff")}
+                    </p>
+                  </div>
+                </div>
+              }
+            >
+              <button
+                type="button"
+                aria-label={t("chatPanel.hintAriaLabel")}
+                className="inline-flex items-center rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <Info size={15} className={memoryEnabled ? "" : "text-amber-500"} aria-hidden />
+              </button>
+            </Tooltip>
           </div>
           <div className="flex items-end gap-2">
             <Textarea

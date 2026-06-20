@@ -659,6 +659,27 @@ function memoryWorkflow(): WorkflowFile {
   };
 }
 
+/** Chat-mode Start → LLM(memory) whose human prompt is the live chat query. */
+function chatMemoryWorkflow(): WorkflowFile {
+  const workflow = memoryWorkflow();
+  const llm = workflow.graph.nodes.find((node) => node.type === "llm");
+  if (llm?.type !== "llm") {
+    throw new Error("Expected llm node.");
+  }
+  llm.config = {
+    ...llm.config,
+    messages: [
+      { role: "system", content: "sys" },
+      { role: "user", content: "{{userInput.query}}" },
+    ],
+  };
+  return {
+    ...workflow,
+    metadata: { ...workflow.metadata, mode: "chat" },
+    settings: { ...workflow.settings, modelProviderKeys: { deepseek: "test-deepseek-key" } },
+  };
+}
+
 describe("conversation memory", () => {
   it("carries prior turns into later runs that share a thread", async () => {
     const checkpointer = new MemorySaver();
@@ -687,6 +708,41 @@ describe("conversation memory", () => {
 
     const lastContents = (requests.at(-1) as { messages: Array<{ content: string }> }).messages.map((m) => m.content);
     expect(lastContents).not.toContain("thread-one-secret");
+  });
+
+  it("remembers a failed chat turn's user message so the next turn can continue", async () => {
+    const checkpointer = new MemorySaver();
+    const workflow = chatMemoryWorkflow();
+
+    // Turn 1 fails at the model call (network error) before the LLM node commits its
+    // [user, assistant] memory pair. Turn 2 must still see turn 1's question.
+    const { fetch: okFetch, requests } = createCapturingModelFetch("好的");
+    let firstCall = true;
+    const fetch = (async (url: Parameters<typeof okFetch>[0], init?: Parameters<typeof okFetch>[1]) => {
+      if (firstCall) {
+        firstCall = false;
+        throw new Error("fetch failed");
+      }
+      return okFetch(url, init);
+    }) as unknown as typeof okFetch;
+
+    const first = await executeWorkflowRuntime(
+      workflow,
+      {},
+      { checkpointer, threadId: "conv-fail", query: "你那里的时区时间是多少？", fetch },
+    );
+    expect(first.ok).toBe(false);
+
+    const second = await executeWorkflowRuntime(
+      workflow,
+      {},
+      { checkpointer, threadId: "conv-fail", query: "继续", fetch },
+    );
+    expect(second.ok).toBe(true);
+
+    const lastContents = (requests.at(-1) as { messages: Array<{ content: string }> }).messages.map((m) => m.content);
+    expect(lastContents).toContain("你那里的时区时间是多少？");
+    expect(lastContents).toContain("继续");
   });
 });
 

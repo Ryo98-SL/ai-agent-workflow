@@ -130,6 +130,11 @@ export async function executeWorkflowRuntime(
   const nodeById = new Map(workflow.graph.nodes.map((node) => [node.id, node]));
   const nodeStartTimes = new Map<string, number>();
   let runningNodeId: string | undefined;
+  // Hoisted so the catch block can persist a failed chat turn's user message into
+  // the conversation thread (see the failure path below). Typed `any` to match the
+  // compiled StateGraph (the graph is built `as any`).
+  let compiled: any;
+  let startNodeId: string | undefined;
 
   // Credit metering: accumulate token usage and abort once the budget is spent
   // (per-user balance) or the platform's daily output ceiling is reached.
@@ -149,6 +154,7 @@ export async function executeWorkflowRuntime(
       threadId,
     });
     const { startNode, reachableNodes } = validateWorkflow(workflow);
+    startNodeId = startNode.id;
     const reachableNodeIds = new Set(reachableNodes.map((node) => node.id));
     const graph = new StateGraph(RuntimeStateAnnotation) as any;
     const context: RuntimeNodeBuildContext = {
@@ -285,7 +291,7 @@ export async function executeWorkflowRuntime(
       graph.addEdge(nodeId, END);
     }
 
-    const compiled = graph.compile({ checkpointer });
+    compiled = graph.compile({ checkpointer });
     let finalGraphState: RuntimeGraphState = { values: {}, messages: [], summary: "", summarizedCount: 0 };
 
     // Fresh runs start from empty state (plus the ambient `userInput` namespace so
@@ -512,6 +518,39 @@ export async function executeWorkflowRuntime(
       message: normalizedError.message,
       threadId,
     });
+
+    // A thrown node rolls back its whole superstep, so a failed chat turn never
+    // commits the memory node's [user, assistant] pair (successful turns persist via
+    // `appendMessages`). Persist just this turn's user message into the conversation
+    // thread so a follow-up message ("继续") can continue with context — unless a
+    // memory node already committed it earlier in this run (multi-node graphs), which
+    // would duplicate the turn.
+    if (compiled && startNodeId && options.query !== undefined && isChatWorkflow(workflow) && workflowUsesConversationMemory(workflow)) {
+      const memoryAlreadyCommitted = nodeResults.some((result) => {
+        const node = nodeById.get(result.nodeId);
+        return (
+          result.status === "succeeded" &&
+          node !== undefined &&
+          (node.type === "llm" || node.type === "agent") &&
+          node.config.memory === true
+        );
+      });
+      if (!memoryAlreadyCommitted) {
+        try {
+          await compiled.updateState(
+            { configurable: { thread_id: threadId } },
+            { messages: [{ role: "user", content: options.query }] satisfies ChatMessage[] },
+            startNodeId,
+          );
+        } catch (persistError) {
+          logger.warn("runtime.memory.failed_turn_persist_failed", {
+            threadId,
+            message: persistError instanceof Error ? persistError.message : "updateState failed",
+          });
+        }
+      }
+    }
+
     return { ok: false, error: normalizedError, nodeResults, streamEvents, consumedTokens, consumedOutputTokens };
   }
 }
@@ -538,6 +577,17 @@ function buildStartNode(node: WorkflowNode, _state: RuntimeGraphState, context: 
 function estimateMemoryTokens(summary: string, history: ChatMessage[]): number {
   const chars = summary.length + history.reduce((sum, message) => sum + message.content.length, 0);
   return Math.ceil(chars / 4);
+}
+
+/**
+ * Whether any LLM/Agent node has conversation memory enabled. Gates the
+ * failed-turn user-message persistence so we only touch threads that actually
+ * accumulate history.
+ */
+function workflowUsesConversationMemory(workflow: WorkflowFile): boolean {
+  return workflow.graph.nodes.some(
+    (node) => (node.type === "llm" || node.type === "agent") && node.config.memory === true,
+  );
 }
 
 async function buildLlmNode(

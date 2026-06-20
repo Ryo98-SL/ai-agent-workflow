@@ -20,7 +20,8 @@ entry point.
   The right slot reserves stable width for the theme switcher plus auth
   pending/signed-out/signed-in states so trigger changes do not shift the
   header. Header tab buttons keep a transparent base border so active and
-  inactive states have the same box metrics.
+  inactive states have the same box metrics. The shell also owns the fixed
+  lower-left round white GitHub repository shortcut.
 - `ProductHomepage.tsx` provides the shared `ThemeProvider`, renders
   `ImportLocalDataPrompt` inside the data provider so signed-in users can import
   workflows created while anonymous, and places the Product Locale

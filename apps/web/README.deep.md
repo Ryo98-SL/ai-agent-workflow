@@ -36,9 +36,10 @@ shared workbench UI at `/workbench`, and injects a typed workflow client.
   migration flow. The header uses a three-column
   grid with a stable right
   utility slot for the Product Locale switcher, shared theme switcher, and
-  account menu so the centered tabs do not shift across auth states. The Product
-  Locale switcher uses the shared workbench `Popover` instead of a native select
-  or custom floating implementation.
+  account menu so the centered tabs do not shift across auth states. A fixed,
+  round white GitHub repository shortcut sits at the lower-left corner of the
+  homepage. The Product Locale switcher uses the shared workbench `Popover`
+  instead of a native select or custom floating implementation.
 - `src/i18n/` owns the app-level `web` namespace resources for `en-US` and
   `zh-CN` homepage Product Locale copy.
 - `src/pages/design/` hosts design-gallery pages for workbench UI surfaces,

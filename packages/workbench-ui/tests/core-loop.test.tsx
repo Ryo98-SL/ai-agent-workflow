@@ -347,6 +347,40 @@ describe("MVP smoke loop", () => {
     );
   });
 
+  it("keeps the header save button pending and prevents duplicate saves", async () => {
+    const user = userEvent.setup();
+    const { api, workflows } = createMemoryWorkflowApi();
+    let resolveUpdate: (() => void) | undefined;
+    api.updateWorkflow = vi.fn(
+      (id, request) =>
+        new Promise<{ workflow: WorkflowDto }>((resolve) => {
+          resolveUpdate = () => {
+            const dto = { id, workflow: JSON.parse(JSON.stringify(request.workflow)) as WorkflowFile };
+            workflows.set(id, dto);
+            resolve({ workflow: dto });
+          };
+        }),
+    );
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add connected node from LLM" }));
+    const palette = screen.getByText("Node Palette").closest("aside");
+    expect(palette).not.toBeNull();
+    await user.click(within(palette!).getByRole("button", { name: /Code/ }));
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    fireEvent.click(saveButton);
+    fireEvent.click(saveButton);
+
+    expect(api.updateWorkflow).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
+
+    resolveUpdate?.();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeDisabled());
+  });
+
   it("opens header run history as a read-only debug view without replacing the live run", async () => {
     const user = userEvent.setup();
     const { api } = createMemoryWorkflowApi();

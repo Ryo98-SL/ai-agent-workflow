@@ -39,6 +39,7 @@ type WorkbenchLayoutProps = {
   workflow: WorkflowFile;
   workflowId?: string;
   dirty: boolean;
+  savingWorkflow: boolean;
   selectedNode?: WorkflowNode;
   selectedNodeId: string;
   debugState: DebugState;
@@ -96,6 +97,7 @@ export function WorkbenchLayout({
   workflow,
   workflowId,
   dirty,
+  savingWorkflow,
   selectedNode,
   selectedNodeId,
   debugState,
@@ -182,7 +184,7 @@ export function WorkbenchLayout({
           onSaveMeta={onSaveWorkflowMeta}
         />
         <div className="min-w-0 flex-1" />
-        <ProjectFileActions dirty={dirty} filePath={workflowId} onSave={onSaveWorkflow} />
+        <ProjectFileActions dirty={dirty} filePath={workflowId} saving={savingWorkflow} onSave={onSaveWorkflow} />
         <RunHistoryMenu workflow={workflow} workflowId={workflowId} debugState={debugState} nodeStates={nodeStates} />
         <ThemeMenu />
         <AuthMenu />

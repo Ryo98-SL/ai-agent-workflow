@@ -110,7 +110,10 @@ Design constraints:
   snapshot with the last opened/saved baseline. The snapshot ignores workflow
   metadata and transient workflow-level `modelProvider.apiKey`; title,
   description, and icon changes are saved from `WorkflowMetaEditor` instead of
-  activating the header Save button.
+  activating the header Save button. Manual header saves are guarded by a
+  synchronous pending ref plus UI state: the button shows loading feedback and
+  remains disabled until the persistence request settles, and failures surface
+  through the shared toast in addition to debug error state.
 - Workflow switcher rows use the saved workflow summary icon, not a fixed icon,
   and keep row metadata editing adjacent to row deletion inside the popover.
 - Host apps can pass `initialWorkflowId` to select a workflow from external
@@ -189,8 +192,11 @@ Design constraints:
   space.
 - Tool nodes are descriptor-driven. The palette drills into `ToolBrowser`, the
   inspector can rebind a tool, and `ToolParamForm` renders controls from
-  workflow-domain param specs. Built-in descriptor display copy is localized in
-  `localizedToolDescriptor` without changing server-facing identity.
+  workflow-domain param specs. Agent selected-tool rows show descriptor
+  descriptions inline and use a row-level details expansion for full description,
+  provider/tool identity, MCP auto-param notes, and built-in fixed params.
+  Built-in descriptor display copy is localized in `localizedToolDescriptor`
+  without changing server-facing identity.
 - Workflow node cards localize display-only fallbacks such as effective-model
   placeholders, Human Input defaults, branch empty states, handle aria labels,
   and Agent tool counts in the rendering layer. Stored node labels, tool ids,

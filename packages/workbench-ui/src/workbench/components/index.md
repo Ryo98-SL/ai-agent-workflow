@@ -27,8 +27,11 @@ Focused React components for the server-backed workbench shell.
   back to the host-provided home route and matches the workflow switcher icon
   footprint.
 - `ChatPanel.tsx` owns Chat Mode transcript, once-per-conversation Start input
-  gate, the `{{userInput.query}}` composer reminder, memory summary controls,
-  and in-chat Human Input resume forms.
+  gate, memory summary controls, and in-chat Human Input resume forms. The
+  composer's permanent hint box is replaced by a single right-aligned info-icon
+  `Tooltip` that carries both the `{{userInput.query}}` usage note and the
+  dynamic cross-turn memory status (on/off, derived from any LLM/Agent node's
+  `config.memory`), so the hints don't crowd the input.
 - `NewWorkflowDialog.tsx` renders the starter-template picker from
   workflow-domain `getWorkflowTemplates(locale)` and uses Product Locale as
   Template Locale for newly created workflow defaults.
@@ -50,6 +53,10 @@ Focused React components for the server-backed workbench shell.
   viewport width/height through Floating UI `size`, supports
   `matchReferenceWidth`, and supports `fillAvailableHeight` for panels that
   should stretch from the trigger down to the viewport edge.
+- `Tooltip.tsx` is the hover/focus `role="tooltip"` companion to `Popover`: a
+  Floating-UI surface for passive hints anchored to a small trigger (opens on
+  hover with a short delay or keyboard focus, dismisses on blur/Escape), so
+  non-interactive hints don't abuse the click-driven dialog `Popover`.
 - `InlineNodePalettePopover.tsx` anchors node creation to a ReactFlow handle and
   localizes the inline floating-panel title, close label, and connection
   description through the `workbench` Product Locale namespace.
@@ -142,7 +149,9 @@ Focused React components for the server-backed workbench shell.
   with unsaved changes. It offers "Save & switch" (persist then switch) and
   "Cancel", built from the shared `Button`. State (`pendingSwitch`/`switching`)
   lives in `AppWorkbench`.
-- `ProjectFileActions.tsx` contains the localized header Save workflow control.
+- `ProjectFileActions.tsx` contains the localized header Save workflow control,
+  including pending loading feedback and disabled state while a save request is
+  in flight.
 - `NodeOutputVariablesPanel.tsx` renders shared field/type descriptions for
   model-output node types with localized panel chrome.
 - `VariablePicker.tsx`, `VariablePickerButton.tsx`, `VariableTag.tsx`, and

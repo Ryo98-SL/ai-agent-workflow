@@ -125,6 +125,8 @@ function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWork
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [savingWorkflow, setSavingWorkflow] = useState(false);
+  const savingWorkflowRef = useRef(false);
   // Lifted so the active Debug Panel sub-route survives panel close/reopen.
   const [debugView, setDebugView] = useState<"input" | "run">("input");
   const debugViewRef = useRef<"input" | "run">("input");
@@ -686,13 +688,24 @@ function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWork
 
   const saveWorkflow = useCallback(
     async (mode: "save" | "saveAs", workflowToPersist: WorkflowFile = workflow) => {
+      if (savingWorkflowRef.current) {
+        return false;
+      }
+
+      savingWorkflowRef.current = true;
+      setSavingWorkflow(true);
       try {
         await persistWorkflow(mode, workflowToPersist);
         invalidateWorkflowList();
         return true;
       } catch (error) {
-        setDebugState({ status: "error", error: errorMessage(error) });
+        const message = errorMessage(error);
+        setDebugState({ status: "error", error: message });
+        toast.error(message);
         return false;
+      } finally {
+        savingWorkflowRef.current = false;
+        setSavingWorkflow(false);
       }
     },
     [errorMessage, invalidateWorkflowList, persistWorkflow, setDebugState, workflow],
@@ -905,6 +918,7 @@ function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWork
       workflow={workflow}
       workflowId={workflowId}
       dirty={dirty}
+      savingWorkflow={savingWorkflow}
       selectedNode={selectedNode}
       selectedNodeId={selectedNodeId}
       debugState={debugState}

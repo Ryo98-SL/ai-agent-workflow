@@ -11,6 +11,7 @@ export const webZhCn = {
       english: "English",
       chinese: "中文",
     },
+    github: "打开 GitHub 仓库",
     studio: {
       title: "工作台",
       description: "构建工作流、连接知识，并在需要深入调整时回到编辑器。",

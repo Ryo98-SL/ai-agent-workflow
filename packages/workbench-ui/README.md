@@ -24,7 +24,9 @@ Principles:
   the MiniMap.
 - Enable the header Save only when workflow graph/settings content differs from
   the last opened or saved baseline. Workflow title, description, and icon are
-  saved from their own metadata editor.
+  saved from their own metadata editor. While a header save request is pending,
+  keep the Save button disabled with loading feedback so repeated clicks cannot
+  submit duplicate persistence calls.
 - Keep workflow switching row-oriented: the popover list shows each workflow's
   saved icon and places metadata edit actions beside delete actions.
 - Keep the browser document title aligned with the active workflow metadata
@@ -78,7 +80,9 @@ Principles:
   the slash menu flips and resizes to stay inside the viewport.
 - Keep Tool nodes descriptor-driven: the Tool Browser selects a registry entry
   and the inspector renders params from the tool descriptor instead of hard-coded
-  per-tool forms.
+  per-tool forms. Agent tool rows keep descriptor descriptions visible in the
+  selected-tool list and expose a details expansion for full copy, identity, MCP
+  auto-param notes, and built-in fixed params.
 - Keep Product Locale copy in the package-owned `workbench` namespace. Display
   localization for Tool descriptors is applied in the rendering layer and does
   not mutate stored tool identity or workflow config. Node Inspector forms,

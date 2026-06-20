@@ -37,6 +37,9 @@ For production API deploys, run Prisma migrations with
   Chat Completions、Anthropic Messages 或 Ollama HTTP 协议适配层。
 - 不能只是写代码，还必须思考 UX：主动覆盖加载、流式、空、错误等中间状态，
   避免界面出现空白、卡死或无任何反馈；在交付前从用户视角检查交互是否顺畅。
+- 触发接口调用的按钮必须覆盖 pending 和 error 反馈：pending 期间按钮要 disabled
+  防止重复提交，并显示加载中状态；失败时要有用户可见的 floating message / toast
+  等反馈，不能只在控制台或隐藏状态里记录错误。
 
 ## Packages And Apps
 

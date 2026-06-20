@@ -18,10 +18,11 @@ Node-specific configuration forms for the selection inspector.
   model, endpoint URL, temperature, and max tokens.
 - `AgentInspector.tsx` edits an Agent node: Agentic Strategy picker (functionCalling
   / react, with a "not implemented" note on react), the shared model field, an inline
-  tool list (multi-select Tool Browser, per built-in tool an optional author-fixed
-  `ToolParamForm`, MCP tools shown model-filled), variable-aware Instruction + Query
-  editors (Query required), a Maximum Iterations slider (1–50), a memory toggle, and
-  the output variables panel.
+  tool list (multi-select Tool Browser, two-line descriptor previews, row-level
+  details expansion, per built-in tool an optional author-fixed `ToolParamForm`,
+  MCP tools shown model-filled), variable-aware Instruction + Query editors (Query
+  required), a Maximum Iterations slider (1–50), a memory toggle, and the output
+  variables panel.
 - `ToolInspector.tsx` lets users rebind a Tool node through the Tool Browser and
   renders descriptor-defined params through `ToolParamForm`.
 - `IfElseInspector.tsx` edits case branches, condition combinators, operators,

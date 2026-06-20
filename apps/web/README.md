@@ -21,7 +21,8 @@ design-only galleries live in `src/pages/design/`.
 The homepage follows the shared workbench light/dark theme tokens for its shell,
 header-below canvas, cards, search field, header tabs, and primary accents. Its
 header places the Product Locale switcher beside the shared theme switcher and
-account menu; the language menu uses the shared workbench `Popover`.
+account menu; the language menu uses the shared workbench `Popover`. A fixed
+round GitHub repository shortcut sits at the lower-left corner of the homepage.
 It also mounts the shared local-workflow import prompt so workflows created
 while anonymous can be imported from the homepage after sign-in.
 Studio workflow cards read each workflow's saved metadata icon, format edited

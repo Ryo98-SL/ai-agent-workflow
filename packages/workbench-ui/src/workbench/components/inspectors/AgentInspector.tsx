@@ -283,56 +283,84 @@ function AgentToolRow({
   const Icon = resolveToolIcon(descriptor?.icon);
   const isMcp = tool.provider === "mcp";
   const hasConfigurableParams = !isMcp && (descriptor?.params.length ?? 0) > 0;
+  const hasDetails = Boolean(descriptor?.description) || hasConfigurableParams || isMcp;
+  const providerLabel = isMcp ? `MCP · ${tool.providerId}` : `${tool.provider} · ${tool.toolName}`;
 
   return (
     <div className="rounded-md border border-border bg-card">
-      <div className="flex items-center gap-2 p-2">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-amber-700 text-white">
+      <div className="flex items-start gap-2 p-2">
+        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-amber-700 text-white">
           <Icon size={14} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-foreground">{descriptor?.label ?? tool.toolName}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {isMcp ? `MCP · ${tool.providerId}` : `${tool.provider} · ${tool.toolName}`}
-          </p>
+          {descriptor?.description ? (
+            <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground">{descriptor.description}</p>
+          ) : (
+            <p className="truncate text-xs text-muted-foreground">{providerLabel}</p>
+          )}
         </div>
-        {hasConfigurableParams && (
+        {hasDetails && (
           <button
             type="button"
             onClick={() => setExpanded((value) => !value)}
-            aria-label={t("inspectors.agent.configureParams", { defaultValue: "Configure params" })}
+            aria-label={
+              expanded
+                ? t("inspectors.agent.hideToolDetails", { defaultValue: "Hide tool details" })
+                : t("inspectors.agent.showToolDetails", { defaultValue: "Show tool details" })
+            }
             aria-expanded={expanded}
-            className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="grid size-7 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            {expanded ? <ChevronDown size={14} aria-hidden /> : <SlidersHorizontal size={14} aria-hidden />}
+            {expanded ? <ChevronDown size={14} aria-hidden /> : <Info size={14} aria-hidden />}
           </button>
         )}
         <button
           type="button"
           onClick={onRemove}
           aria-label={t("inspectors.agent.removeTool", { defaultValue: "Remove tool" })}
-          className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+          className="grid size-7 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
         >
           <Trash2 size={14} aria-hidden />
         </button>
       </div>
-      {isMcp && (
-        <p className="flex items-center gap-1.5 border-t border-border px-2 py-1.5 text-[11px] text-muted-foreground">
-          <Info size={11} className="shrink-0" aria-hidden />
-          {t("inspectors.agent.mcpParamsAuto", {
-            defaultValue: "Params are filled automatically by the Agent when it calls the tool.",
-          })}
-        </p>
-      )}
-      {expanded && hasConfigurableParams && descriptor && (
+      {expanded && hasDetails && (
         <div className="space-y-3 border-t border-border p-3">
-          <p className="flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
-            <Info size={11} className="mt-0.5 shrink-0" aria-hidden />
-            {t("inspectors.agent.fixedParamsHint", {
-              defaultValue: "Filled params are fixed; empty params are filled automatically by the Agent.",
-            })}
-          </p>
-          <ToolParamForm nodeId={nodeId} descriptor={descriptor} params={tool.params} onChange={onParamsChange} />
+          {descriptor?.description && (
+            <div>
+              <p className="text-[11px] font-medium uppercase text-muted-foreground">
+                {t("inspectors.agent.description", { defaultValue: "Description" })}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-foreground">{descriptor.description}</p>
+            </div>
+          )}
+          <div>
+            <p className="text-[11px] font-medium uppercase text-muted-foreground">
+              {t("inspectors.agent.toolIdentity", { defaultValue: "Tool" })}
+            </p>
+            <p className="mt-1 break-all rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+              {providerLabel}
+            </p>
+          </div>
+          {isMcp && (
+            <p className="flex items-start gap-1.5 rounded-md bg-muted px-2 py-1.5 text-[11px] leading-5 text-muted-foreground">
+              <Info size={11} className="mt-0.5 shrink-0" aria-hidden />
+              {t("inspectors.agent.mcpParamsAuto", {
+                defaultValue: "Params are filled automatically by the Agent when it calls the tool.",
+              })}
+            </p>
+          )}
+          {hasConfigurableParams && descriptor && (
+            <div className="space-y-3">
+              <p className="flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
+                <SlidersHorizontal size={11} className="mt-0.5 shrink-0" aria-hidden />
+                {t("inspectors.agent.fixedParamsHint", {
+                  defaultValue: "Filled params are fixed; empty params are filled automatically by the Agent.",
+                })}
+              </p>
+              <ToolParamForm nodeId={nodeId} descriptor={descriptor} params={tool.params} onChange={onParamsChange} />
+            </div>
+          )}
         </div>
       )}
     </div>

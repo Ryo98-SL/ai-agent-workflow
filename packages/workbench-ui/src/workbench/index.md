@@ -50,9 +50,13 @@ overrides, global model settings, selection, panels, and run state are not part
 of graph history. Header Save activation is derived by comparing the current
 stable workflow content snapshot with the last opened/saved baseline, so
 undo/redo can return the button to the correct enabled state without coupling
-dirty state to history stack length. While that dirty state holds, a
-`beforeunload` guard warns before the tab closes or navigates away so unsaved
-work is not lost. Workflow title, description, and icon edits
+dirty state to history stack length. Header saves set a pending state and
+synchronous guard before calling the injected workflow API, so the Save button
+shows loading feedback, disables immediately, and cannot issue duplicate save
+requests; save failures also emit the shared toast while preserving debug error
+state. While that dirty state holds, a `beforeunload` guard warns before the tab
+closes or navigates away so unsaved work is not lost. Workflow title,
+description, and icon edits
 stay local to the metadata editor until its own Save button persists them.
 Header run history opens a portal-mounted right drawer
 with read-only debug output beside a date-first run list; run deletion uses an

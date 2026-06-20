@@ -51,7 +51,13 @@ a reviewer form and resume from the selected action/text value. Code nodes save
 placeholder state until a runtime implementation exists.
 
 Compiled graphs use a LangGraph checkpointer and execute through `.stream()`
-with `updates`, `messages`, and `values`. `executeWorkflowRuntime` collects
+with `updates`, `messages`, and `values`. Memory-enabled LLM/Agent nodes commit
+their `[user, assistant]` turn into the shared `messages` channel only on success;
+because a thrown node rolls back its superstep, a failed chat turn would otherwise
+leave no trace. So when a chat run with conversation memory fails, the failure path
+persists just that turn's user message into the thread (via `updateState`, unless a
+memory node already committed it earlier in the run) so a follow-up message keeps
+the prior context. `executeWorkflowRuntime` collects
 normalized stream events and can call `RuntimeExecutorOptions.onStreamEvent` for
 each chunk. Tests can inject `fetch`, `checkpointer`, `threadId`, `knowledge`,
 `embeddings`, `emailSender`, `mcpServers`, `agentModelFactory`, and resume values

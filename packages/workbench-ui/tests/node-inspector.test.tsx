@@ -1,7 +1,7 @@
 import * as React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createDefaultWorkflow, createNode } from "@ai-agent-workflow/workflow-domain";
+import { createAgentToolsDemoWorkflow, createDefaultWorkflow, createNode } from "@ai-agent-workflow/workflow-domain";
 import type { WorkflowRun } from "@ai-agent-workflow/api-contracts";
 import { describe, expect, it, vi } from "vitest";
 import { WorkbenchDataProvider } from "../src/data/WorkbenchDataProvider";
@@ -111,6 +111,37 @@ describe("NodeInspector", () => {
     await waitFor(() => {
       expect(updateNode.mock.calls.length).toBeGreaterThan(1);
     });
+  });
+
+  it("expands Agent tool rows to show full tool details", async () => {
+    const user = userEvent.setup();
+    const workflow = createAgentToolsDemoWorkflow();
+    const selectedNode = workflow.graph.nodes.find((node) => node.type === "agent");
+    expect(selectedNode).toBeDefined();
+
+    render(
+      <ThemeProvider>
+        <WorkbenchDataProvider workflowApi={createWorkflowApiStub()} apiBaseUrl="http://127.0.0.1:8788">
+          <NodeInspector
+            workflow={workflow}
+            workflowId="workflow-1"
+            selectedNode={selectedNode}
+            debugState={{ status: "idle" }}
+            nodeStates={new Map()}
+            updateNode={vi.fn()}
+          />
+        </WorkbenchDataProvider>
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByText("Return the current date and time in a timezone.")).toBeInTheDocument();
+    expect(screen.queryByText("builtin · currentTime")).not.toBeInTheDocument();
+
+    await user.click(screen.getAllByRole("button", { name: "Show tool details" })[0]);
+
+    expect(screen.getByText("Description")).toBeInTheDocument();
+    expect(screen.getByText("builtin · currentTime")).toBeInTheDocument();
+    expect(screen.getByText("Filled params are fixed; empty params are filled automatically by the Agent.")).toBeInTheDocument();
   });
 
   it("renders Knowledge node output data (result, context, query) in run history", async () => {

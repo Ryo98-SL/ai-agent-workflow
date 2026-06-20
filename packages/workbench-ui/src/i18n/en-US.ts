@@ -71,6 +71,15 @@ export const workbenchEnUs = {
     workflowMode: "Run",
     chatMode: "Chat",
   },
+  chatPanel: {
+    hintAriaLabel: "Input and memory hints",
+    queryHintPrefix: "Composer messages are sent as",
+    queryHintSuffix:
+      "into the workflow — reference it in the prompt of any LLM / Agent node that should see the user message.",
+    memoryOn: "Cross-turn memory is on · the assistant draws on recent conversation history.",
+    memoryOnSummary: "Older turns past the threshold are compressed into a summary.",
+    memoryOff: "Cross-turn memory is off · to keep context across turns, enable Memory on an LLM / Agent node.",
+  },
   modelSettings: {
     model: "Model",
     chooseModel: "Choose model provider and model",
@@ -126,6 +135,7 @@ export const workbenchEnUs = {
   projectFileActions: {
     saveWorkflow: "Save workflow",
     save: "Save",
+    saving: "Saving...",
   },
   workflowSwitcher: {
     switchWorkflow: "Switch workflow",
@@ -230,6 +240,10 @@ export const workbenchEnUs = {
       queryPlaceholder: "Current user input, defaults to {{defaultQuery}}, type / to reference variables",
       queryRequired: "Query is required.",
       configureParams: "Configure params",
+      showToolDetails: "Show tool details",
+      hideToolDetails: "Hide tool details",
+      description: "Description",
+      toolIdentity: "Tool",
       removeTool: "Remove tool",
       mcpParamsAuto: "Params are filled automatically by the Agent when it calls the tool.",
       fixedParamsHint: "Filled params are fixed; empty params are filled automatically by the Agent.",
