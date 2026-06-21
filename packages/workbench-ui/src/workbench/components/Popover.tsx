@@ -39,6 +39,12 @@ type PopoverProps = {
   availableHeightPadding?: number;
   preserveNestedPopoverPress?: boolean;
   referenceElement?: HTMLElement | null;
+  /**
+   * Stacking context override (inline style, so it always beats the default
+   * `z-[100]` class). Needed when the popover is opened from inside a higher
+   * layer such as a Dialog (overlay/content sit at z-210/z-211).
+   */
+  zIndex?: number;
 };
 
 const VIEWPORT_PADDING = 12;
@@ -57,6 +63,7 @@ export function Popover({
   availableHeightPadding = 12,
   preserveNestedPopoverPress = true,
   referenceElement,
+  zIndex,
 }: PopoverProps) {
   const generatedId = useId();
   const contentId = id || generatedId;
@@ -127,9 +134,12 @@ export function Popover({
         <FloatingPortal>
           <div
             {...getFloatingProps({
-              className: ["z-[100]", className].filter(Boolean).join(" "),
+              // `pointer-events-auto` keeps the content clickable when an ancestor
+              // (e.g. a Radix modal Dialog sets `pointer-events: none` on <body>)
+              // would otherwise let clicks fall through to the layer below.
+              className: ["pointer-events-auto z-[100]", className].filter(Boolean).join(" "),
               id: contentId,
-              style: floatingStyles,
+              style: zIndex != null ? { ...floatingStyles, zIndex } : floatingStyles,
             })}
             ref={setFloatingElement}
             data-workbench-popover

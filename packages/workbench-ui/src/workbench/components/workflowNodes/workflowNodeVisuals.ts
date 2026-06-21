@@ -1,16 +1,24 @@
 import {
   Bot,
+  Boxes,
   Braces,
   Brain,
   Clock,
+  Cloud,
   Database,
   Flag,
   GitBranch,
+  Globe,
   Mail,
   Play,
+  Plug,
+  Server,
+  Sparkles,
+  Terminal,
   TextCursorInput,
   UserCheck,
   Wrench,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import type { WorkflowNodeType } from "@ai-agent-workflow/workflow-domain";
@@ -53,8 +61,38 @@ export const toolIcons: Record<string, LucideIcon> = {
   clock: Clock,
   mail: Mail,
   wrench: Wrench,
+  // MCP server / generic provider icons — shared so the picker, the server list,
+  // and tool descriptors all resolve the same keys (see MCP_SERVER_ICON_KEYS).
+  plug: Plug,
+  server: Server,
+  globe: Globe,
+  cloud: Cloud,
+  database: Database,
+  bot: Bot,
+  zap: Zap,
+  sparkles: Sparkles,
+  terminal: Terminal,
+  boxes: Boxes,
 };
 
 export function resolveToolIcon(key?: string): LucideIcon {
   return (key && toolIcons[key]) || Wrench;
 }
+
+/** Curated, ordered icon keys offered when picking an MCP server icon. */
+export const MCP_SERVER_ICON_KEYS = [
+  "plug",
+  "server",
+  "globe",
+  "cloud",
+  "database",
+  "bot",
+  "zap",
+  "sparkles",
+  "terminal",
+  "boxes",
+  "wrench",
+  "mail",
+] as const;
+
+export const DEFAULT_MCP_SERVER_ICON = "plug";

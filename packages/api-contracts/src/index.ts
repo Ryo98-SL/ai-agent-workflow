@@ -567,7 +567,11 @@ export const ListMcpServersResponseSchema = z.object({
 });
 
 export const CreateMcpServerRequestSchema = z.object({
-  identifier: McpServerIdentifierSchema,
+  /**
+   * Optional: when omitted, the server derives a unique slug from `name`. The
+   * client no longer surfaces this field — it is auto-generated server-side.
+   */
+  identifier: McpServerIdentifierSchema.optional(),
   name: z.string().min(1),
   icon: z.string().optional(),
   url: z.string().url(),

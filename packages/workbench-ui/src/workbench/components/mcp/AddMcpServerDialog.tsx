@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { AlertTriangle, Loader2, Plus, Plug, Trash2 } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { AlertTriangle, Check, ChevronDown, Loader2, Plus, Trash2 } from "lucide-react";
 import type { McpServerDto } from "@ai-agent-workflow/api-contracts";
 import {
   Dialog,
@@ -12,7 +12,13 @@ import {
 import { Input } from "@workbench/components/ui/input";
 import { useCreateMcpServer, useUpdateMcpServer } from "../../../data/useMcpServers";
 import { Button } from "../Button";
-import { Field, errorMessage } from "../knowledge/shared";
+import { Popover } from "../Popover";
+import {
+  DEFAULT_MCP_SERVER_ICON,
+  MCP_SERVER_ICON_KEYS,
+  resolveToolIcon,
+} from "../workflowNodes/workflowNodeVisuals";
+import { Field, useApiErrorMessage } from "../knowledge/shared";
 
 type HeaderRow = { name: string; value: string };
 
@@ -24,8 +30,6 @@ type AddMcpServerDialogProps = {
   onSaved?: (server: McpServerDto) => void;
 };
 
-const IDENTIFIER_PATTERN = /^[a-z0-9_-]+$/;
-
 /**
  * Add / edit an HTTP MCP server (ADR 0004). Renders only the **Headers** auth tab —
  * Authentication (OAuth) and Configurations are reserved and intentionally omitted.
@@ -34,22 +38,21 @@ const IDENTIFIER_PATTERN = /^[a-z0-9_-]+$/;
  */
 export function AddMcpServerDialog({ open, onOpenChange, server, onSaved }: AddMcpServerDialogProps) {
   const isEdit = Boolean(server);
+  const resolveErrorMessage = useApiErrorMessage();
   const createServer = useCreateMcpServer();
   const updateServer = useUpdateMcpServer();
   const pending = createServer.isPending || updateServer.isPending;
 
-  const [identifier, setIdentifier] = useState("");
   const [name, setName] = useState("");
-  const [icon, setIcon] = useState("plug");
+  const [icon, setIcon] = useState(DEFAULT_MCP_SERVER_ICON);
   const [url, setUrl] = useState("");
   const [headers, setHeaders] = useState<HeaderRow[]>([]);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setIdentifier(server?.identifier ?? "");
     setName(server?.name ?? "");
-    setIcon(server?.icon ?? "plug");
+    setIcon(server?.icon || DEFAULT_MCP_SERVER_ICON);
     setUrl(server?.url ?? "");
     setHeaders([]);
     setSnapshotError(null);
@@ -57,17 +60,9 @@ export function AddMcpServerDialog({ open, onOpenChange, server, onSaved }: AddM
     updateServer.reset();
   }, [open, server]);
 
-  const identifierError = useMemo(() => {
-    if (isEdit || identifier === "") return null;
-    if (identifier.length > 24) return "标识符不能超过 24 个字符。";
-    if (!IDENTIFIER_PATTERN.test(identifier)) return "仅限小写字母、数字、下划线或连字符。";
-    return null;
-  }, [identifier, isEdit]);
-
   const canSubmit =
     name.trim().length > 0 &&
     url.trim().length > 0 &&
-    (isEdit || (identifier.trim().length > 0 && !identifierError)) &&
     headers.every((row) => row.name.trim() && row.value) &&
     !pending;
 
@@ -96,8 +91,9 @@ export function AddMcpServerDialog({ open, onOpenChange, server, onSaved }: AddM
         { onSuccess: ({ server: saved }) => handleResult(saved) },
       );
     } else {
+      // No `identifier`: the server derives a unique one from the name.
       createServer.mutate(
-        { identifier: identifier.trim(), name: name.trim(), icon, url: url.trim(), headers: cleanHeaders },
+        { name: name.trim(), icon, url: url.trim(), headers: cleanHeaders },
         { onSuccess: ({ server: saved }) => handleResult(saved) },
       );
     }
@@ -110,6 +106,12 @@ export function AddMcpServerDialog({ open, onOpenChange, server, onSaved }: AddM
       <DialogContent
         overlayClassName="z-[210]"
         className="z-[211] flex max-h-[88vh] w-full max-w-lg flex-col gap-0 overflow-hidden border-2 bg-card p-0 shadow-2xl shadow-black/40"
+        onInteractOutside={(event) => {
+          // The icon picker portals to <body> (outside the dialog DOM). Don't let
+          // an interaction inside it count as "outside" and close the dialog.
+          const target = event.detail.originalEvent.target as Element | null;
+          if (target?.closest("[data-workbench-popover]")) event.preventDefault();
+        }}
       >
         <DialogHeader className="shrink-0 border-b border-border px-5 py-4">
           <DialogTitle>{isEdit ? `编辑 ${server?.name}` : "添加 MCP 服务器 (HTTP)"}</DialogTitle>
@@ -130,42 +132,12 @@ export function AddMcpServerDialog({ open, onOpenChange, server, onSaved }: AddM
 
             <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3">
               <Field label="图标" htmlFor="mcp-icon">
-                <div className="flex items-center gap-2">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-amber-700 text-white">
-                    <Plug size={16} aria-hidden />
-                  </span>
-                  <Input
-                    id="mcp-icon"
-                    value={icon}
-                    onChange={(event) => setIcon(event.target.value)}
-                    placeholder="plug"
-                    className="w-24"
-                  />
-                </div>
+                <IconPicker value={icon} onChange={setIcon} />
               </Field>
               <Field label="名称" htmlFor="mcp-name">
                 <Input id="mcp-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="天气服务" />
               </Field>
             </div>
-
-            <Field label="服务器标识符" htmlFor="mcp-identifier">
-              <Input
-                id="mcp-identifier"
-                value={identifier}
-                disabled={isEdit}
-                onChange={(event) => setIdentifier(event.target.value.toLowerCase())}
-                placeholder="weather"
-                aria-invalid={Boolean(identifierError)}
-                maxLength={24}
-              />
-              <span className="mt-1 block text-xs text-muted-foreground">
-                {identifierError ? (
-                  <span className="text-destructive">{identifierError}</span>
-                ) : (
-                  "唯一标识，工具名将以此为前缀。创建后不可更改。"
-                )}
-              </span>
-            </Field>
 
             <HeadersSection
               isEdit={isEdit}
@@ -180,7 +152,7 @@ export function AddMcpServerDialog({ open, onOpenChange, server, onSaved }: AddM
                 <span>连接失败：{snapshotError}。服务器已保存，请检查 URL 或请求头后刷新。</span>
               </div>
             )}
-            {mutationError && <p className="text-xs text-destructive">{errorMessage(mutationError)}</p>}
+            {mutationError && <p className="text-xs text-destructive">{resolveErrorMessage(mutationError)}</p>}
           </div>
 
           <DialogFooter className="shrink-0 border-t border-border p-4">
@@ -195,6 +167,73 @@ export function AddMcpServerDialog({ open, onOpenChange, server, onSaved }: AddM
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Clickable icon swatch → popover grid. Replaces the old free-text icon name
+ * input (which never affected the rendered glyph). Keys resolve through the
+ * shared `resolveToolIcon`, so the picked icon matches the server list view.
+ */
+function IconPicker({ value, onChange }: { value: string; onChange: (icon: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const Current = resolveToolIcon(value);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      placement="bottom-start"
+      zIndex={220}
+      renderTrigger={({ ref, props }) => (
+        <button
+          {...props}
+          ref={ref}
+          id="mcp-icon"
+          type="button"
+          aria-label="选择图标"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          className="flex items-center gap-1 rounded-md border border-border p-1 pr-1.5 transition-colors hover:bg-accent"
+        >
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-amber-700 text-white">
+            <Current size={16} aria-hidden />
+          </span>
+          <ChevronDown size={14} className="text-muted-foreground" aria-hidden />
+        </button>
+      )}
+    >
+      <div className="w-[232px] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-xl">
+        <div className="grid grid-cols-6 gap-1">
+          {MCP_SERVER_ICON_KEYS.map((key) => {
+            const Glyph = resolveToolIcon(key);
+            const selected = value === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  onChange(key);
+                  setOpen(false);
+                }}
+                aria-label={`使用图标 ${key}`}
+                aria-pressed={selected}
+                title={key}
+                className={`relative flex aspect-square items-center justify-center rounded-md border ${
+                  selected
+                    ? "border-brand bg-brand/15 text-brand"
+                    : "border-transparent text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                <Glyph size={16} aria-hidden />
+                {selected && <Check size={10} className="absolute right-0.5 top-0.5" aria-hidden />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </Popover>
   );
 }
 

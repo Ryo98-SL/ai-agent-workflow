@@ -163,6 +163,27 @@ describe("MCP routes — auth + identifier validation", () => {
     expect((await createServer(app)).status).toBe(201);
     expect((await createServer(app)).status).toBe(409);
   });
+
+  it("auto-generates a unique slug identifier from the name when omitted", async () => {
+    const app = createApp({ userId: "user-1", repository: createInMemoryMcpRepository() });
+    const body = { name: "Weather Service", url: "https://mcp.example.com/mcp", headers: [] };
+
+    const first = await createServer(app, body);
+    expect(first.status).toBe(201);
+    expect(((await first.json()) as { server: McpServerDto }).server.identifier).toBe("weather-service");
+
+    // A second server with the same name gets a numeric suffix instead of a 409.
+    const second = await createServer(app, body);
+    expect(second.status).toBe(201);
+    expect(((await second.json()) as { server: McpServerDto }).server.identifier).toBe("weather-service-2");
+  });
+
+  it("falls back to 'mcp' when the name has no slug-able characters", async () => {
+    const app = createApp({ userId: "user-1", repository: createInMemoryMcpRepository() });
+    const response = await createServer(app, { name: "天气服务", url: "https://mcp.example.com/mcp", headers: [] });
+    expect(response.status).toBe(201);
+    expect(((await response.json()) as { server: McpServerDto }).server.identifier).toBe("mcp");
+  });
 });
 
 describe("MCP routes — snapshot + header secrecy", () => {

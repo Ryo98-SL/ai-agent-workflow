@@ -81,6 +81,38 @@ function headersToRecord(headers: McpServerHeaderInput[]): Record<string, string
   return record;
 }
 
+/**
+ * Slugify a name into a valid identifier seed: lowercase, non-`[a-z0-9]` runs
+ * collapsed to `-`, trimmed, capped to leave room for a numeric suffix. Falls
+ * back to `"mcp"` when the name has no usable characters (e.g. CJK-only names).
+ */
+function slugifyIdentifier(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 20);
+  return slug || "mcp";
+}
+
+/**
+ * Derive a per-user-unique identifier from `name`. Appends `-2`, `-3`, … on
+ * collision and treats the reserved built-in identifier as taken.
+ */
+async function generateUniqueIdentifier(
+  repository: McpRepository,
+  userId: string,
+  name: string,
+): Promise<string> {
+  const base = slugifyIdentifier(name);
+  for (let attempt = 1; ; attempt += 1) {
+    const candidate = attempt === 1 ? base : `${base}-${attempt}`.slice(0, 24);
+    if (candidate === BUILTIN_MCP_IDENTIFIER) continue;
+    const existing = await repository.findByIdentifier(userId, candidate);
+    if (!existing) return candidate;
+  }
+}
+
 /** Runs the snapshot, mapping a connection failure to a stored `lastError`. */
 async function trySnapshot(
   snapshot: (server: McpServerConnection) => Promise<ToolDescriptor[]>,
@@ -119,21 +151,27 @@ export function createMcpRoutes({ repository, resolveUserId, snapshot = snapshot
       return c.json(parsed.body, parsed.status);
     }
 
-    if (parsed.data.identifier === BUILTIN_MCP_IDENTIFIER) {
-      return c.json(
-        createApiErrorResponse("conflict", `"${BUILTIN_MCP_IDENTIFIER}" is a reserved built-in identifier.`),
-        409,
-      );
-    }
-
-    const duplicate = await repository.findByIdentifier(userId, parsed.data.identifier);
-    if (duplicate) {
-      return c.json(createApiErrorResponse("conflict", `An MCP server "${parsed.data.identifier}" already exists.`), 409);
+    let identifier = parsed.data.identifier;
+    if (identifier) {
+      // Explicit identifier (legacy/API callers): keep the original validations.
+      if (identifier === BUILTIN_MCP_IDENTIFIER) {
+        return c.json(
+          createApiErrorResponse("conflict", `"${BUILTIN_MCP_IDENTIFIER}" is a reserved built-in identifier.`),
+          409,
+        );
+      }
+      const duplicate = await repository.findByIdentifier(userId, identifier);
+      if (duplicate) {
+        return c.json(createApiErrorResponse("conflict", `An MCP server "${identifier}" already exists.`), 409);
+      }
+    } else {
+      // Auto-generate a unique slug from the name (the client hides this field).
+      identifier = await generateUniqueIdentifier(repository, userId, parsed.data.name);
     }
 
     const headers = headersToRecord(parsed.data.headers);
     const connection: McpServerConnection = {
-      identifier: parsed.data.identifier,
+      identifier,
       name: parsed.data.name,
       icon: parsed.data.icon ?? "",
       url: parsed.data.url,
@@ -142,7 +180,7 @@ export function createMcpRoutes({ repository, resolveUserId, snapshot = snapshot
     const snapshotResult = await trySnapshot(snapshot, connection);
 
     const server = await repository.create(userId, {
-      identifier: parsed.data.identifier,
+      identifier,
       name: parsed.data.name,
       icon: parsed.data.icon ?? null,
       url: parsed.data.url,
