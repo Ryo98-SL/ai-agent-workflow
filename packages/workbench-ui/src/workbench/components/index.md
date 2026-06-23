@@ -137,6 +137,9 @@ Focused React components for the server-backed workbench shell.
   `credits_exhausted` error once spent. The modal uses the shared no-animation
   dialog and product `Button` chrome; the key popover dismisses when focus/click
   moves elsewhere in the model selector. Ollama groups omit it.
+- Credits-related run failures surface a toast from `AppWorkbench` with an
+  action that opens the global model settings panel, where `ProviderApiKeyControl`
+  exposes the AI credits application path or API-key fallback.
 - `WorkflowSwitcher.tsx` shows each workflow's saved icon in the popover list
   and keeps row-level edit/delete actions together on the right edge. It always
   closes the popover and delegates the switch to the parent via `onSwitch(id,

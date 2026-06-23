@@ -24,7 +24,7 @@ import {
   type WorkflowNode,
   type WorkflowNodeType,
 } from "@ai-agent-workflow/workflow-domain";
-import type { WorkflowDto } from "@ai-agent-workflow/api-contracts";
+import type { ApiErrorCode, ApiErrorResponse, WorkflowDto } from "@ai-agent-workflow/api-contracts";
 import type { RunInput } from "@ai-agent-workflow/api-contracts";
 import { WorkbenchLayout } from "./components/WorkbenchLayout";
 import { WorkflowGraphProvider } from "./components/WorkflowGraphContext";
@@ -48,6 +48,23 @@ import { workflowDirtySnapshot } from "./workflowDirtySnapshot";
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8788";
 const DRAFT_WORKFLOW_SESSION_KEY = "__draft__";
+const CREDIT_RUN_ERROR_CODES = new Set<ApiErrorCode>(["credits_required", "credits_exhausted", "daily_limit_exceeded"]);
+
+function apiErrorCode(error: unknown): ApiErrorCode | undefined {
+  if (error && typeof error === "object" && "apiError" in error) {
+    return (error as { apiError?: ApiErrorResponse }).apiError?.error.code;
+  }
+  if (error && typeof error === "object" && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === "string" && CREDIT_RUN_ERROR_CODES.has(code as ApiErrorCode) ? (code as ApiErrorCode) : undefined;
+  }
+  return undefined;
+}
+
+function isCreditRunError(error: unknown): boolean {
+  const code = apiErrorCode(error);
+  return code ? CREDIT_RUN_ERROR_CODES.has(code) : false;
+}
 
 /**
  * Binds a freshly-created Tool node to the tool chosen in the Tool Browser
@@ -101,9 +118,26 @@ function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWork
   const [workflow, setWorkflow] = useState<WorkflowFile>(() => createDefaultWorkflow());
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const authSourceKey = sessionData?.user?.id ? `user:${sessionData.user.id}` : "anonymous";
   const bootstrapKey = `${authSourceKey}:${workflowRefreshNonce}`;
   const loadedBootstrapRef = useRef<{ key: string; workflowApi: typeof workflowApi } | null>(null);
+  const handleRunError = useCallback(
+    (error: unknown) => {
+      if (!isCreditRunError(error)) {
+        return;
+      }
+
+      toast.error(t("providerKeys.creditsRunFailed"), {
+        description: t("providerKeys.creditsRunFailedDescription"),
+        action: {
+          label: t("providerKeys.openModelSettings"),
+          onClick: () => setSettingsOpen(true),
+        },
+      });
+    },
+    [t],
+  );
   const {
     nodeStates,
     debugState,
@@ -118,11 +152,10 @@ function WorkbenchApp({ showDevModelProviders = false, initialWorkflowId, onWork
     prepareWorkflowSessionSwitch,
     moveActiveWorkflowSession,
     resetWorkflowSession,
-  } = useWorkflowExecution(workflowApi);
+  } = useWorkflowExecution(workflowApi, { onRunError: handleRunError });
   const [workflowId, setWorkflowId] = useState<string | undefined>();
   const [savedWorkflowSnapshot, setSavedWorkflowSnapshot] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [savingWorkflow, setSavingWorkflow] = useState(false);

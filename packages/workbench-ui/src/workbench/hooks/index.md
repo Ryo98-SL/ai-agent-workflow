@@ -8,7 +8,9 @@ Stateful workbench hooks that keep runtime concerns outside visual components.
 
 - `useWorkflowExecution.ts` starts workflow runs, follows the run event stream,
   resumes Human Input pauses, manages Chat Mode conversation/transcript state,
-  and exposes node execution state for the canvas, debug panel, and chat panel.
+  exposes node execution state for the canvas, debug panel, and chat panel, and
+  reports run failures back to the workbench shell for user-facing toasts such
+  as the AI credits application prompt.
 - `useWorkflowGraphHistory.ts` owns local undo/redo stacks for canvas structure
   operations without snapshotting node inspector configuration or global model
   settings.

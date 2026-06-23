@@ -71,6 +71,9 @@ Principles:
   rather than an older server copy. When development providers are hidden, run
   requests also replace legacy Ollama defaults and node overrides with the
   public DeepSeek fallback shown by the UI.
+- When a run cannot start because AI credits need attention, show a toast with
+  an action that opens model settings so users can apply for credits or switch
+  to their own API key.
 - Keep Debug Sessions scoped to workflows: switching workflows restores that
   workflow's run output and Chat Mode transcript, or shows an empty debug panel
   when the target workflow has not run in the current browser session. Runs keep

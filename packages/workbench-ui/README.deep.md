@@ -169,6 +169,11 @@ Design constraints:
   conversation; "New conversation" resets transcript and memory thread for the
   active workflow. Summary-buffer settings live in workflow settings and are
   edited from the Chat Panel.
+- Credits-related run failures (`credits_required`,
+  `credits_exhausted`, `daily_limit_exceeded`) keep the debug/chat error state
+  and also raise a shared toast from `AppWorkbench` with an action that opens the
+  global model settings panel. The application path stays in
+  `ProviderApiKeyControl` inside `ModelSettingsPanel`.
 - Human Input nodes pause runs with a normalized interrupt. `resumeRun` keeps
   completed node state visible, posts the selected action/text, and subscribes
   to a fresh SSE leg on the same run.

@@ -114,6 +114,109 @@ describe("MVP smoke loop", () => {
     expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
   });
 
+  it("prompts users to open model settings when AI credits are required to run", async () => {
+    const user = userEvent.setup();
+    const { api } = createMemoryWorkflowApi();
+    const creditsError = Object.assign(new Error("AI credits are required to continue."), {
+      apiError: {
+        error: {
+          code: "credits_required" as const,
+          message: "AI credits are required to continue.",
+        },
+      },
+    });
+    vi.mocked(api.createRun).mockRejectedValueOnce(creditsError);
+
+    render(<AppWorkbench workflowApi={api} />);
+    expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Run workflow" }));
+    await user.click(screen.getAllByRole("button", { name: "Run workflow" }).at(-1)!);
+
+    expect(await screen.findByText("AI credits need attention")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Open model settings" }).at(-1)!);
+
+    expect(await screen.findByRole("button", { name: "Choose model provider and model" })).toBeInTheDocument();
+  });
+
+  it("prompts users to open model settings when credits fail during an LLM node run", async () => {
+    const user = userEvent.setup();
+    const { api } = createMemoryWorkflowApi();
+    const originalWindowEventSource = window.EventSource;
+    const originalGlobalEventSource = globalThis.EventSource;
+    class FailedCreditsEventSource {
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+
+      constructor(public readonly url: string) {
+        const [, runId = "run-1"] = url.match(/\/runs\/([^/]+)\/stream/) ?? [];
+        [
+          { type: "node.started", runId, nodeId: "llm1", nodeType: "llm" },
+          {
+            type: "node.failed",
+            runId,
+            nodeId: "llm1",
+            nodeType: "llm",
+            error: "AI credits exhausted.",
+            durationMs: 120,
+          },
+          { type: "run.completed", runId, status: "failed" },
+        ].forEach((event, index) => {
+          setTimeout(() => {
+            this.onmessage?.(new MessageEvent("message", { data: JSON.stringify(event) }));
+          }, index);
+        });
+      }
+
+      close() {}
+    }
+    Object.defineProperty(window, "EventSource", { writable: true, configurable: true, value: FailedCreditsEventSource });
+    Object.defineProperty(globalThis, "EventSource", { writable: true, configurable: true, value: FailedCreditsEventSource });
+    vi.mocked(api.getRun).mockResolvedValueOnce({
+      run: {
+        id: "run-1",
+        workflowId: "workflow-1",
+        status: "failed",
+        input: { topic: "credits" },
+        output: {
+          summary: "Workflow run failed for Seed Workflow.",
+          nodeResults: [
+            {
+              nodeId: "llm1",
+              label: "LLM",
+              status: "failed",
+              output: "AI credits exhausted.",
+              data: { text: "AI credits exhausted." },
+            },
+          ],
+        },
+        error: {
+          code: "credits_exhausted",
+          message: "AI credits exhausted.",
+        },
+        createdAt: new Date(Date.UTC(2026, 5, 1, 0, 0, 0)).toISOString(),
+        startedAt: new Date(Date.UTC(2026, 5, 1, 0, 0, 1)).toISOString(),
+        completedAt: new Date(Date.UTC(2026, 5, 1, 0, 0, 2)).toISOString(),
+      },
+    });
+
+    try {
+      render(<AppWorkbench workflowApi={api} />);
+      expect(await screen.findByText("Seed Workflow")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Run workflow" }));
+      await user.click(screen.getAllByRole("button", { name: "Run workflow" }).at(-1)!);
+
+      expect(await screen.findByText("AI credits need attention")).toBeInTheDocument();
+      await user.click(screen.getAllByRole("button", { name: "Open model settings" }).at(-1)!);
+
+      expect(await screen.findByRole("button", { name: "Choose model provider and model" })).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "EventSource", { writable: true, configurable: true, value: originalWindowEventSource });
+      Object.defineProperty(globalThis, "EventSource", { writable: true, configurable: true, value: originalGlobalEventSource });
+    }
+  });
+
   it("shows a save & switch bar before switching workflows with unsaved changes", async () => {
     const user = userEvent.setup();
     const { api, workflows, calls } = createMemoryWorkflowApi();

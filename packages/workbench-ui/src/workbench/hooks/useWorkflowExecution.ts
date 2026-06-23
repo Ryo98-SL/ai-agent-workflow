@@ -20,6 +20,10 @@ type WorkflowExecutionSession = {
   activeChat: boolean;
 };
 
+type WorkflowExecutionOptions = {
+  onRunError?: (error: unknown) => void;
+};
+
 function cloneTranscript(transcript: ChatTurn[]): ChatTurn[] {
   return transcript.map((turn) => ({
     ...turn,
@@ -57,7 +61,8 @@ export function deriveChatAnswer(nodeStates: Map<string, NodeExecutionState>): s
   return (last.output ?? last.streamingText ?? "").trim();
 }
 
-export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
+export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi, options: WorkflowExecutionOptions = {}) {
+  const { onRunError } = options;
   const [nodeStates, setNodeStates] = useState<Map<string, NodeExecutionState>>(() => new Map());
   const [debugState, setDebugState] = useState<DebugState>({ status: "idle" });
   const [conversationTurns, setConversationTurns] = useState(0);
@@ -321,6 +326,9 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
           const answer = deriveChatAnswer(turnNodeStates);
           Promise.all([workflowApi.getRun(runId), workflowApi.listRunEvents(runId)])
             .then(([runRes, eventsRes]) => {
+              if (runRes.run.error) {
+                onRunError?.(runRes.run.error);
+              }
               const result = { run: runRes.run, events: eventsRes.events };
               updateSession(sessionKey, (current) => {
                 const nextStatus = runStatus === "failed" ? "error" : "success";
@@ -401,13 +409,14 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
           subscribeToStream(sessionKey, run.id);
         })
         .catch((err: unknown) => {
+          onRunError?.(err);
           updateSession(sessionKey, (current) => ({
             ...current,
             debugState: { status: "error", error: err instanceof Error ? err.message : "Run creation failed." },
           }));
         });
     },
-    [closeSessionStream, readSession, subscribeToStream, updateSession, workflowApi],
+    [closeSessionStream, onRunError, readSession, subscribeToStream, updateSession, workflowApi],
   );
 
   /**
@@ -439,6 +448,7 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
           subscribeToStream(sessionKey, run.id);
         })
         .catch((err: unknown) => {
+          onRunError?.(err);
           const message = err instanceof Error ? err.message : "Run creation failed.";
           updateSession(sessionKey, (current) => ({
             ...current,
@@ -447,7 +457,7 @@ export function useWorkflowExecution(workflowApi: WorkbenchWorkflowApi) {
           patchActiveTurn(sessionKey, { status: "error", error: message });
         });
     },
-    [closeSessionStream, patchActiveTurn, readSession, subscribeToStream, updateSession, workflowApi],
+    [closeSessionStream, onRunError, patchActiveTurn, readSession, subscribeToStream, updateSession, workflowApi],
   );
 
   // Answers a paused Human Input interrupt and re-subscribes to the continuation.
