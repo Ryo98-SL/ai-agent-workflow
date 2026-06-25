@@ -5,6 +5,7 @@ import type { OpenAICompatibleSettings, WorkflowRuntimeState } from "@ai-agent-w
 import type { EmbeddingAdapter } from "../knowledge/embeddings";
 import type { KnowledgeRepository } from "../knowledge/repository";
 import type { McpServerConnection } from "../mcp/client";
+import type { EmailDelivery } from "../email/types";
 
 export type RuntimeNodeResult = {
   nodeId: string;
@@ -41,12 +42,6 @@ export type BoundCapableChatModel = BaseChatModel;
 
 /** A single conversation turn kept in the run thread's memory channel. */
 export type ChatMessage = { role: "user" | "assistant"; content: string };
-
-export type EmailMessage = { to: string; subject: string; body: string };
-
-/** Sends a composed email. Injected so dry-run stays the default and real
- * sending (env-gated Resend) is pluggable and testable. */
-export type EmailSender = (email: EmailMessage) => Promise<{ id?: string }>;
 
 /** A pending human-in-the-loop interrupt the run paused on. */
 export type RuntimeInterrupt = {
@@ -87,6 +82,8 @@ export type RuntimeExecutorOptions = {
   embeddings?: EmbeddingAdapter;
   onStreamEvent?: (event: RuntimeStreamEvent) => void | Promise<void>;
   threadId?: string;
+  /** Stable run id used to construct idempotent external-action identities. */
+  runId?: string;
   userId?: string | null;
   /**
    * Chat Mode: the user's message for this turn. Seeded into runtime state as the
@@ -94,8 +91,8 @@ export type RuntimeExecutorOptions = {
    * memory "user" turn so RAG-injected prompts don't pollute conversation history.
    */
   query?: string;
-  /** Sends emails for the Email tool node when real sending is enabled. */
-  emailSender?: EmailSender;
+  /** Authenticated, quota-protected email delivery capability. */
+  emailDelivery?: EmailDelivery;
   /**
    * Resolves the current user's MCP server connections (decrypted headers) for an
    * Agent node that binds MCP tools (ADR 0004). Injected by the run entry from the

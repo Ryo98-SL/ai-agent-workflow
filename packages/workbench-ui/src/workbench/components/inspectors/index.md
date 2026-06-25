@@ -24,7 +24,8 @@ Node-specific configuration forms for the selection inspector.
   required), a Maximum Iterations slider (1–50), a memory toggle, and the output
   variables panel.
 - `ToolInspector.tsx` lets users rebind a Tool node through the Tool Browser and
-  renders descriptor-defined params through `ToolParamForm`.
+  renders descriptor-defined params through `ToolParamForm`; Send Email's real
+  send switch is delegated to the shared confirmation/capability control.
 - `IfElseInspector.tsx` edits case branches, condition combinators, operators,
   and variable references.
 - `HumanInputInspector.tsx` edits reviewer prompts, action buttons, optional

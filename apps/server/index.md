@@ -52,7 +52,9 @@ pgvector and does not support PDF/DOCX parsing or hybrid retrieval.
 
 Built-in tools are registered in `src/runtime/tools/`: Current Time returns
 formatted time metadata, and Send Email composes a dry-run by default or sends
-through the env-gated Resend adapter.
+through the authenticated `src/email/` delivery service. Real sends are
+transactionally reserved before Resend, idempotent per run/tool call, and
+bounded below the provider free allowance.
 
 The package exposes `db:deploy` for production Prisma migrations and binds the
 server to `HOST` or `0.0.0.0` by default so Railway can route public traffic to

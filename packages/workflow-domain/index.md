@@ -18,6 +18,8 @@ helpers shared by apps, server code, and future packages.
   `jsonSchemaToParamSpec`) and the **client-only** MCP descriptor merge
   (`registerMcpToolDescriptors` / `getToolDescriptors`) that keeps
   `resolveToolDescriptor` synchronous (ADR 0004 §6 — never inject on the server).
+  Send Email keeps `send:false` as its safe default and declares optional
+  `data.id` provider output.
 - `src/conditions.ts` evaluates If/Else branches against runtime state.
 - `src/availableVariables.ts` computes upstream variable groups for prompt,
   condition, tool, and template authoring.

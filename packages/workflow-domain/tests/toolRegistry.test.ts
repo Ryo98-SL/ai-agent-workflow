@@ -104,6 +104,12 @@ describe("tool descriptor registry", () => {
   it("resolves a bound descriptor and returns undefined for an unknown tool", () => {
     const email = resolveToolDescriptor({ provider: "builtin", providerId: "builtin", toolName: "emailSend" });
     expect(email?.label).toBe("Send Email");
+    expect(email?.defaultParams.send).toBe(false);
+    expect(email?.outputFields[1].children).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "id", type: "string" }),
+      ]),
+    );
     expect(email?.params.find((p) => p.name === "to")).toMatchObject({ supportsVariables: true, primary: true });
     const send = email?.params.find((p) => p.name === "send");
     expect(send?.type).toBe("boolean");
@@ -124,7 +130,7 @@ describe("tool descriptor registry", () => {
       config: { provider: "builtin", providerId: "builtin", toolName: "emailSend", params: {} },
     };
     const data = nodeOutputFields(emailNode).find((f) => f.name === "data");
-    expect(data?.children?.map((c) => c.name)).toEqual(["to", "subject", "body", "sent", "dryRun"]);
+    expect(data?.children?.map((c) => c.name)).toEqual(["to", "subject", "body", "sent", "dryRun", "id"]);
 
     const unknownNode: WorkflowNode = { ...emailNode, config: { ...emailNode.config, toolName: "nope" } };
     expect(nodeOutputFields(unknownNode).map((f) => f.name)).toEqual(["text", "data"]);

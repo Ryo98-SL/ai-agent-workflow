@@ -9,6 +9,8 @@
 
 - `account.ts` manages authenticated provider keys and custom model records.
 - `credits.ts` exposes AI credit status and application endpoints.
+- `email.ts` exposes the public, non-sensitive real-email capability and quota
+  snapshot for the current session.
 - `knowledge.ts` exposes Knowledge Base and Knowledge Document APIs.
 - `mcp.ts` exposes account-level MCP server CRUD + refresh (ADR 0004); it
   snapshots tools through `mcp/client.ts` and stores header secrets encrypted.

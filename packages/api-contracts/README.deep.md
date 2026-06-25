@@ -11,7 +11,7 @@ any transport implementation.
   keyring settings, inline workflow run payloads, Chat Mode query/conversation
   fields, Human Input interrupt/resume schemas, run input/output schemas, SSE
   event schemas, Knowledge Base schemas, account/credit schemas, DTO types, and
-  error helpers.
+  error helpers, including the public real-email capability/quota response.
 - `tests/contracts.test.ts` validates representative request and response
   payloads against the public schemas.
 

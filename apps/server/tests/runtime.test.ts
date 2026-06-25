@@ -6,7 +6,7 @@ import {
   type KnowledgeNode,
   type WorkflowFile,
 } from "@ai-agent-workflow/workflow-domain";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { chunkKnowledgeText } from "../src/knowledge/chunking";
 import { createDeterministicEmbeddingAdapter, type EmbeddingAdapter } from "../src/knowledge/embeddings";
 import { createInMemoryKnowledgeRepository, type KnowledgeRepository } from "../src/knowledge/repository";
@@ -584,7 +584,10 @@ describe("Human Input (HITL) pause and resume", () => {
 });
 
 /** Start → Email tool. */
-function emailWorkflow(send: boolean): WorkflowFile {
+function emailWorkflow(
+  send: boolean,
+  overrides: Partial<{ to: string; subject: string; body: string }> = {},
+): WorkflowFile {
   const workflow = createDefaultWorkflow();
   const start = workflow.graph.nodes.find((node) => node.type === "start");
   if (!start) {
@@ -600,9 +603,9 @@ function emailWorkflow(send: boolean): WorkflowFile {
     providerId: "builtin",
     toolName: "emailSend",
     params: {
-      to: "user@example.com",
-      subject: "Re: {{start1.topic}}",
-      body: "Hi about {{start1.topic}}",
+      to: overrides.to ?? "user@example.com",
+      subject: overrides.subject ?? "Re: {{start1.topic}}",
+      body: overrides.body ?? "Hi about {{start1.topic}}",
       send,
     },
   };
@@ -750,7 +753,9 @@ describe("Email tool", () => {
   it("composes the email in dry-run without sending", async () => {
     const sent: unknown[] = [];
     const execution = await executeWorkflowRuntime(emailWorkflow(false), { topic: "refund" }, {
-      emailSender: async (email) => {
+      userId: "user-1",
+      runId: "email-dry-run",
+      emailDelivery: async (email) => {
         sent.push(email);
         return {};
       },
@@ -768,7 +773,9 @@ describe("Email tool", () => {
   it("sends the email through the configured sender when send is enabled", async () => {
     const sent: Array<{ subject: string }> = [];
     const execution = await executeWorkflowRuntime(emailWorkflow(true), { topic: "refund" }, {
-      emailSender: async (email) => {
+      userId: "user-1",
+      runId: "email-real-send",
+      emailDelivery: async (email) => {
         sent.push(email);
         return { id: "email_123" };
       },
@@ -784,9 +791,38 @@ describe("Email tool", () => {
     expect(email).toMatchObject({ sent: true, id: "email_123" });
   });
 
-  it("fails real send when no email sender is configured", async () => {
+  it("rejects anonymous real send before provider configuration is considered", async () => {
     const execution = await executeWorkflowRuntime(emailWorkflow(true), { topic: "x" }, {});
     expect(execution.ok).toBe(false);
+    if (!execution.ok) expect(execution.error.code).toBe("email_auth_required");
+  });
+
+  it("validates the resolved recipient and message lengths before delivery", async () => {
+    const delivery = vi.fn(async () => ({ id: "email_123" }));
+    const invalidRecipient = await executeWorkflowRuntime(
+      emailWorkflow(true, { to: "not-an-email" }),
+      { topic: "x" },
+      { userId: "user-1", runId: "invalid-recipient", emailDelivery: delivery },
+    );
+    expect(invalidRecipient.ok).toBe(false);
+    if (!invalidRecipient.ok) expect(invalidRecipient.error.code).toBe("email_invalid");
+
+    const longSubject = await executeWorkflowRuntime(
+      emailWorkflow(true, { subject: "x".repeat(201) }),
+      { topic: "x" },
+      { userId: "user-1", runId: "long-subject", emailDelivery: delivery },
+    );
+    expect(longSubject.ok).toBe(false);
+    if (!longSubject.ok) expect(longSubject.error.code).toBe("email_invalid");
+
+    const longBody = await executeWorkflowRuntime(
+      emailWorkflow(true, { body: "x".repeat(50_001) }),
+      { topic: "x" },
+      { userId: "user-1", runId: "long-body", emailDelivery: delivery },
+    );
+    expect(longBody.ok).toBe(false);
+    if (!longBody.ok) expect(longBody.error.code).toBe("email_invalid");
+    expect(delivery).not.toHaveBeenCalled();
   });
 });
 

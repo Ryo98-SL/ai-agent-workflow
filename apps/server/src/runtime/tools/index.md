@@ -19,9 +19,10 @@ this folder owns the matching runtime implementations.
 
 The executor resolves variable-bearing tool params before calling a runtime.
 Current Time validates the requested timezone and returns formatted/ISO time
-metadata. Send Email defaults to dry-run composition; real sending requires the
-server to provide an `emailSender` capability, currently created from
-`RESEND_API_KEY` and `EMAIL_FROM`.
+metadata. Send Email validates one recipient plus subject/body limits and
+defaults to dry-run composition. Real sending requires the protected
+`emailDelivery` capability from `src/email/`, an authenticated user, and a stable
+run/tool identity; the runtime never talks to Resend directly.
 
 MCP, custom, and workflow tool providers are represented in the shared schema
 but do not have server runtimes yet.

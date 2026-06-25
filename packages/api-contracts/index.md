@@ -12,8 +12,9 @@ endpoints.
   run input, inline workflow execution, Chat Mode query/conversation fields,
   transient run model-provider/keyring settings, provider-key selection, Human
   Input interrupt/resume contracts, run SSE event contracts, structured node
-  result contracts, Knowledge Base contracts, account/credit contracts, inferred
-  DTO/request/response types, and normalized API error helpers.
+  result contracts, Knowledge Base contracts, account/credit contracts, public
+  email capability contracts, inferred DTO/request/response types, and
+  normalized API error helpers.
 - `tests/contracts.test.ts` covers path generation, nullable run input,
   transient model-provider/keyring settings, structured node result metadata,
   Knowledge Base payloads, account/credit payloads, resume payloads, and

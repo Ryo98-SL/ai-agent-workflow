@@ -25,7 +25,9 @@ Electron, server, or runtime execution dependencies.
   demo.
 - `src/toolRegistry.ts` defines declarative Tool descriptors, parameter specs,
   output fields, and lookup helpers. Built-in descriptors currently cover
-  Current Time and Send Email; MCP/custom/workflow providers are schema-reserved.
+  Current Time and Send Email; Send Email defaults real sending off and exposes
+  its optional provider message id. MCP/custom/workflow providers are
+  schema-reserved.
 - `src/conditions.ts` evaluates If/Else condition rows against runtime state and
   exports shared operator labels.
 - `src/availableVariables.ts` computes upstream Available Variables for a

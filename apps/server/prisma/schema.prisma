@@ -35,6 +35,7 @@ model User {
   creditGrant  CreditGrant?
   knowledgeBases KnowledgeBase[]
   mcpServers   McpServer[]
+  emailSendAttempts EmailSendAttempt[]
 
   @@map("user")
 }
@@ -155,6 +156,23 @@ model PlatformDailyUsage {
   updatedAt    DateTime @updatedAt
 
   @@map("platform_daily_usage")
+}
+
+model EmailSendAttempt {
+  id                String    @id @default(cuid())
+  userId            String
+  idempotencyHash   String    @unique
+  recipient         String
+  status            String    @default("reserved")
+  providerMessageId String?
+  failureSummary    String?
+  createdAt         DateTime  @default(now())
+  completedAt       DateTime?
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@map("email_send_attempt")
 }
 
 model Workflow {

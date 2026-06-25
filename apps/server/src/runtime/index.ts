@@ -1,9 +1,8 @@
 export { executeWorkflowRuntime } from "./executor";
 export type {
-  EmailMessage,
-  EmailSender,
   RuntimeExecutionResult,
   RuntimeExecutorOptions,
   RuntimeNodeResult,
   RuntimeStreamEvent,
 } from "./types";
+export type { EmailDelivery, EmailMessage, EmailSender } from "../email/types";

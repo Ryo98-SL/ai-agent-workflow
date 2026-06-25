@@ -371,6 +371,20 @@ export const workbenchZhCn = {
     noMcp: "还没有 MCP 工具。注册一个 HTTP MCP 服务器后，其工具会显示在这里。",
     comingSoon: "敬请期待",
     off: "关",
+    emailSafety: {
+      realSend: "真实发送",
+      dryRunHelp: "关闭时仅进行 dry-run。开启后会向外部发送真实邮件并消耗额度。",
+      loading: "正在检查邮件发送能力…",
+      statusError: "无法获取邮件发送状态，真实发送已禁用。",
+      notConfigured: "服务器尚未配置邮件发送服务。",
+      signIn: "登录后才能启用真实邮件发送。",
+      unavailable: "当前无法验证安全额度，因此已阻止发送。",
+      exhausted: "受保护的邮件发送额度当前已用尽。",
+      remaining: "可用 · 本分钟 {{userMinute}} 封 · 平台今日 {{platformDay}} 封 · 本月 {{platformMonth}} 封",
+      confirmDetail: "之后运行工作流可能发送真实邮件。发送请求一旦发起即计入额度，包括失败的尝试。",
+      cancel: "取消",
+      confirm: "启用真实发送",
+    },
     descriptors: {
       currentTime: {
         label: "当前时间",

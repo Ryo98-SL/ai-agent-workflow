@@ -51,8 +51,12 @@ remain in memory so the UI can run unsaved drafts and replay stream state.
   node failure, tool execution, and model invocation.
 - `src/runtime/tools/` is the server runtime half of the Tool Registry. Built-in
   Current Time and Send Email runtimes are keyed by the same identity triple as
-  workflow-domain descriptors; Send Email is dry-run unless an env-gated Resend
-  sender is configured.
+  workflow-domain descriptors.
+- `src/email/` owns authenticated real-email delivery: fixed safety ceilings,
+  Prisma-backed atomic attempt reservation, SHA-256 idempotency keys, fail-closed
+  quota checks, the env-gated Resend adapter, and public capability snapshots.
+  Anonymous users retain dry-run only. Failed or timed-out provider calls keep
+  their reservation and are never retried automatically.
 - `src/index.ts` exports the app factory and starts the Node server when run by
   the package `dev` or production `start` script. It binds to `HOST` or
   `0.0.0.0` by default so Railway-style public networking can reach the service
@@ -66,6 +70,9 @@ remain in memory so the UI can run unsaved drafts and replay stream state.
 - `tests/runtime.test.ts` covers runtime stream callbacks, checkpoint
   persistence, Knowledge retrieval, tools, branches, templates, and Human Input
   pause/resume behavior.
+- `tests/email.test.ts` covers anonymous denial, quota ceilings, duplicate
+  suppression, provider failures, database fail-closed behavior, and the public
+  capability route.
 
 ## Integration Boundary
 

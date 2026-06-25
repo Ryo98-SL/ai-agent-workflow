@@ -11,6 +11,7 @@ import {
   type JsonValue,
   type ModelProvider,
   type ProviderKeyPreference,
+  type ToolDescriptor,
   type WorkflowFile,
   type WorkflowNode,
 } from "@ai-agent-workflow/workflow-domain";
@@ -19,7 +20,9 @@ import { Popover } from "../Popover";
 import { VariableRichTextEditor } from "../richtext/VariableRichTextEditor";
 import { resolveToolIcon } from "../workflowNodes/workflowNodeVisuals";
 import { ToolBrowser } from "../tools/ToolBrowser";
+import { EmailSendControl } from "../tools/EmailSendControl";
 import { ToolParamForm } from "../tools/ToolParamForm";
+import { initialAgentToolParams } from "../tools/agentToolDefaults";
 import { NodeModelSettingField, modelSettingsForEditor, sanitizeNodeModelSettings } from "./sharedModelSettingField";
 import { WORKBENCH_I18N_NAMESPACE } from "../../../i18n";
 
@@ -197,12 +200,20 @@ function AgentToolList({
   const [browsing, setBrowsing] = useState(false);
   const selectedKeys = new Set(tools.map((tool) => toolDescriptorKey(tool.provider, tool.providerId, tool.toolName)));
 
-  const toggle = (descriptor: { provider: AgentToolBinding["provider"]; providerId: string; toolName: string }) => {
+  const toggle = (descriptor: ToolDescriptor) => {
     const key = toolDescriptorKey(descriptor.provider, descriptor.providerId, descriptor.toolName);
     if (selectedKeys.has(key)) {
       onChange(tools.filter((tool) => toolDescriptorKey(tool.provider, tool.providerId, tool.toolName) !== key));
     } else {
-      onChange([...tools, { provider: descriptor.provider, providerId: descriptor.providerId, toolName: descriptor.toolName, params: {} }]);
+      onChange([
+        ...tools,
+        {
+          provider: descriptor.provider,
+          providerId: descriptor.providerId,
+          toolName: descriptor.toolName,
+          params: initialAgentToolParams(descriptor),
+        },
+      ]);
     }
   };
 
@@ -256,7 +267,15 @@ function AgentToolList({
               key={toolDescriptorKey(tool.provider, tool.providerId, tool.toolName)}
               nodeId={nodeId}
               tool={tool}
-              onRemove={() => toggle(tool)}
+              onRemove={() =>
+                onChange(
+                  tools.filter(
+                    (candidate) =>
+                      toolDescriptorKey(candidate.provider, candidate.providerId, candidate.toolName) !==
+                      toolDescriptorKey(tool.provider, tool.providerId, tool.toolName),
+                  ),
+                )
+              }
               onParamsChange={(params) => setParams(toolDescriptorKey(tool.provider, tool.providerId, tool.toolName), params)}
             />
           ))}
@@ -282,6 +301,11 @@ function AgentToolRow({
   const descriptor = resolveToolDescriptor(tool);
   const Icon = resolveToolIcon(descriptor?.icon);
   const isMcp = tool.provider === "mcp";
+  const isEmail = tool.provider === "builtin" && tool.toolName === "emailSend";
+  const formDescriptor =
+    descriptor && isEmail
+      ? { ...descriptor, params: descriptor.params.filter((param) => param.name !== "send") }
+      : descriptor;
   const hasConfigurableParams = !isMcp && (descriptor?.params.length ?? 0) > 0;
   const hasDetails = Boolean(descriptor?.description) || hasConfigurableParams || isMcp;
   const providerLabel = isMcp ? `MCP · ${tool.providerId}` : `${tool.provider} · ${tool.toolName}`;
@@ -350,7 +374,7 @@ function AgentToolRow({
               })}
             </p>
           )}
-          {hasConfigurableParams && descriptor && (
+          {hasConfigurableParams && formDescriptor && (
             <div className="space-y-3">
               <p className="flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
                 <SlidersHorizontal size={11} className="mt-0.5 shrink-0" aria-hidden />
@@ -358,7 +382,13 @@ function AgentToolRow({
                   defaultValue: "Filled params are fixed; empty params are filled automatically by the Agent.",
                 })}
               </p>
-              <ToolParamForm nodeId={nodeId} descriptor={descriptor} params={tool.params} onChange={onParamsChange} />
+              <ToolParamForm nodeId={nodeId} descriptor={formDescriptor} params={tool.params} onChange={onParamsChange} />
+              {isEmail && (
+                <EmailSendControl
+                  enabled={tool.params.send === true}
+                  onChange={(send) => onParamsChange({ ...tool.params, send })}
+                />
+              )}
             </div>
           )}
         </div>

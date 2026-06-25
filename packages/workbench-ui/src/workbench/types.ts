@@ -9,6 +9,7 @@ import type {
   CreditStatusResponse,
   CreditProvidersResponse,
   EmbeddingInfoResponse,
+  EmailCapabilityResponse,
   CustomModelDto,
   KnowledgeBaseDto,
   KnowledgeDocumentDto,
@@ -164,6 +165,7 @@ export type WorkbenchWorkflowApi = {
   applyCredits: () => Promise<CreditStatusResponse>;
   getCreditProviders: () => Promise<CreditProvidersResponse>;
   getEmbeddingInfo: () => Promise<EmbeddingInfoResponse>;
+  getEmailCapability: () => Promise<EmailCapabilityResponse>;
 };
 
 export type AppWorkbenchProps = {

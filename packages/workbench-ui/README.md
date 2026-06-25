@@ -86,6 +86,9 @@ Principles:
   per-tool forms. Agent tool rows keep descriptor descriptions visible in the
   selected-tool list and expose a details expansion for full copy, identity, MCP
   auto-param notes, and built-in fixed params.
+- Keep Send Email safe by default: surface server/quota availability, require an
+  explicit inline confirmation before real sending, and author-fix `send:false`
+  when the tool is added to an Agent.
 - Keep Product Locale copy in the package-owned `workbench` namespace. Display
   localization for Tool descriptors is applied in the rendering layer and does
   not mutate stored tool identity or workflow config. Node Inspector forms,

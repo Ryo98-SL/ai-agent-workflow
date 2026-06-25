@@ -60,5 +60,8 @@ KB indexer is disabled so local dev can start without marking queued documents
 as failed.
 
 Tool nodes bind to the shared workflow-domain Tool Registry. Built-in server
-runtimes currently cover Current Time and Send Email. Email defaults to dry-run;
-real sending requires `RESEND_API_KEY` and `EMAIL_FROM`.
+runtimes currently cover Current Time and Send Email. Email defaults to dry-run.
+Real sending requires authentication, a dedicated `RESEND_API_KEY`, verified
+`EMAIL_FROM`, and a successful database reservation. Attempts are idempotent and
+capped at 10/user/minute, 100/user/UTC day, 80/platform/UTC day, and
+2,400/platform/UTC month; failed attempts are not refunded.

@@ -19,4 +19,5 @@ and resume support via `resumeRun`.
 The client also exposes typed account, custom model, AI credit, Knowledge Base,
 and document methods for listing the anonymous example KB, managing
 authenticated private KBs, adding text/file documents, deleting documents, and
-queueing reindexing.
+queueing reindexing. `getEmailCapability()` reads the public, non-sensitive
+real-email availability and quota snapshot.

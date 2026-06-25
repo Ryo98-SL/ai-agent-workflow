@@ -60,6 +60,6 @@ memory node already committed it earlier in the run) so a follow-up message keep
 the prior context. `executeWorkflowRuntime` collects
 normalized stream events and can call `RuntimeExecutorOptions.onStreamEvent` for
 each chunk. Tests can inject `fetch`, `checkpointer`, `threadId`, `knowledge`,
-`embeddings`, `emailSender`, `mcpServers`, `agentModelFactory`, and resume values
+`embeddings`, protected `emailDelivery`, `mcpServers`, `agentModelFactory`, and resume values
 through `RuntimeExecutorOptions` so provider calls, retrieval, tools, agent loops,
 interrupts, and checkpoint assertions remain deterministic.

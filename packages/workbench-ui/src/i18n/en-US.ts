@@ -372,6 +372,22 @@ export const workbenchEnUs = {
     noMcp: "No MCP tools yet. Register an HTTP MCP server and its tools will appear here.",
     comingSoon: "Coming soon",
     off: "off",
+    emailSafety: {
+      realSend: "Send for real",
+      dryRunHelp: "Off keeps this tool in dry-run mode. Turning it on sends an external email and consumes quota.",
+      loading: "Checking email availability...",
+      statusError: "Email availability could not be loaded. Real send is disabled.",
+      notConfigured: "The server email provider is not configured.",
+      signIn: "Sign in to enable real email sending.",
+      unavailable: "Quota protection is unavailable, so sending is blocked.",
+      exhausted: "The protected email quota is currently exhausted.",
+      remaining:
+        "Available · {{userMinute}} this minute · {{platformDay}} platform sends today · {{platformMonth}} this month",
+      confirmDetail:
+        "Future workflow runs may send a real email. Quota is charged when delivery is attempted, including failed attempts.",
+      cancel: "Cancel",
+      confirm: "Enable real send",
+    },
     descriptors: {
       currentTime: {
         label: "Current Time",

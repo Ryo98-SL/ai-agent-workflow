@@ -24,7 +24,8 @@ workflow IO stays behind the injected API.
   Product Locale copy.
 - `src/data/` contains the workbench data provider, Better Auth client,
   anonymous IndexedDB workflow storage, session-scoped anonymous run tracking,
-  and React Query hooks for account/workflow/Knowledge Base resources.
+  and React Query hooks for account/workflow/Knowledge Base resources plus the
+  public email capability snapshot.
 - `src/workbench/` contains state, layout, canvas, panels, Knowledge Base UI,
   Tool Browser, variable-rich text editor, Chat Mode UI, and workflow primitives.
 - `tests/` contains component smoke coverage against a mocked workflow API.
@@ -48,6 +49,8 @@ node inspector.
 Chat Mode sends user messages as run `query` values against a stable
 conversation id. Human Input pauses show resume forms. Tool nodes are selected
 through the Tool Browser and configured through descriptor-driven param forms.
+Send Email shows authentication/provider/quota state and requires confirmation
+before its real-send switch is persisted; Agent bindings default that switch off.
 Canvas structure edits have local undo/redo for node/edge creation, deletion,
 and movement; form-based inspector changes and model settings stay outside that
 history.

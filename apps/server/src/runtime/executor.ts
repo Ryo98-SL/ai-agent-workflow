@@ -32,7 +32,8 @@ import { materializeStartValues } from "./startValues";
 import { resolvePrompt } from "./prompts";
 import { resolveToolRuntime } from "./tools/registry";
 import type { McpServerConnection } from "../mcp/client";
-import type { BoundCapableChatModel, ChatMessage, EmailSender, RuntimeExecutionResult, RuntimeExecutorOptions, RuntimeInterrupt, RuntimeNodeResult, RuntimeStreamEvent } from "./types";
+import type { BoundCapableChatModel, ChatMessage, RuntimeExecutionResult, RuntimeExecutorOptions, RuntimeInterrupt, RuntimeNodeResult, RuntimeStreamEvent } from "./types";
+import type { EmailDelivery } from "../email/types";
 import { validateWorkflow } from "./validation";
 
 type RuntimeGraphState = {
@@ -78,7 +79,8 @@ type RuntimeNodeBuildContext = {
   knowledge?: KnowledgeRepository;
   userId: string | null;
   workflow: WorkflowFile;
-  emailSender?: EmailSender;
+  runId: string;
+  emailDelivery?: EmailDelivery;
   /** Resolves the current user's MCP server connections for Agent MCP tools. */
   mcpServers?: () => Promise<McpServerConnection[]>;
   /** Builds an Agent node's bound model from resolved settings (test-overridable). */
@@ -165,7 +167,8 @@ export async function executeWorkflowRuntime(
       knowledge: options.knowledge,
       userId: options.userId ?? null,
       workflow,
-      emailSender: options.emailSender,
+      runId: options.runId ?? threadId,
+      emailDelivery: options.emailDelivery,
       mcpServers: options.mcpServers,
       createAgentModel: options.agentModelFactory ?? ((settings) => createBoundCapableModel(settings, fetchImpl)),
     };
@@ -687,7 +690,12 @@ async function buildAgentNode(
   const { tools, close } = await assembleAgentTools({
     bindings: node.config.tools,
     values: state.values,
-    emailSender: context.emailSender,
+    email: {
+      delivery: context.emailDelivery,
+      userId: context.userId,
+      runId: context.runId,
+      agentNodeId: node.id,
+    },
     mcpConnections: context.mcpServers,
   });
 
@@ -857,7 +865,13 @@ async function buildToolNode(
       param.supportsVariables && typeof raw === "string" ? resolvePrompt(raw, state.values) : raw;
   }
 
-  const result = await runtime.execute(resolvedParams, { emailSender: context.emailSender });
+  const result = await runtime.execute(resolvedParams, {
+    emailDelivery: context.emailDelivery,
+    emailIdentity: {
+      userId: context.userId,
+      idempotencyKey: `${context.runId}:tool:${node.id}`,
+    },
+  });
   const value = { text: result.output, data: result.data };
   return {
     output: result.output,

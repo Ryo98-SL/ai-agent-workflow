@@ -1138,6 +1138,21 @@ function createMemoryWorkflowApi(prepareSeed: (workflow: WorkflowFile) => Workfl
     applyCredits: vi.fn(async () => ({ status: "approved" as const, grantedTokens: 100_000, balanceTokens: 100_000 })),
     getCreditProviders: vi.fn(async () => ({ providers: ["deepseek"] })),
     getEmbeddingInfo: vi.fn(async () => ({ embedding: { provider: "openai", model: "text-embedding-3-small" } })),
+    getEmailCapability: vi.fn(async () => ({
+      email: {
+        configured: true,
+        eligible: true,
+        available: true,
+        reason: null,
+        limits: { userMinute: 10, userDay: 100, platformDay: 80, platformMonth: 2400 },
+        remaining: { userMinute: 10, userDay: 100, platformDay: 80, platformMonth: 2400 },
+        resets: {
+          userMinute: "2026-06-24T12:01:00.000Z",
+          day: "2026-06-25T00:00:00.000Z",
+          month: "2026-07-01T00:00:00.000Z",
+        },
+      },
+    })),
   };
 
   return { api, workflows, calls };

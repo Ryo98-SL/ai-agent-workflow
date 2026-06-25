@@ -37,6 +37,7 @@ export const API_ROUTE_TEMPLATES = {
   creditsApply: "/api/credits/apply",
   creditProviders: "/api/credit-providers",
   embeddingInfo: "/api/embedding-info",
+  emailCapability: "/api/email-capability",
 } as const;
 
 const encodePathSegment = (value: string) => encodeURIComponent(value);
@@ -67,6 +68,7 @@ export const apiPaths = {
   creditsApply: () => API_ROUTE_TEMPLATES.creditsApply,
   creditProviders: () => API_ROUTE_TEMPLATES.creditProviders,
   embeddingInfo: () => API_ROUTE_TEMPLATES.embeddingInfo,
+  emailCapability: () => API_ROUTE_TEMPLATES.emailCapability,
 } as const;
 
 export const ApiIssueSchema = z.object({
@@ -84,6 +86,16 @@ export const ApiErrorCodeSchema = z.enum([
   "credits_required",
   "credits_exhausted",
   "daily_limit_exceeded",
+  "email_auth_required",
+  "email_not_configured",
+  "email_unavailable",
+  "email_invalid",
+  "email_user_minute_limit",
+  "email_user_daily_limit",
+  "email_platform_daily_limit",
+  "email_platform_monthly_limit",
+  "email_duplicate_pending",
+  "email_provider_failed",
   "internal_error",
 ]);
 
@@ -686,6 +698,32 @@ export const EmbeddingInfoResponseSchema = z.object({
     .nullable(),
 });
 
+export const EmailCapabilityResponseSchema = z.object({
+  email: z.object({
+    configured: z.boolean(),
+    eligible: z.boolean(),
+    available: z.boolean(),
+    reason: z.enum(["not_configured", "sign_in_required", "quota_unavailable", "quota_exhausted"]).nullable(),
+    limits: z.object({
+      userMinute: z.number().int().positive(),
+      userDay: z.number().int().positive(),
+      platformDay: z.number().int().positive(),
+      platformMonth: z.number().int().positive(),
+    }),
+    remaining: z.object({
+      userMinute: z.number().int().nonnegative().nullable(),
+      userDay: z.number().int().nonnegative().nullable(),
+      platformDay: z.number().int().nonnegative().nullable(),
+      platformMonth: z.number().int().nonnegative().nullable(),
+    }),
+    resets: z.object({
+      userMinute: z.string().datetime().nullable(),
+      day: z.string().datetime().nullable(),
+      month: z.string().datetime().nullable(),
+    }),
+  }),
+});
+
 export type ProviderKeyDto = z.infer<typeof ProviderKeyDtoSchema>;
 export type ListProviderKeysResponse = z.infer<typeof ListProviderKeysResponseSchema>;
 export type CreateProviderKeyRequest = z.input<typeof CreateProviderKeyRequestSchema>;
@@ -694,6 +732,7 @@ export type CreditStatusDto = z.infer<typeof CreditStatusDtoSchema>;
 export type CreditStatusResponse = z.infer<typeof CreditStatusResponseSchema>;
 export type CreditProvidersResponse = z.infer<typeof CreditProvidersResponseSchema>;
 export type EmbeddingInfoResponse = z.infer<typeof EmbeddingInfoResponseSchema>;
+export type EmailCapabilityResponse = z.infer<typeof EmailCapabilityResponseSchema>;
 export type CustomModelDto = z.infer<typeof CustomModelDtoSchema>;
 export type ListCustomModelsResponse = z.infer<typeof ListCustomModelsResponseSchema>;
 export type CreateCustomModelRequest = z.input<typeof CreateCustomModelRequestSchema>;

@@ -19,6 +19,7 @@ export {
   useDeleteCustomModel,
   useCredits,
   useApplyCredits,
+  useEmailCapability,
 } from "./data/useAccount";
 export { useProviderKeyStore } from "./data/useProviderKeyStore";
 export type { ProviderKeyEntry, ProviderKeyStore } from "./data/useProviderKeyStore";

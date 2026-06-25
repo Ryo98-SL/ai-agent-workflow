@@ -14,7 +14,8 @@ fetch calls to the workflow REST API.
   progress. Knowledge Base methods cover list/read/create/update/delete plus
   document list/create/delete/reindex. Account methods cover provider keys,
   custom models, and credits. Every JSON response is validated with shared
-  contracts.
+  contracts. `getEmailCapability()` validates the public email provider,
+  eligibility, quota, and reset-time snapshot.
 - `tests/client.test.ts` covers mocked fetch success/failure behavior and a
   lightweight integration pass against the Hono server app.
 

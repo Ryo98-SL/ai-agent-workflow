@@ -27,8 +27,8 @@ Data boundary and React Query hooks for the workbench UI.
   summary-only data. The workflow hooks are part of the public package surface
   so host apps can render product-level workflow summaries and manage workflows
   without mounting the full editor.
-- `useAccount.ts` exposes session, provider-key, custom-model, and credits
-  hooks.
+- `useAccount.ts` exposes session, provider-key, custom-model, credits, and the
+  session-scoped public email capability/quota hook.
 - `useKnowledgeBases.ts` exposes public Knowledge Base list/read/mutation hooks
   plus document create/delete/reindex hooks so both workbench internals and
   product shells can render/search KB summaries.

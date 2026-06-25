@@ -17,4 +17,5 @@ Knowledge Base contracts cover reusable KB resources, text/file document
 ingestion metadata, document indexing statuses, platform-managed embedding
 settings, and Dify-style Knowledge node retrieval output data. Account
 contracts cover encrypted provider-key metadata, custom models, and one-time AI
-credit grants.
+credit grants. The public email capability contract exposes only provider
+configuration, session eligibility, protected quota counts, and UTC reset times.

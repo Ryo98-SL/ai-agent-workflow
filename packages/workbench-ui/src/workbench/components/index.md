@@ -38,7 +38,8 @@ Focused React components for the server-backed workbench shell.
 - `knowledge/` owns Knowledge Base management and Knowledge node inspector UI;
   see `knowledge/index.md`.
 - `tools/` owns the Tool Browser and descriptor-driven Tool param form; see
-  `tools/index.md`.
+  `tools/index.md`. It also owns Send Email capability status and explicit
+  real-send confirmation controls.
 - `richtext/` owns variable-chip editing for prompt-like fields, including the
   shared focus treatment for editor-owned borders and borderless embedded
   editor containers; see `richtext/index.md`.

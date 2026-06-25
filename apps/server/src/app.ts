@@ -52,11 +52,16 @@ import {
 } from "./routes/credits";
 import { createKnowledgeRoutes } from "./routes/knowledge";
 import { createMcpRoutes } from "./routes/mcp";
+import { createEmailRoutes } from "./routes/email";
 import { createPrismaMcpRepository, type McpRepository } from "./mcp/repository";
 import type { McpServerConnection } from "./mcp/client";
 import { handleBuiltinMcpRequest } from "./mcp/builtin-server";
 import { loadMcpConnections } from "./mcp/connections";
-import { executeWorkflowRuntime, type EmailSender } from "./runtime";
+import { executeWorkflowRuntime } from "./runtime";
+import { createPrismaEmailAttemptRepository } from "./email/repository";
+import { createEmailDeliveryService } from "./email/service";
+import { createEnvEmailSender } from "./email/resend";
+import type { EmailAttemptRepository, EmailSender } from "./email/types";
 import type { ToolDescriptor } from "@ai-agent-workflow/workflow-domain";
 import { frontendOrigins, getPlatformEmbeddingConfig } from "./config";
 import { createPlatformEmbeddingAdapter, type EmbeddingAdapter } from "./knowledge/embeddings";
@@ -118,6 +123,8 @@ export type CreateServerAppOptions = {
   dailyOutputRecorder?: (tokens: number) => Promise<void>;
   /** Email sender for the Email tool. Defaults to env-gated Resend (undefined when unset → dry-run only). */
   emailSender?: EmailSender;
+  /** Persistent outbound-attempt accounting. Defaults to the Prisma repository. */
+  emailAttempts?: EmailAttemptRepository;
   /** Durable LangGraph checkpointer for authed runs. Anonymous runs use MemorySaver. */
   authedCheckpointer?: BaseCheckpointSaver;
   /** Resolves the session userId. Defaults to the Better Auth resolver. */
@@ -167,33 +174,6 @@ function resolveRunProvider(workflow: WorkflowFile, modelProvider?: OpenAICompat
   }
 
   return modelProvider?.provider ?? workflow.settings.modelProvider?.provider;
-}
-
-/**
- * Env-gated Resend sender for the Email tool's real-send path. Returns
- * undefined when RESEND_API_KEY/EMAIL_FROM are unset, so the node falls back to
- * a clear "not configured" error and dry-run stays the default everywhere.
- */
-function createEnvEmailSender(fetchImpl?: typeof fetch): EmailSender | undefined {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
-  if (!apiKey || !from) {
-    return undefined;
-  }
-  const doFetch = fetchImpl ?? fetch;
-  return async (email) => {
-    const response = await doFetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ from, to: email.to, subject: email.subject, text: email.body }),
-    });
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(`Email send failed (${response.status}): ${detail.slice(0, 200)}`);
-    }
-    const payload = (await response.json().catch(() => ({}))) as { id?: string };
-    return { id: payload.id };
-  };
 }
 
 /** Maps a runtime interrupt (the node's `interrupt()` payload) to the DTO. */
@@ -388,7 +368,11 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
   const dailyOutputRecorder = options.dailyOutputRecorder ?? recordDailyOutputUsage;
   // Undefined unless RESEND_API_KEY + EMAIL_FROM are set; then the Email tool's
   // "send for real" path works (otherwise it errors and dry-run is the default).
-  const emailSender = options.emailSender ?? createEnvEmailSender(options.fetch);
+  const emailAttempts = options.emailAttempts ?? createPrismaEmailAttemptRepository();
+  const emailDelivery = createEmailDeliveryService({
+    repository: emailAttempts,
+    sender: options.emailSender ?? createEnvEmailSender(options.fetch),
+  });
   const embeddingConfig = getPlatformEmbeddingConfig();
   const embeddings = options.embeddings ?? (embeddingConfig ? createPlatformEmbeddingAdapter(options.fetch, embeddingConfig) : undefined);
   const knowledgeIndexer =
@@ -481,11 +465,12 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
         fetch: options.fetch,
         knowledge,
         threadId,
+        runId,
         query,
         creditBudget,
         dailyOutputBudget,
         userId,
-        emailSender,
+        emailDelivery: emailDelivery.send,
         // Agent MCP tools resolve connections at run time (ADR 0004 — never a
         // process-global): the built-in server (ADR 0006) for everyone, plus a
         // signed-in user's own servers. Available to anonymous runs too.
@@ -710,6 +695,7 @@ export function createServerApp(options: CreateServerAppOptions = {}) {
   app.route("/", createAccountRoutes());
   // AI credits: status + one-time auto-approved application.
   app.route("/", createCreditRoutes());
+  app.route("/", createEmailRoutes({ service: emailDelivery, resolveUserId: resolveUser }));
   // User-level reusable Knowledge Bases plus the read-only anonymous example KB.
   app.route("/", createKnowledgeRoutes({ repository: knowledge, resolveUserId: resolveUser, indexer: knowledgeIndexer }));
   // Account-level MCP servers (HTTP) — registered, snapshotted, and pickable as tools.

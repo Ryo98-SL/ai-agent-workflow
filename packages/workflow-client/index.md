@@ -10,6 +10,8 @@ account, credits, custom model, and Knowledge Base REST endpoints.
 - `src/index.ts` contains the client factory, methods, response validation, URL
   handling, and normalized error class.
 - `tests/client.test.ts` covers mocked fetch paths and Hono app integration.
+- `tests/email-capability.test.ts` isolates public email capability validation
+  from the server integration test environment.
 
 ## Behavior
 
@@ -18,5 +20,6 @@ list/create/read/update/delete, run create/read/events/stream/resume/delete,
 account resources, credits, custom models, and Knowledge Base/document
 management. Run creation forwards inline workflows, Chat Mode fields, stored
 provider-key selection, and transient model-provider settings when supplied.
+The client also reads public real-email capability and quota state.
 Every successful JSON response is validated with shared API contracts before it
 reaches the caller.

@@ -1,5 +1,5 @@
 import type { JsonValue } from "@ai-agent-workflow/workflow-domain";
-import type { EmailSender } from "../types";
+import type { EmailDelivery, EmailDeliveryIdentity } from "../../email/types";
 
 /**
  * Server-side runtime half of the Tool Registry (ADR 0003). The declarative
@@ -10,8 +10,10 @@ import type { EmailSender } from "../types";
 
 /** Server capabilities a tool runtime may use. */
 export type ToolRuntimeContext = {
-  /** Sends a composed email when the Email tool's real-send is enabled. */
-  emailSender?: EmailSender;
+  /** Authenticated, quota-protected delivery for a real send. */
+  emailDelivery?: EmailDelivery;
+  /** Stable identity used by the delivery service for auth + idempotency. */
+  emailIdentity?: EmailDeliveryIdentity;
 };
 
 /** What a tool runtime returns; the executor wraps it as `{ text, data }` node state. */

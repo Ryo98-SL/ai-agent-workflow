@@ -134,6 +134,7 @@ const emailSendDescriptor: ToolDescriptor = {
         { name: "body", type: "string", description: "Body" },
         { name: "sent", type: "boolean", description: "Whether it was actually sent" },
         { name: "dryRun", type: "boolean", description: "True when composed only (not sent)" },
+        { name: "id", type: "string", description: "Provider message id when a real send succeeds" },
       ],
     },
   ],

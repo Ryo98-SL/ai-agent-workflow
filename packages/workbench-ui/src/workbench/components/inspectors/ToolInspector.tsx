@@ -13,6 +13,7 @@ import { NodeOutputVariablesPanel } from "../NodeOutputVariablesPanel";
 import { Popover } from "../Popover";
 import { resolveToolIcon } from "../workflowNodes/workflowNodeVisuals";
 import { ToolBrowser } from "../tools/ToolBrowser";
+import { EmailSendControl } from "../tools/EmailSendControl";
 import { ToolParamForm } from "../tools/ToolParamForm";
 
 type ToolInspectorProps = {
@@ -30,6 +31,10 @@ export function ToolInspector({ node, onOpenMcpServers, updateNode }: ToolInspec
   const { t } = useTranslation(WORKBENCH_I18N_NAMESPACE);
   const [browsing, setBrowsing] = useState(false);
   const descriptor = resolveToolDescriptor(node.config);
+  const isEmail = descriptor?.provider === "builtin" && descriptor.toolName === "emailSend";
+  const formDescriptor = isEmail
+    ? { ...descriptor, params: descriptor.params.filter((param) => param.name !== "send") }
+    : descriptor;
   const Icon = resolveToolIcon(descriptor?.icon);
   const boundKey = descriptor
     ? `${descriptor.provider}:${descriptor.providerId}:${descriptor.toolName}`
@@ -98,8 +103,16 @@ export function ToolInspector({ node, onOpenMcpServers, updateNode }: ToolInspec
         </Popover>
       </div>
 
-      {descriptor ? (
-        <ToolParamForm nodeId={node.id} descriptor={descriptor} params={node.config.params} onChange={setParams} />
+      {formDescriptor ? (
+        <>
+          <ToolParamForm nodeId={node.id} descriptor={formDescriptor} params={node.config.params} onChange={setParams} />
+          {isEmail && (
+            <EmailSendControl
+              enabled={node.config.params.send === true}
+              onChange={(send) => setParams({ ...node.config.params, send })}
+            />
+          )}
+        </>
       ) : (
         <p className="rounded-md bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-300">
           {t("inspectors.tool.unavailable", {

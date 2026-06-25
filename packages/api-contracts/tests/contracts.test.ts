@@ -6,6 +6,7 @@ import {
   CreateRunResponseSchema,
   CreateWorkflowRequestSchema,
   CreditStatusDtoSchema,
+  EmailCapabilityResponseSchema,
   CreateTextKnowledgeDocumentRequestSchema,
   KnowledgeBaseSettingsSchema,
   KnowledgeNodeOutputDataSchema,
@@ -33,6 +34,7 @@ describe("api contracts", () => {
     expect(apiPaths.knowledgeDocumentReindex("doc/1")).toBe("/api/knowledge-documents/doc%2F1/reindex");
     expect(apiPaths.credits()).toBe("/api/credits");
     expect(apiPaths.creditsApply()).toBe("/api/credits/apply");
+    expect(apiPaths.emailCapability()).toBe("/api/email-capability");
   });
 
   it("validates knowledge base settings and list payloads", () => {
@@ -208,5 +210,24 @@ describe("api contracts", () => {
         message: "Missing workflow",
       },
     });
+  });
+
+  it("validates the public email capability payload", () => {
+    const parsed = EmailCapabilityResponseSchema.parse({
+      email: {
+        configured: true,
+        eligible: true,
+        available: true,
+        reason: null,
+        limits: { userMinute: 10, userDay: 100, platformDay: 80, platformMonth: 2400 },
+        remaining: { userMinute: 9, userDay: 99, platformDay: 79, platformMonth: 2399 },
+        resets: {
+          userMinute: "2026-06-24T12:01:00.000Z",
+          day: "2026-06-25T00:00:00.000Z",
+          month: "2026-07-01T00:00:00.000Z",
+        },
+      },
+    });
+    expect(parsed.email.limits.platformDay).toBe(80);
   });
 });

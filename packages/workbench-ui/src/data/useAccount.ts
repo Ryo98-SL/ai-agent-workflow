@@ -9,6 +9,7 @@ export const accountQueryKeys = {
   credits: ["credits"] as const,
   creditProviders: ["credit-providers"] as const,
   embeddingInfo: ["embedding-info"] as const,
+  emailCapability: (userId: string) => ["email-capability", userId] as const,
   workflowRuns: (workflowId: string) => ["workflow-runs", workflowId] as const,
 };
 
@@ -121,6 +122,19 @@ export function useEmbeddingInfo() {
     queryKey: accountQueryKeys.embeddingInfo,
     queryFn: () => workflowApi.getEmbeddingInfo(),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Public email provider/quota status, scoped by the current auth identity. */
+export function useEmailCapability() {
+  const { workflowApi } = useWorkbenchData();
+  const { data } = useSession();
+  const userId = data?.user?.id ?? "anonymous";
+  return useQuery({
+    queryKey: accountQueryKeys.emailCapability(userId),
+    queryFn: () => workflowApi.getEmailCapability(),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 }
 

@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { WorkbenchDataProvider } from "../src/data/WorkbenchDataProvider";
 import { ThemeProvider } from "../src/theme/ThemeProvider";
 import { NodeInspector } from "../src/workbench/components/NodeInspector";
+import { EmailSendControl } from "../src/workbench/components/tools/EmailSendControl";
 import type { DebugState, NodeExecutionState, WorkbenchWorkflowApi } from "../src/workbench/types";
 
 // Monaco does not render text in jsdom; stand in a plain <pre> so run-history
@@ -28,6 +29,25 @@ vi.mock("better-auth/react", () => ({
 }));
 
 describe("NodeInspector", () => {
+  it("requires explicit confirmation before enabling real email sending", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <ThemeProvider>
+        <WorkbenchDataProvider workflowApi={createWorkflowApiStub()} apiBaseUrl="http://127.0.0.1:8788">
+          <EmailSendControl enabled={false} onChange={onChange} />
+        </WorkbenchDataProvider>
+      </ThemeProvider>,
+    );
+
+    expect(await screen.findByText(/Available/)).toBeInTheDocument();
+    await user.click(screen.getByRole("switch", { name: "Send for real" }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByText(/Future workflow runs may send a real email/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Enable real send/ }));
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
+
   it("locks Settings and opens History while a workflow is running", () => {
     const workflow = createDefaultWorkflow();
     const selectedNode = workflow.graph.nodes.find((node) => node.type === "llm");
@@ -280,5 +300,20 @@ function createWorkflowApiStub(): WorkbenchWorkflowApi {
     deleteCustomModel: vi.fn(),
     getCredits: vi.fn(async () => ({ status: "none" as const })),
     applyCredits: vi.fn(),
+    getEmailCapability: vi.fn(async () => ({
+      email: {
+        configured: true,
+        eligible: true,
+        available: true,
+        reason: null,
+        limits: { userMinute: 10, userDay: 100, platformDay: 80, platformMonth: 2400 },
+        remaining: { userMinute: 10, userDay: 100, platformDay: 80, platformMonth: 2400 },
+        resets: {
+          userMinute: "2026-06-24T12:01:00.000Z",
+          day: "2026-06-25T00:00:00.000Z",
+          month: "2026-07-01T00:00:00.000Z",
+        },
+      },
+    })),
   } as unknown as WorkbenchWorkflowApi;
 }

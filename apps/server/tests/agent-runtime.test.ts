@@ -191,6 +191,92 @@ describe("agent runtime function-calling loop", () => {
     expect(step.result).toContain("vip@example.com");
   });
 
+  it("never lets the model enable real email sending", async () => {
+    const model = new ScriptedChatModel([
+      new AIMessage({
+        content: "",
+        tool_calls: [
+          {
+            id: "call-email-safe",
+            name: "emailSend",
+            args: { to: "vip@example.com", subject: "Hi", body: "Body text", send: true },
+          },
+        ],
+      }),
+      new AIMessage({ content: "Email composed." }),
+    ]);
+    const delivery = vi.fn(async () => ({ id: "should-not-send" }));
+
+    const execution = await executeWorkflowRuntime(
+      agentWorkflow({
+        tools: [{ provider: "builtin", providerId: "builtin", toolName: "emailSend", params: {} }],
+      }),
+      { topic: "vip@example.com" },
+      {
+        checkpointer: new MemorySaver(),
+        agentModelFactory: () => model,
+        threadId: "agent-email-safe",
+        runId: "agent-email-safe",
+        userId: "user-1",
+        emailDelivery: delivery,
+      },
+    );
+
+    expect(execution.ok).toBe(true);
+    expect(delivery).not.toHaveBeenCalled();
+    if (!execution.ok) return;
+    const agentState = execution.state.agent1 as { data: { steps: Array<{ result: string }> } };
+    expect(agentState.data.steps[0].result).toContain("dry-run");
+  });
+
+  it("uses the LangChain tool-call id for author-enabled real email delivery", async () => {
+    const model = new ScriptedChatModel([
+      new AIMessage({
+        content: "",
+        tool_calls: [
+          {
+            id: "call-email-real",
+            name: "emailSend",
+            args: { to: "vip@example.com", subject: "Hi", body: "Body text" },
+          },
+        ],
+      }),
+      new AIMessage({ content: "Email sent." }),
+    ]);
+    const delivery = vi.fn(async () => ({ id: "email-real-1" }));
+
+    const execution = await executeWorkflowRuntime(
+      agentWorkflow({
+        tools: [
+          {
+            provider: "builtin",
+            providerId: "builtin",
+            toolName: "emailSend",
+            params: { send: true },
+          },
+        ],
+      }),
+      { topic: "vip@example.com" },
+      {
+        checkpointer: new MemorySaver(),
+        agentModelFactory: () => model,
+        threadId: "agent-email-real",
+        runId: "run-email-real",
+        userId: "user-1",
+        emailDelivery: delivery,
+      },
+    );
+
+    expect(execution.ok).toBe(true);
+    expect(delivery).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "vip@example.com" }),
+      {
+        userId: "user-1",
+        idempotencyKey: "run-email-real:agent:agent1:call-email-real",
+      },
+    );
+  });
+
   it("binds a (mock) MCP tool, calls it, and closes the connection in finally", async () => {
     mcpHooks.close.mockClear();
     mcpHooks.connectCalls = 0;

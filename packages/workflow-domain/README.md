@@ -33,7 +33,8 @@ Workflow settings also include `mode` (`workflow` or `chat`), provider-key
 preferences for AI credits vs stored API keys, and optional conversation-memory
 summary settings. Tool nodes bind to a shared
 `provider/providerId/toolName` identity; built-in descriptors currently cover
-Current Time and Send Email.
+Current Time and Send Email. Send Email defaults to dry-run (`send: false`) and
+exposes the optional provider message id as `data.id`.
 
 ## Commands
 

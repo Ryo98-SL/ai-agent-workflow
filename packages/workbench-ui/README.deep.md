@@ -202,6 +202,10 @@ Design constraints:
   provider/tool identity, MCP auto-param notes, and built-in fixed params.
   Built-in descriptor display copy is localized in `localizedToolDescriptor`
   without changing server-facing identity.
+  Send Email uses a dedicated safety control: capability loading/error states,
+  authentication and remaining quota are visible, enabling real send requires
+  inline confirmation, and Agent bindings always author-fix `send:false` unless
+  the workflow author explicitly enables it.
 - Workflow node cards localize display-only fallbacks such as effective-model
   placeholders, Human Input defaults, branch empty states, handle aria labels,
   and Agent tool counts in the rendering layer. Stored node labels, tool ids,
